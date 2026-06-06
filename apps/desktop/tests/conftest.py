@@ -3,6 +3,7 @@ Pytest configuration and fixtures for HiDock Next testing.
 """
 
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -10,6 +11,15 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+
+# Make ``src`` importable for collection. Without this, every test in this
+# directory fails collection with ``ModuleNotFoundError: No module named
+# 'desktop_device_adapter'`` because the package layout puts modules in
+# ``../src`` and the tests don't have a package __init__ that does it for them.
+_TESTS_DIR = Path(__file__).resolve().parent
+_SRC_DIR = _TESTS_DIR.parent / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 
 @pytest.fixture
