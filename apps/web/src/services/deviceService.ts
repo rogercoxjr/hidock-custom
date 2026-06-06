@@ -1914,8 +1914,13 @@ class DeviceService {
     }
 
     private isHiDockDevice(device: USBDevice): boolean {
-        // Check if device is a HiDock based on vendor/product ID
-        const isKnownVendor = device.vendorId === 0x10D6 || device.vendorId === 0x1a86;
+        // Check if device is a HiDock based on vendor/product ID.
+        //
+        // Note: 0x1a86 (QinHeng CH340) is intentionally included in the
+        // ``requestDevice`` filter above (L223-226) for legacy CH340-based
+        // cable compatibility, but it is NOT a HiDock vendor — the guard
+        // here correctly drops it.
+        const isKnownVendor = HIDOCK_VENDOR_IDS.includes(device.vendorId as never);
         const isKnownProduct = (Object.values(HIDOCK_PRODUCT_IDS) as number[]).includes(device.productId);
         const hasHiDockName = device.productName?.toLowerCase().includes('hidock') ?? false;
 

@@ -5,7 +5,7 @@
  * IDeviceInterface, providing consistent API across platforms.
  */
 
-import { HIDOCK_DEVICE_CONFIG, HIDOCK_PRODUCT_IDS } from '../constants';
+import { HIDOCK_DEVICE_CONFIG, HIDOCK_PRODUCT_IDS, HIDOCK_VENDOR_IDS } from '../constants';
 import {
     AudioRecording,
     ConnectionStats,
@@ -40,7 +40,10 @@ export class WebDeviceAdapter implements IDeviceInterface {
             const hidockDevices: DeviceInfo[] = [];
 
             for (const device of devices) {
-                if (device.vendorId === HIDOCK_DEVICE_CONFIG.VENDOR_ID) {
+                // Match against the full vendor set (Actions 0x10D6 + newer
+                // HiDock 0x3887 P1 Mini). Using === HIDOCK_DEVICE_CONFIG.VENDOR_ID
+                // was a defect that silently filtered out 0x3887 devices.
+                if (HIDOCK_VENDOR_IDS.includes(device.vendorId as never)) {
                     const model = detectDeviceModel(device.vendorId, device.productId);
 
                     hidockDevices.push({

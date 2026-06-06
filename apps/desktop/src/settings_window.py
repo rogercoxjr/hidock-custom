@@ -143,7 +143,6 @@ class SettingsDialog(ctk.CTkToplevel):
             "logger_processing_level_var": "StringVar",
             "selected_vid_var": "StringVar",  # Changed from IntVar to prevent TclError
             "selected_pid_var": "StringVar",  # Changed from IntVar to prevent TclError
-            "target_interface_var": "StringVar",  # Changed from IntVar to prevent TclError
             "recording_check_interval_var": "StringVar",  # Changed from IntVar to prevent TclError
             "default_command_timeout_ms_var": "StringVar",  # Changed from IntVar to prevent TclError
             "file_stream_timeout_s_var": "StringVar",  # Changed from IntVar to prevent TclError
@@ -196,7 +195,6 @@ class SettingsDialog(ctk.CTkToplevel):
                 if var_type_str == "StringVar" and var_name in [
                     "selected_vid_var",
                     "selected_pid_var",
-                    "target_interface_var",
                     "recording_check_interval_var",
                     "default_command_timeout_ms_var",
                     "file_stream_timeout_s_var",
@@ -374,10 +372,10 @@ class SettingsDialog(ctk.CTkToplevel):
             text="Autoconnect on startup",
             variable=self.local_vars["autoconnect_var"],
         ).pack(pady=10, padx=10, anchor="w")
-        ctk.CTkLabel(scroll_frame, text="Target USB Interface Number:").pack(anchor="w", pady=(5, 0), padx=10)
-        ctk.CTkEntry(scroll_frame, textvariable=self.local_vars["target_interface_var"], width=60).pack(
-            anchor="w", pady=2, padx=10
-        )
+        # The "Target USB Interface Number" GUI field has been removed.
+        # Interface 0 is hardcoded in ``desktop_device_adapter.connect()`` and
+        # ``hidock_device.connect()`` so a wrong value cannot reach the USB
+        # stack. Keeping the field user-settable was a known lockup risk.
 
     def _populate_operation_tab(self, tab):
         """Populates the 'Operation' tab with relevant settings widgets."""
@@ -1198,7 +1196,6 @@ class SettingsDialog(ctk.CTkToplevel):
         numeric_vars = {
             "selected_vid_var": ("Vendor ID", 0, 0xFFFF),
             "selected_pid_var": ("Product ID", 0, 0xFFFF),
-            "target_interface_var": ("Target Interface", 0, 10),
             "recording_check_interval_var": ("Recording Check Interval", 1, 3600),
             "default_command_timeout_ms_var": ("Command Timeout", 100, 60000),
             "file_stream_timeout_s_var": ("File Stream Timeout", 1, 300),
@@ -1829,7 +1826,6 @@ class SettingsDialog(ctk.CTkToplevel):
             if var_name in [
                 "selected_vid_var",
                 "selected_pid_var",
-                "target_interface_var",
                 "recording_check_interval_var",
                 "default_command_timeout_ms_var",
                 "file_stream_timeout_s_var",

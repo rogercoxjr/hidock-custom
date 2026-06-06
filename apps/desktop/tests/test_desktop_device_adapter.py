@@ -192,6 +192,124 @@ class TestConnectionManagement:
         with pytest.raises(ConnectionError):
             await self.adapter.connect()
 
+    # ------------------------------------------------------------------
+    # HiDock VID/PID auto-discovery (P1 / 0x3887 connect fix)
+    # ------------------------------------------------------------------
+    #
+    # When no device_id is given, the adapter must scan
+    # ALL_VENDOR_IDS x HIDOCK_PRODUCT_IDS and succeed on the first VID/PID
+    # that responds. Previously it hard-coded DEFAULT_VENDOR_ID /
+    # DEFAULT_PRODUCT_ID and silently failed to reach 0x3887 devices.
+
+    def test_all_vid_pid_pairs_covers_every_known_device(self):
+        """All VIDs × PIDs are produced, default VID is tried first."""
+        from constants import ALL_VENDOR_IDS, DEFAULT_PRODUCT_ID, DEFAULT_VENDOR_ID, HIDOCK_PRODUCT_IDS
+
+        pairs = DesktopDeviceAdapter._all_vid_pid_pairs()
+
+        # Every (vid, pid) combination must be reachable.
+        expected_count = len(ALL_VENDOR_IDS) * len(HIDOCK_PRODUCT_IDS)
+        assert len(pairs) == expected_count
+        for vid in ALL_VENDOR_IDS:
+            for pid in HIDOCK_PRODUCT_IDS:
+                assert (vid, pid) in pairs
+
+        # The historical default VID/DEFAULT_PRODUCT_ID combination must
+        # be the very first pair tried so existing users see no behaviour
+        # change.
+        assert pairs[0] == (DEFAULT_VENDOR_ID, DEFAULT_PRODUCT_ID)
+
+    @pytest.mark.asyncio
+    async def test_connect_no_device_id_falls_back_to_secondary_vid(self):
+        """When default VID is absent, the adapter tries 0x3887 (P1 Mini)."""
+        from constants import ALL_VENDOR_IDS, HIDOCK_PRODUCT_IDS
+
+        # First VID pair (0x10D6 × default PID) fails; the very next call
+        # (0x10D6 × another PID) succeeds. We don't simulate the cross-VID
+        # case in this test — the next test covers that.
+        call_log = []
+
+        def fake_connect(target_interface_number, vid, pid, auto_retry, force_reset):
+            call_log.append((vid, pid))
+            return (True, None)
+
+        self.mock_jensen.connect.side_effect = fake_connect
+        self.mock_jensen.get_device_info.return_value = {"sn": "ABC", "versionCode": "1.0.0"}
+
+        with patch("desktop_device_adapter.detect_device_model") as mock_detect:
+            mock_detect.return_value = DeviceModel.H1
+            result = await self.adapter.connect()
+
+        # The adapter must have invoked Jensen at least once with the
+        # default VID/DEFAULT_PRODUCT_ID before any fallback.
+        assert call_log[0][0] == ALL_VENDOR_IDS[0]
+        assert isinstance(result, DeviceInfo)
+        assert result.serial_number == "ABC"
+
+    @pytest.mark.asyncio
+    async def test_connect_no_device_id_walks_all_vid_pid_pairs(self):
+        """If every default-VID pair fails, the adapter tries the 0x3887 VID."""
+        from constants import ALL_VENDOR_IDS, DEFAULT_PRODUCT_ID, DEFAULT_VENDOR_ID, HIDOCK_PRODUCT_IDS
+
+        default_vid_pid_count = len(HIDOCK_PRODUCT_IDS)
+        attempted_vids = []
+
+        def fake_connect(target_interface_number, vid, pid, auto_retry, force_reset):
+            attempted_vids.append(vid)
+            # Succeed only when we reach a 0x3887 pair.
+            if vid == 0x3887 and pid == HIDOCK_PRODUCT_IDS[0]:
+                return (True, None)
+            return (False, "not present")
+
+        self.mock_jensen.connect.side_effect = fake_connect
+        self.mock_jensen.get_device_info.return_value = {"sn": "P1MINI", "versionCode": "1.0.0"}
+
+        with patch("desktop_device_adapter.detect_device_model") as mock_detect:
+            mock_detect.return_value = DeviceModel.P1
+            result = await self.adapter.connect()
+
+        # The adapter must have first tried every default-VID pair before
+        # moving to the 0x3887 VID.
+        assert attempted_vids[:default_vid_pid_count] == [DEFAULT_VENDOR_ID] * default_vid_pid_count
+        assert 0x3887 in attempted_vids
+        assert result.serial_number == "P1MINI"
+
+    @pytest.mark.asyncio
+    async def test_connect_no_device_id_raises_when_nothing_found(self):
+        """If every VID/PID pair fails, ConnectionError is raised with the
+        last error message and no partial state is kept."""
+        from constants import ALL_VENDOR_IDS, HIDOCK_PRODUCT_IDS
+
+        def fake_connect(target_interface_number, vid, pid, auto_retry, force_reset):
+            return (False, "no device")
+
+        self.mock_jensen.connect.side_effect = fake_connect
+
+        with pytest.raises(ConnectionError) as excinfo:
+            await self.adapter.connect()
+
+        assert "no device" in str(excinfo.value)
+        assert self.adapter._current_device_info is None
+
+    @pytest.mark.asyncio
+    async def test_connect_with_explicit_device_id_does_not_scan(self):
+        """When the user names a specific device, the adapter must NOT
+        silently fall through to other VID/PID pairs — that would mask
+        genuine connection failures."""
+        call_log = []
+
+        def fake_connect(target_interface_number, vid, pid, auto_retry, force_reset):
+            call_log.append((vid, pid))
+            return (False, "explicit device failed")
+
+        self.mock_jensen.connect.side_effect = fake_connect
+
+        with pytest.raises(ConnectionError):
+            await self.adapter.connect(device_id="10d6:af0e")
+
+        # Exactly one Jensen call — the one the user asked for.
+        assert call_log == [(0x10D6, 0xAF0E)]
+
     @pytest.mark.asyncio
     async def test_disconnect(self):
         """Test device disconnection."""

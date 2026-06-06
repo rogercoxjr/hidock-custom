@@ -91,7 +91,10 @@ The project evolved through four iterations, each building toward the ultimate v
 - `apps/desktop/` - Device management (Python/CustomTkinter) - Original entry point
 - `apps/web/` - Transcription focus (React/TypeScript/WebUSB)
 - `apps/audio-insights/` - Insights prototype (AI analysis)
-- `apps/electron/` - **Universal knowledge hub** (integration of all capabilities)
+- `apps/electron/` - **Universal knowledge hub** (integration of all capabilities) — current focus
+- `apps/meeting-recorder/` - Standalone cross-platform meeting recorder (real-time transcription, summarization, system tray)
+- `packages/` - Shared workspace packages (e.g., `audio-capture`, `transcription`) consumed by Electron/meeting-assistant apps
+- `docs/superpowers/specs/` - Phased design specs (e.g., meeting assistant)
 
 **Shared Protocols:**
 - Jensen protocol for USB communication with HiDock devices
@@ -135,6 +138,29 @@ cd apps/web && npm run dev
 
 # Audio Insights (Prototype)
 cd apps/audio-insights && npm run dev
+
+# Meeting Recorder (standalone, electron-vite; real-time AI transcription)
+cd apps/meeting-recorder && npm run dev
+# Convenience wrappers at repo root: ./run-recorder.sh (Unix) / run-recorder.bat (Windows) / make recorder
+```
+
+### Running a Single Test
+
+```bash
+# One Python test file
+pytest apps/desktop/tests/test_hidock_device.py
+
+# One Python test by node id (-k matches against test names; -m filters by marker)
+pytest -k "jensen_protocol" -m unit
+
+# One Vitest test file (Electron / web / meeting-recorder)
+cd apps/electron && npx vitest run src/services/__tests__/deviceService.test.ts
+
+# Match a single Vitest test by name pattern
+cd apps/electron && npx vitest run -t "download reconciliation"
+
+# Electron app quality gates: typecheck, lint, test
+cd apps/electron && npm run typecheck && npm run lint && npm run test:run
 ```
 
 ### Testing
@@ -203,29 +229,23 @@ python scripts/build/build_desktop.py
 - **Integrated capabilities**: Combines device management, transcription, and AI analysis from all previous iterations
 - **Knowledge-first**: Organized around insights and information, not just files
 
-**Current Focus (Wave 4 Refactor):**
-We're currently implementing a comprehensive UI/UX redesign and auto-refresh system for the Knowledge Library:
-- **Auto-refresh**: Real-time updates when new recordings/artifacts are detected
-- **Waveform loading**: Immediate audio visualization on selection
-- **Enhanced UI**: Clear labels, location badges, responsive layout
-- **Accessibility**: WCAG 2.1 AA compliance with keyboard navigation and screen reader support
-- **Universal library**: Preparing architecture for multi-artifact-type support
+**Active work areas:**
+- Knowledge Library, Device sync, RAG chat, Calendar correlation, Contacts, Projects, Outputs, Search, Settings (see `apps/electron/README.md` for status table)
+- Phased integration of `apps/meeting-assistant/` with shared `packages/audio-capture` + `packages/transcription` (Cohere ASR local default, Chirp 3 cloud fallback) — see `.claude/workflow-state-meeting-assistant.md`
 
 **Technology Stack:**
-- **Frontend**: React 18 + TypeScript + Tailwind CSS
+- **Frontend**: React 18 + TypeScript + Tailwind CSS + Radix UI primitives
 - **State Management**: Zustand
-- **Backend**: Electron main process (Node.js)
-- **Database**: SQLite (better-sqlite3) for local knowledge storage
-- **AI Integration**: Multiple transcription providers, future multi-modal analysis
-- **Device Communication**: IPC bridge to device services
+- **Backend**: Electron 39 main process (Node.js) — `electron/main/index.ts`
+- **Database**: SQLite via `sql.js` (WASM) for local knowledge storage
+- **AI Integration**: Google Gemini (transcription/chat), Ollama (local RAG via `nomic-embed-text` + `llama3.2`)
+- **Device Communication**: `node-usb` (npm `usb`) + Jensen protocol; **must use `startPoll(3, 32768)` for reads (see USB Safety above)**
 
-**Key Services:**
-- **Recording Watcher** (`recording-watcher.ts`) - File system monitoring for auto-refresh
-- **Device Service** - USB device communication (inherited from desktop app architecture)
-- **Transcription Service** - Multi-provider AI transcription
-- **Download Service** - 4-layer reconciliation for accurate sync status
-- **Calendar Service** - Meeting correlation with recordings (future: all artifacts)
-- **Metadata Service** - Unified metadata management across artifact types
+**Key Services (electron/main/services/):**
+- `database.ts` - sql.js-backed schema and migrations
+- `device-service.ts` - USB device communication (Jensen protocol)
+- `recording-watcher.ts` - File system monitoring for auto-refresh
+- `download-service.ts` - 4-layer reconciliation for accurate sync status
 
 **Core Components:**
 - **Knowledge Library** (`pages/Library.tsx`) - Main unified view of all knowledge sources
@@ -334,9 +354,32 @@ cd apps/web
 npm install          # Install dependencies
 npm run dev          # Development server
 npm run build        # Production build
-npm test             # Run tests (Vitest)
 npm run lint         # ESLint
 ```
+
+### Meeting Recorder (`apps/meeting-recorder/`)
+
+**Standalone cross-platform meeting recorder** — independent from the Desktop app and from the Electron knowledge hub. Records system audio + microphone with real-time AI transcription, summarization, and meeting intelligence.
+
+**Stack:** Electron 39, electron-vite, sql.js (SQLite), Vercel AI SDK (OpenAI / Anthropic / Google / AWS Bedrock / Ollama), ical.js, React + Tailwind + Radix UI.
+
+**Layout:**
+```
+apps/meeting-recorder/
+├── electron/
+│   ├── main/                  # Main process (Node.js)
+│   │   ├── index.ts           # App bootstrap: db, IPC, windows, tray
+│   │   ├── services/          # session-manager, transcription-pipeline,
+│   │   │                      #   summarization-service, translation-service,
+│   │   │                      #   end-of-meeting-processor, attachment-service,
+│   │   │                      #   ai-provider (factory), database (sql.js)
+│   │   └── ipc/               # Domain-specific IPC handler modules
+│   └── preload/index.ts       # electronAPI context bridge
+├── src/                       # Renderer (React): Dashboard, History, …
+└── sql/                       # sql.js wasm + migrations
+```
+
+**Active development note:** `apps/meeting-assistant/` is a phased build (see `.claude/workflow-state-meeting-assistant.md`) reusing shared `packages/*` (`audio-capture`, `transcription`, etc.). Don't confuse the two — `meeting-recorder` is the shipping standalone app; `meeting-assistant` is the new build on `fix/electron-bug-fixes`.
 
 ### Shared Concepts
 
@@ -392,11 +435,16 @@ Configured in `.pre-commit-config.yaml`:
 ### Test Organization
 
 - Desktop tests: `apps/desktop/tests/`
-- Web tests: `apps/web/src/test/`
+- Web tests: `apps/web/src/test/` (and Vitest co-located tests)
+- Electron app tests: `apps/electron/src/**/__tests__/` (Vitest)
+- Meeting recorder tests: `apps/meeting-recorder/**/__tests__/` (Vitest)
+- Shared package tests: `packages/*/src/**/__tests__/` (Vitest)
 - Root-level tests: `tests/` (core infrastructure only)
 
 By default, `pytest` only discovers tests in `tests/` (see `pytest.ini` `testpaths`).
 To test desktop app: `pytest apps/desktop/tests`
+
+For Vitest projects, the per-app `npm run test` runs in watch mode; use `npm run test:run` (where the script exists) for a single CI-style pass.
 
 ### Key Files to Know
 
@@ -405,6 +453,8 @@ To test desktop app: `pytest apps/desktop/tests`
 - `pyproject.toml` - Python project metadata, optional dependencies, tool configs
 - `pytest.ini` - Test configuration, markers, default filter
 - `conftest.py` - Global pytest configuration
+- `.claude/workflow-state-meeting-assistant.md` - Active phased build state for meeting-assistant (current phase, recent commits, key decisions)
+- `docs/superpowers/specs/` - Authoritative design specs for active phased work
 
 ## Common Patterns
 

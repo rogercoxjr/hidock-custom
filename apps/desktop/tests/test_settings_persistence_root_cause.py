@@ -94,7 +94,6 @@ class TestSettingsPersistenceRootCause(unittest.TestCase):
             "logger_processing_level_var": "log_level",
             "selected_vid_var": "selected_vid",
             "selected_pid_var": "selected_pid",
-            "target_interface_var": "target_interface",
             "recording_check_interval_var": "recording_check_interval_s",
             "default_command_timeout_ms_var": "default_command_timeout_ms",
             "file_stream_timeout_s_var": "file_stream_timeout_s",

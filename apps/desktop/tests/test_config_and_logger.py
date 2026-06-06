@@ -32,7 +32,6 @@ class TestGetDefaultConfig:
             "log_level",
             "selected_vid",
             "selected_pid",
-            "target_interface",
             "recording_check_interval_s",
             "default_command_timeout_ms",
             "file_stream_timeout_s",
@@ -68,7 +67,6 @@ class TestGetDefaultConfig:
 
         assert config["autoconnect"] is False
         assert config["log_level"] == "INFO"
-        assert config["target_interface"] == 0
         assert config["recording_check_interval_s"] == 3
         assert config["appearance_mode"] == "System"
         assert config["color_theme"] == "blue"

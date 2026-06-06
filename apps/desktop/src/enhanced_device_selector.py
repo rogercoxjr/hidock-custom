@@ -16,6 +16,7 @@ from typing import Callable, List, Optional  # Removed Dict - not used
 
 import customtkinter as ctk
 from config_and_logger import logger
+from constants import ALL_VENDOR_IDS, HIDOCK_PRODUCT_IDS, PRODUCT_ID_MODEL_MAP
 from PIL import Image
 
 
@@ -292,27 +293,33 @@ class EnhancedDeviceSelector(ctk.CTkFrame):
         return devices
 
     def _is_hidock_device(self, vendor_id: int, product_id: int) -> bool:
-        """Check if device is a HiDock device based on VID/PID."""
-        # HiDock device VID/PID combinations
-        hidock_devices = [
-            (0x10D6, 0xAF0C),  # H1
-            (0x10D6, 0xAF0D),  # H1E variant
-            (0x10D6, 0xAF0E),  # P1
-            (0x10D6, 0xB00E),  # P1 variant
-            (0x10D6, 0xB00D),  # H1E
-        ]
-        return (vendor_id, product_id) in hidock_devices
+        """Check if device is a HiDock device based on VID/PID.
+
+        Single source of truth lives in ``constants.py`` (ALL_VENDOR_IDS x
+        HIDOCK_PRODUCT_IDS). Iterating at every call is cheap and keeps the
+        selector in lock-step with the official HiDock HiNotes jensen.js
+        product list — including the alternate 0x3887 vendor and all P1 /
+        P1 mini / H1E PIDs. Fixes the defect where the previous hardcoded
+        5-entry tuple list silently filtered out the user's P1 (0xB00E).
+        """
+        return vendor_id in ALL_VENDOR_IDS and product_id in HIDOCK_PRODUCT_IDS
 
     def _get_hidock_model_name(self, product_id: int) -> str:
         """Get HiDock model name from product ID."""
-        model_map = {
-            0xAF0C: "H1",
-            0xAF0D: "Device",  # H1E variant
-            0xAF0E: "P1",
-            0xB00E: "P1 Variant",
-            0xB00D: "H1E",
+        # PRODUCT_ID_MODEL_MAP is keyed by raw int PID and returns the
+        # canonical model slug (e.g. "hidock-p1"). The selector historically
+        # returned short labels like "P1 Variant" — keep the legacy short
+        # labels here so we don't churn the GUI display strings.
+        slug = PRODUCT_ID_MODEL_MAP.get(product_id)
+        if slug is None:
+            return f"Unknown ({hex(product_id)})"
+        short = {
+            "hidock-h1": "H1",
+            "hidock-h1e": "H1E",
+            "hidock-p1": "P1",
+            "hidock-p1-mini": "P1 Mini",
         }
-        return model_map.get(product_id, f"Unknown ({hex(product_id)})")
+        return short.get(slug, slug)
 
     def _on_scan_complete(self, devices: List[DeviceInfo]):
         """Handle successful device scan completion."""
@@ -411,7 +418,9 @@ class EnhancedDeviceSelector(ctk.CTkFrame):
                 if button._device == device:
                     button.configure(fg_color="green", hover_color="darkgreen")
                 else:
-                    button.configure(fg_color=None, hover_color=None)
+                    # CustomTkinter does not accept None for fg_color/hover_color;
+                    # use "transparent" to reset to the theme default.
+                    button.configure(fg_color="transparent", hover_color="transparent")
 
         # Update status
         self.status_label.configure(text=f"📱 Selected: {device.name} ({device.status})")

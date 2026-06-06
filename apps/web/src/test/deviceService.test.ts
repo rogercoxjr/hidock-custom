@@ -2,7 +2,7 @@
  * Tests for WebUSB device service implementation
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HIDOCK_COMMANDS, HIDOCK_DEVICE_CONFIG, HIDOCK_PRODUCT_IDS } from '../constants';
+import { HIDOCK_COMMANDS, HIDOCK_DEVICE_CONFIG, HIDOCK_PRODUCT_IDS, HIDOCK_VENDOR_IDS } from '../constants';
 import { deviceService } from '../services/deviceService';
 
 // Type for accessing internal device service properties in tests
@@ -15,6 +15,7 @@ interface TestableDeviceService {
     sendCommand: (commandId: number, bodyBytes?: Uint8Array) => Promise<number>;
     parsePacket: () => unknown;
     updateProgress: (operationId: string, progress: unknown) => void;
+    isHiDockDevice: (device: USBDevice) => boolean;
 }
 
 // Mock WebUSB API
@@ -472,5 +473,67 @@ describe('DeviceService WebUSB Implementation', () => {
             expect(capabilities).toContain('format_storage');
             expect(capabilities).toContain('settings_management');
         });
+    });
+});
+
+// ----------------------------------------------------------------------
+// Regression tests for the P1 / 0x3887 connect fix
+// ----------------------------------------------------------------------
+//
+// isHiDockDevice previously hard-coded the VID check to ``0x10D6 || 0x1a86``.
+// That meant:
+//   * 0x3887 (new P1 Mini vendor) was rejected, even when the user
+//     plugged in a P1 Mini and the requestDevice filter passed it through.
+//   * 0x1a86 (CH340 cable chip) was always accepted, which let non-HiDock
+//     devices slip through into the WebUSB connection path.
+//
+// The fixed implementation routes the check through HIDOCK_VENDOR_IDS, so
+// both legacy and new vendors are matched. CH340 stays in the
+// requestDevice filter for legacy cable compatibility but is no longer
+// accepted as a HiDock vendor.
+
+describe('isHiDockDevice vendor guard (P1 / 0x3887 regression)', () => {
+    const service = deviceService as unknown as TestableDeviceService;
+
+    function deviceWith(vendorId: number, productId: number, name?: string): USBDevice {
+        return {
+            vendorId,
+            productId,
+            productName: name ?? 'HiDock',
+        } as unknown as USBDevice;
+    }
+
+    it.each(HIDOCK_VENDOR_IDS)('accepts known HiDock vendor 0x%04x', (vid) => {
+        const dev = deviceWith(vid, HIDOCK_PRODUCT_IDS.H1E);
+        expect(service.isHiDockDevice(dev)).toBe(true);
+    });
+
+    it('accepts 0x3887 (P1 Mini) with a known HiDock product ID', () => {
+        const dev = deviceWith(0x3887, HIDOCK_PRODUCT_IDS.P1);
+        expect(service.isHiDockDevice(dev)).toBe(true);
+    });
+
+    it('rejects 0x1a86 (CH340 cable chip)', () => {
+        // 0x1a86 stays in the requestDevice filter for legacy cable
+        // compatibility, but the post-filter guard must drop it.
+        const dev = deviceWith(0x1a86, HIDOCK_PRODUCT_IDS.H1E, 'HiDock H1E');
+        expect(service.isHiDockDevice(dev)).toBe(false);
+    });
+
+    it('rejects arbitrary non-HiDock vendor', () => {
+        const dev = deviceWith(0x1234, HIDOCK_PRODUCT_IDS.H1E, 'NotHiDock');
+        expect(service.isHiDockDevice(dev)).toBe(false);
+    });
+
+    it('rejects known vendor with unknown product (no name match)', () => {
+        const dev = deviceWith(HIDOCK_DEVICE_CONFIG.VENDOR_ID, 0xDEAD);
+        expect(service.isHiDockDevice(dev)).toBe(false);
+    });
+
+    it('still accepts known vendor + unknown product when productName contains "hidock"', () => {
+        // The legacy name-based fallback is preserved for forward
+        // compatibility with future PIDs.
+        const dev = deviceWith(HIDOCK_DEVICE_CONFIG.VENDOR_ID, 0xDEAD, 'HiDock Mystery');
+        expect(service.isHiDockDevice(dev)).toBe(true);
     });
 });

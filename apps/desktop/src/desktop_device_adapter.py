@@ -48,6 +48,25 @@ class DesktopDeviceAdapter(IDeviceInterface):
         self._current_device_info: Optional[DeviceInfo] = None
         self._connection_start_time: Optional[datetime] = None
 
+    @staticmethod
+    def _all_vid_pid_pairs() -> List[tuple]:
+        """
+        Return the cartesian product of every HiDock vendor × product ID pair,
+        starting with the most common default (0x10D6 × DEFAULT_PRODUCT_ID).
+
+        Used by :meth:`connect` when the caller has not pinned a specific
+        ``device_id`` so that newer devices (e.g. 0x3887 P1 Mini) are reachable
+        without a config change. This is a pure data helper — no USB I/O.
+        """
+        # Prioritise the historical default first so the common case
+        # (existing 0x10D6 user) is tried before anything else.
+        ordered_products = [DEFAULT_PRODUCT_ID] + [p for p in HIDOCK_PRODUCT_IDS if p != DEFAULT_PRODUCT_ID]
+        pairs: List[tuple] = []
+        for vid in ALL_VENDOR_IDS:
+            for pid in ordered_products:
+                pairs.append((vid, pid))
+        return pairs
+
     async def discover_devices(self) -> List[DeviceInfo]:
         """
         Discover available HiDock devices.
@@ -122,36 +141,74 @@ class DesktopDeviceAdapter(IDeviceInterface):
         try:
             self._connection_start_time = datetime.now()
 
-            # Extract VID/PID from device_id if provided
-            vid, pid = DEFAULT_VENDOR_ID, DEFAULT_PRODUCT_ID
+            # Extract VID/PID from device_id if provided. If no device_id was
+            # given, scan ALL_VENDOR_IDS × HIDOCK_PRODUCT_IDS and connect to
+            # the first one that responds — the previous behaviour of using
+            # the static DEFAULT_VENDOR_ID/DEFAULT_PRODUCT_ID made the desktop
+            # app fail to auto-discover newer devices (e.g. 0x3887 P1 Mini).
             if device_id and ":" in device_id:
                 try:
                     vid_str, pid_str = device_id.split(":")
                     vid, pid = int(vid_str, 16), int(pid_str, 16)
+                    vid_pid_candidates = [(vid, pid)]
                 except ValueError:
                     logger.warning(
-                        "DesktopDeviceAdapter", "connect", f"Invalid device_id format: {device_id}, using defaults"
+                        "DesktopDeviceAdapter", "connect", f"Invalid device_id format: {device_id}, scanning all"
                     )
+                    vid_pid_candidates = self._all_vid_pid_pairs()
+            else:
+                vid_pid_candidates = self._all_vid_pid_pairs()
 
-            # Connect using the Jensen device with optional force reset
-            success, error_msg = self.jensen_device.connect(
-                target_interface_number=0, vid=vid, pid=pid, auto_retry=auto_retry, force_reset=force_reset
-            )
+            last_error: Optional[str] = None
+            vid, pid = DEFAULT_VENDOR_ID, DEFAULT_PRODUCT_ID
+            success = False
+            error_msg = "No matching HiDock device found"
 
-            if not success:
+            for candidate_vid, candidate_pid in vid_pid_candidates:
+                vid, pid = candidate_vid, candidate_pid
+                # Connect using the Jensen device with optional force reset.
+                # ``auto_retry=False`` is critical here: the outer adapter loop
+                # IS the retry. Letting Jensen's inner retry fire (3x, 1s delay
+                # each) for every one of the 24 VID/PID pairs would generate up
+                # to 72s of USB activity on a cold start, materially increasing
+                # the LIBUSB_ERROR_ACCESS risk called out in CLAUDE.md. One
+                # clean attempt per pair, move on, and the force-reset branch
+                # below still gives us a single second-chance per pair.
+                success, error_msg = self.jensen_device.connect(
+                    target_interface_number=0, vid=vid, pid=pid, auto_retry=False, force_reset=force_reset
+                )
+
+                if success:
+                    break
+
+                last_error = error_msg
+                # If the user explicitly named a device, do not silently try
+                # other VID/PID pairs — propagate the failure.
+                if device_id and ":" in device_id:
+                    break
+
                 # If connection failed with timeout errors, try once more with force reset
                 if "timeout" in str(error_msg).lower() and not force_reset:
                     logger.info(
                         "DesktopDeviceAdapter",
                         "connect",
-                        "Connection failed with timeout, retrying with device reset",
+                        f"VID {vid:04x} PID {pid:04x} timed out, retrying with device reset",
                     )
                     success, error_msg = self.jensen_device.connect(
                         target_interface_number=0, vid=vid, pid=pid, auto_retry=False, force_reset=True
                     )
+                    if success:
+                        break
+                    last_error = error_msg
 
-                if not success:
-                    raise ConnectionError(error_msg or "Connection failed")
+                logger.debug(
+                    "DesktopDeviceAdapter",
+                    "connect",
+                    f"VID {vid:04x} PID {pid:04x} not present: {error_msg}",
+                )
+
+            if not success:
+                raise ConnectionError(last_error or error_msg or "Connection failed")
 
             # Get device information
             device_info_raw = self.jensen_device.get_device_info() or {}

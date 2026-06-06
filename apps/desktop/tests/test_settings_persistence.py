@@ -122,7 +122,6 @@ class TestSettingsPersistence:
             mock_window.logger_processing_level_var.get.return_value = "DEBUG"
             mock_window.selected_vid_var.get.return_value = 1234
             mock_window.selected_pid_var.get.return_value = 5678
-            mock_window.target_interface_var.get.return_value = 0
             mock_window.recording_check_interval_var.get.return_value = 3
             mock_window.default_command_timeout_ms_var.get.return_value = 5000
             mock_window.file_stream_timeout_s_var.get.return_value = 180

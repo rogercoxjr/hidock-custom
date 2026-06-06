@@ -75,7 +75,6 @@ class TestFixtures:
             "log_level": "INFO",
             "selected_vid": 0x10D6,
             "selected_pid": 0xB00D,
-            "target_interface": 0,
             "recording_check_interval_s": 3,
             "default_command_timeout_ms": 5000,
             "file_stream_timeout_s": 180,

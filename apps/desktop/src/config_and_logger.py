@@ -40,7 +40,6 @@ def get_default_config() -> dict:
         "log_level": "INFO",
         "selected_vid": DEFAULT_VENDOR_ID,  # From constants.py
         "selected_pid": DEFAULT_PRODUCT_ID,  # From constants.py
-        "target_interface": 0,
         "recording_check_interval_s": 3,
         "default_command_timeout_ms": 5000,
         "file_stream_timeout_s": 180,
@@ -116,7 +115,6 @@ def _validate_and_merge_config(defaults, loaded_config):
         "file_log_level": lambda x: x in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         "selected_vid": int,
         "selected_pid": int,
-        "target_interface": int,
         "recording_check_interval_s": int,
         "default_command_timeout_ms": int,
         "file_stream_timeout_s": int,
