@@ -311,6 +311,79 @@ class TestConnectionManagement:
         assert call_log == [(0x10D6, 0xAF0E)]
 
     @pytest.mark.asyncio
+    async def test_connect_explicit_device_id_retries_with_force_reset_on_timeout(self):
+        """When an explicit device_id times out, the adapter must still
+        attempt a single force_reset retry before propagating the failure.
+        Regression test: fd1ca915 broke this by breaking out of the loop
+        before the force_reset branch fired for explicit device_ids."""
+        call_log = []
+
+        def fake_connect(target_interface_number, vid, pid, auto_retry, force_reset):
+            call_log.append((vid, pid, force_reset))
+            # First attempt: timeout. Second attempt (force_reset=True): success.
+            if force_reset:
+                return (True, None)
+            return (False, "USB timeout waiting for response")
+
+        self.mock_jensen.connect.side_effect = fake_connect
+        self.mock_jensen.get_device_info.return_value = {"sn": "FR", "versionCode": "1.0.0"}
+
+        with patch("desktop_device_adapter.detect_device_model") as mock_detect:
+            mock_detect.return_value = DeviceModel.H1E
+            result = await self.adapter.connect(device_id="10d6:b00d")
+
+        # The first attempt must have been force_reset=False, the second
+        # force_reset=True — and the second must have succeeded.
+        assert call_log[0] == (0x10D6, 0xB00D, False)
+        assert call_log[1] == (0x10D6, 0xB00D, True)
+        assert isinstance(result, DeviceInfo)
+        assert result.serial_number == "FR"
+
+    @pytest.mark.asyncio
+    async def test_connect_explicit_device_id_no_force_reset_retry_when_auto_retry_false(self):
+        """When auto_retry=False is passed, an explicit device_id timeout
+        must not trigger the force_reset retry — the caller opted out.
+        Regression test: fd1ca915 always used auto_retry=False internally
+        regardless of the caller's preference, so auto_retry=False was
+        silently ignored."""
+        call_log = []
+
+        def fake_connect(target_interface_number, vid, pid, auto_retry, force_reset):
+            call_log.append((vid, pid, force_reset))
+            return (False, "USB timeout waiting for response")
+
+        self.mock_jensen.connect.side_effect = fake_connect
+
+        with pytest.raises(ConnectionError):
+            await self.adapter.connect(device_id="10d6:b00d", auto_retry=False)
+
+        # Exactly one Jensen call — no force_reset retry, even on timeout.
+        assert call_log == [(0x10D6, 0xB00D, False)]
+
+    @pytest.mark.asyncio
+    async def test_connect_scan_skips_force_reset_retry_when_auto_retry_false(self):
+        """When auto_retry=False is passed, the scan path also must not
+        trigger the force_reset retry on timeout."""
+        call_log = []
+
+        def fake_connect(target_interface_number, vid, pid, auto_retry, force_reset):
+            call_log.append((vid, pid, force_reset))
+            return (False, "USB timeout waiting for response")
+
+        self.mock_jensen.connect.side_effect = fake_connect
+
+        with pytest.raises(ConnectionError):
+            await self.adapter.connect(auto_retry=False)
+
+        # No force_reset retry anywhere in the scan.
+        for vid, pid, force_reset in call_log:
+            assert force_reset is False
+        # And there must be no duplicate (vid, pid) entry where the second
+        # was a force_reset retry.
+        force_reset_calls = [c for c in call_log if c[2] is True]
+        assert force_reset_calls == []
+
+    @pytest.mark.asyncio
     async def test_disconnect(self):
         """Test device disconnection."""
         # Set up connected state

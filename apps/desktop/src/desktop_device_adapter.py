@@ -182,13 +182,12 @@ class DesktopDeviceAdapter(IDeviceInterface):
                     break
 
                 last_error = error_msg
-                # If the user explicitly named a device, do not silently try
-                # other VID/PID pairs — propagate the failure.
-                if device_id and ":" in device_id:
-                    break
-
-                # If connection failed with timeout errors, try once more with force reset
-                if "timeout" in str(error_msg).lower() and not force_reset:
+                # If the connection failed with a timeout, give it one more
+                # chance with a device-state reset — this is the historical
+                # second-chance behaviour. This must apply to explicit
+                # device_id callers too, since they too can hit transient
+                # timeouts. Honor auto_retry=False by skipping the retry.
+                if auto_retry and "timeout" in str(error_msg).lower() and not force_reset:
                     logger.info(
                         "DesktopDeviceAdapter",
                         "connect",
@@ -200,6 +199,11 @@ class DesktopDeviceAdapter(IDeviceInterface):
                     if success:
                         break
                     last_error = error_msg
+
+                # If the user explicitly named a device, do not silently try
+                # other VID/PID pairs — propagate the failure.
+                if device_id and ":" in device_id:
+                    break
 
                 logger.debug(
                     "DesktopDeviceAdapter",
