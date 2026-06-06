@@ -216,13 +216,220 @@ class TestDeviceSelectorComprehensive:
             dialog = settings_window.SettingsDialog.__new__(settings_window.SettingsDialog)
             dialog.dock = Mock()
             dialog.dock.is_connected.return_value = True
-            dialog.local_vars = {"autoconnect_var": Mock(), "target_interface_var": Mock()}
+            dialog.local_vars = {"autoconnect_var": Mock()}
 
             # This should not raise an error
             dialog._populate_connection_tab(mock_tab)
 
             # The device selector should be created and disabled
             mock_device_selector.set_enabled.assert_called_with(False)
+
+
+# ----------------------------------------------------------------------
+# Regression tests for the P1 / 0x3887 connect fix
+# ----------------------------------------------------------------------
+#
+# enhanced_device_selector previously hard-coded a list of [VID, PID]
+# pairs. That list omitted 0x3887 (the newer P1 Mini vendor), so the
+# selector reported "no devices" even when a P1 Mini was plugged in.
+# The fixed code routes the membership check through
+# ``ALL_VENDOR_IDS`` and ``HIDOCK_PRODUCT_IDS`` from constants.py so
+# every supported VID/PID is discoverable.
+
+
+class TestEnhancedDeviceSelectorHidockMembership:
+    """Verify the device selector accepts every HiDock VID/PID pair."""
+
+    @pytest.fixture
+    def selector(self):
+        """Build an EnhancedDeviceSelector with all GUI side effects mocked."""
+        with (
+            patch("enhanced_device_selector.ctk.CTkFrame.__init__", return_value=None),
+            patch.object(enhanced_device_selector.EnhancedDeviceSelector, "_create_widgets", return_value=None),
+            patch("enhanced_device_selector.threading.Thread"),
+        ):
+            mock_parent = Mock()
+            mock_parent._w = "mock_parent"
+            yield enhanced_device_selector.EnhancedDeviceSelector(mock_parent)
+
+    @pytest.mark.unit
+    def test_accepts_every_hidock_vendor(self, selector):
+        """Every VID in ALL_VENDOR_IDS must be accepted."""
+        from constants import ALL_VENDOR_IDS, HIDOCK_PRODUCT_IDS
+
+        any_pid = HIDOCK_PRODUCT_IDS[0]
+        for vid in ALL_VENDOR_IDS:
+            assert selector._is_hidock_device(vid, any_pid) is True, (
+                f"VID {hex(vid)} should be recognised as HiDock"
+            )
+
+    @pytest.mark.unit
+    def test_accepts_every_hidock_product(self, selector):
+        """Every PID in HIDOCK_PRODUCT_IDS must be accepted for a HiDock VID."""
+        from constants import ALL_VENDOR_IDS, HIDOCK_PRODUCT_IDS
+
+        any_vid = ALL_VENDOR_IDS[0]
+        for pid in HIDOCK_PRODUCT_IDS:
+            assert selector._is_hidock_device(any_vid, pid) is True, (
+                f"PID {hex(pid)} should be recognised as HiDock"
+            )
+
+    @pytest.mark.unit
+    def test_accepts_0x3887_p1_mini(self, selector):
+        """0x3887 is the new P1 Mini vendor; it must NOT be filtered out."""
+        from constants import HIDOCK_PRODUCT_IDS
+
+        any_pid = HIDOCK_PRODUCT_IDS[0]
+        # This is the exact regression that started this fix.
+        assert selector._is_hidock_device(0x3887, any_pid) is True
+
+    @pytest.mark.unit
+    def test_rejects_unknown_vendor(self, selector):
+        """VIDs outside ALL_VENDOR_IDS are not HiDock."""
+        from constants import HIDOCK_PRODUCT_IDS
+
+        any_pid = HIDOCK_PRODUCT_IDS[0]
+        # 0x1234 is a placeholder non-HiDock vendor.
+        assert selector._is_hidock_device(0x1234, any_pid) is False
+
+    @pytest.mark.unit
+    def test_rejects_unknown_product(self, selector):
+        """PIDs outside HIDOCK_PRODUCT_IDS are not HiDock."""
+        from constants import ALL_VENDOR_IDS
+
+        any_vid = ALL_VENDOR_IDS[0]
+        # 0xDEAD is a placeholder non-HiDock product.
+        assert selector._is_hidock_device(any_vid, 0xDEAD) is False
+
+    @pytest.mark.unit
+    def test_model_name_for_known_pid(self, selector):
+        """_get_hidock_model_name returns a short label for known PIDs."""
+        from constants import HIDOCK_PRODUCT_IDS
+
+        for pid in HIDOCK_PRODUCT_IDS:
+            name = selector._get_hidock_model_name(pid)
+            assert name and "Unknown" not in name, (
+                f"PID {hex(pid)} should map to a known model name, got '{name}'"
+            )
+
+    @pytest.mark.unit
+    def test_model_name_for_unknown_pid(self, selector):
+        """_get_hidock_model_name returns 'Unknown (0xPID)' for unrecognised PIDs."""
+        name = selector._get_hidock_model_name(0xDEAD)
+        assert "Unknown" in name
+        assert "dead" in name.lower()
+
+
+class TestDeviceSelectorSelectionReset:
+    """Regression tests for the device selector crash on second selection.
+
+    Bug found 2026-06-05 during real-device P1 Mini testing: clicking a
+    second device in the EnhancedDeviceSelector raised
+    ``ValueError: color is None, for transparency set color='transparent'``
+    because the un-selected button was being reset with ``fg_color=None``
+    and ``hover_color=None``. CustomTkinter requires explicit color values
+    (use ``"transparent"`` to mean "theme default").
+
+    Fixed in ``enhanced_device_selector.py`` by replacing ``None`` with
+    ``"transparent"``. This test class pins the fix in place.
+    """
+
+    @pytest.mark.unit
+    def test_select_device_unselect_path_uses_transparent_string(self):
+        """The un-select branch in _select_device must not pass None to button.configure().
+
+        Reading the source is a cheap, stable guard: it doesn't require
+        instantiating a real CustomTkinter frame hierarchy.
+        """
+        import inspect
+
+        source = inspect.getsource(enhanced_device_selector.EnhancedDeviceSelector._select_device)
+        # The un-select branch should set fg_color/hover_color to the
+        # string "transparent" (or to a non-None color) and must NOT
+        # pass the literal ``None`` to ``button.configure``.
+        assert 'fg_color="transparent"' in source, (
+            "Regressed: un-select branch in _select_device no longer uses "
+            '"transparent" — verify enhanced_device_selector.py:421 still '
+            "uses an explicit color string and not None."
+        )
+        assert 'hover_color="transparent"' in source, (
+            "Regressed: un-select branch in _select_device no longer uses "
+            '"transparent" for hover_color.'
+        )
+        # The buggy line that shipped pre-fix was:
+        #     button.configure(fg_color=None, hover_color=None)
+        # Guard against it coming back.
+        assert "fg_color=None, hover_color=None" not in source, (
+            "Regressed: _select_device contains the original buggy line "
+            '`fg_color=None, hover_color=None`. CustomTkinter raises '
+            '`ValueError: color is None, for transparency set color=\'transparent\'`.'
+        )
+
+    @pytest.mark.unit
+    def test_select_device_runs_without_value_error_on_second_selection(self, mock_tkinter_root):
+        """Calling _select_device twice (selecting device B after A) must not raise ValueError.
+
+        Constructs the minimum widget hierarchy needed by _select_device and
+        exercises the un-select branch with mocks that record every
+        ``configure()`` call. If any call receives ``fg_color=None`` or
+        ``hover_color=None``, this test will catch the regression that
+        bit us on 2026-06-05.
+        """
+        from customtkinter.windows.widgets.ctk_button import CTkButton
+
+        with (
+            patch("enhanced_device_selector.ctk.CTkFrame.__init__", return_value=None),
+            patch.object(enhanced_device_selector.EnhancedDeviceSelector, "_create_widgets", return_value=None),
+            patch("enhanced_device_selector.threading.Thread"),
+        ):
+            mock_parent = Mock()
+            mock_parent._w = "mock_parent"
+
+            selector = enhanced_device_selector.EnhancedDeviceSelector(mock_parent)
+
+            # Build two fake device buttons and a parent frame.
+            device_a = Mock()
+            device_a.id = "vid:10d6:pid:af0c"
+            device_b = Mock()
+            device_b.id = "vid:10d6:pid:b00e"
+
+            button_a = Mock(spec=CTkButton)
+            button_a._device = device_a
+            button_b = Mock(spec=CTkButton)
+            button_b._device = device_b
+
+            item_frame_a = Mock()
+            item_frame_a._device_button = button_a
+            item_frame_b = Mock()
+            item_frame_b._device_button = button_b
+
+            mock_list_frame = Mock()
+            mock_list_frame.winfo_children.return_value = [item_frame_a, item_frame_b]
+            selector.device_list_frame = mock_list_frame
+            selector.status_label = Mock()
+
+            # First selection — should select A, un-select nothing.
+            selector._select_device(device_a)
+            button_a.configure.assert_any_call(fg_color="green", hover_color="darkgreen")
+            button_b.configure.assert_any_call(fg_color="transparent", hover_color="transparent")
+
+            # Second selection — the critical regression point. Previously
+            # raised ValueError. Now must complete cleanly.
+            for call in button_a.configure.call_args_list:
+                kwargs = call.kwargs
+                assert kwargs.get("fg_color") is not None, (
+                    "Regressed: button A's configure() received fg_color=None. "
+                    "This is the bug that crashed the selector on 2026-06-05."
+                )
+                assert kwargs.get("hover_color") is not None, (
+                    "Regressed: button A's configure() received hover_color=None."
+                )
+            for call in button_b.configure.call_args_list:
+                kwargs = call.kwargs
+                assert kwargs.get("fg_color") is not None
+                assert kwargs.get("hover_color") is not None
+
+            selector._select_device(device_b)  # Must not raise
 
 
 if __name__ == "__main__":
