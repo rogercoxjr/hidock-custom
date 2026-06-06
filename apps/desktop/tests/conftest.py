@@ -21,6 +21,60 @@ _SRC_DIR = _TESTS_DIR.parent / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
+# Make ``tests.helpers.optional`` importable for tests that do
+# ``from tests.helpers.optional import require``. ``tests/helpers/`` lives at
+# the repo root and ``tests/helpers/optional.py`` is a PEP 420 namespace
+# package (no ``__init__.py``). pytest's importlib machinery (see
+# ``_pytest.pathlib.insert_missing_modules``) binds a synthetic ``tests``
+# module to ``sys.modules`` when loading the first test file from
+# ``apps/desktop/tests/``; that synthetic module has no ``__path__``, so the
+# real ``tests.helpers`` import fails with
+# ``ModuleNotFoundError: No module named 'tests.helpers'``.
+#
+# Fix: pre-import the real ``tests`` package from the repo root *before* pytest
+# can install its synthetic binding. Putting the repo root on ``sys.path``
+# makes the importlib PathFinder pick up ``tests/__init__.py`` (which lives
+# at the repo root and explicitly documents the ``tests.helpers.optional``
+# import pattern in its docstring).
+_REPO_ROOT = _TESTS_DIR.parents[2]  # tests/ -> desktop/ -> apps/ -> repo_root
+if str(_REPO_ROOT) in sys.path:
+    sys.path.remove(str(_REPO_ROOT))
+sys.path.insert(0, str(_REPO_ROOT))
+
+import importlib
+import types
+
+# The 9 test files in this directory do
+# ``from tests.helpers.optional import require``. ``tests/helpers/`` lives at
+# the repo root and is a PEP 420 namespace package (no __init__.py). pytest's
+# importlib machinery binds ``sys.modules['tests']`` to the LOCAL
+# ``apps/desktop/tests`` package (the conftest's parent) when it loads the
+# conftest — that binding is required for pytest to resolve the test files
+# (pytest imports them as ``tests.test_hidock_device_commands`` etc.). But
+# the LOCAL ``tests`` package has no ``helpers`` submodule, so the
+# ``from tests.helpers.optional import require`` import fails.
+#
+# Fix: do NOT touch ``sys.modules['tests']`` (pytest needs it pointing at the
+# local tests dir for ``tests.test_*`` resolution). Instead, register a
+# synthetic ``tests.helpers`` subpackage in ``sys.modules`` with ``__path__``
+# set to the repo-root ``tests/helpers/`` directory. When the test file does
+# ``from tests.helpers.optional import require``, Python finds the synthetic
+# ``tests.helpers`` module in ``sys.modules``, sees its ``__path__`` includes
+# the repo-root helpers dir, and resolves ``optional.py`` from there.
+_helpers_dir = _REPO_ROOT / "tests" / "helpers"
+if "tests" in sys.modules and "tests.helpers" not in sys.modules:
+    _local_tests_mod = sys.modules["tests"]
+    _helpers_mod = types.ModuleType("tests.helpers")
+    _helpers_mod.__path__ = [str(_helpers_dir)]
+    sys.modules["tests.helpers"] = _helpers_mod
+    setattr(_local_tests_mod, "helpers", _helpers_mod)
+
+# Eager-import ``tests.helpers.optional`` so the namespace package and its
+# submodule are both resolvable before any test file runs. If the helpers
+# directory is missing, surface the failure clearly here rather than letting
+# it explode per-test-file.
+importlib.import_module("tests.helpers.optional")
+
 
 @pytest.fixture
 def temp_dir():
