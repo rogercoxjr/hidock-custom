@@ -88,7 +88,6 @@ def mock_config():
         "log_level": "INFO",
         "device_vid": 0x1234,
         "device_pid": 0x5678,
-        "target_interface": 0,
     }
 
 
