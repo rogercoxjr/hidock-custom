@@ -74,13 +74,25 @@ class TestGetDefaultConfig:
         assert isinstance(config["log_colors"], dict)
 
     def test_get_default_config_download_directory_exists(self):
-        """Test that default download directory is properly constructed"""
+        """Test that default download directory is properly constructed.
+
+        The 5a3a9c9d refactor renamed the default downloads directory from
+        ``HiDock_Downloads`` to ``audio`` (a sibling of the desktop app dir).
+        The conftest's autouse fixture wraps ``get_default_config`` to return
+        the test download dir for ``download_directory``; the suffix ``audio``
+        is still expected in the path because the fixture keeps the same
+        relative structure.
+        """
         config = get_default_config()
 
         assert "download_directory" in config
-        assert "HiDock_Downloads" in config["download_directory"]
-        # Should contain user home directory path
-        assert os.path.expanduser("~") in config["download_directory"]
+        # Post-refactor default dir is "audio" (was "HiDock_Downloads").
+        # The test conftest's isolated_get_default_config reuses the
+        # default's path-joining logic with a temp parent, so the
+        # trailing component is still "audio".
+        assert config["download_directory"].endswith("audio")
+        # The path should be absolute (post-refactor: relative to APP_ROOT).
+        assert os.path.isabs(config["download_directory"])
 
 
 class TestLoadConfig:
@@ -284,9 +296,19 @@ class TestLogger:
         mock_set_level.assert_not_called()
 
     def test_logger_internal_log_below_level(self):
-        """Test that messages below log level are ignored"""
+        """Test that messages below log level are ignored.
+
+        The 5a3a9c9d refactor introduced per-output thresholds
+        (``console_level``/``gui_level``/``file_level``) in addition to the
+        global ``level``. The default ``console_level`` is INFO; setting only
+        ``logger.level`` does not suppress console output. We must also set
+        ``logger.console_level`` to ERROR.
+        """
         logger = Logger()
         logger.level = Logger.LEVELS["ERROR"]
+        # The per-output threshold governs whether the message is written to
+        # the console. Without this, the INFO message below still passes.
+        logger.console_level = Logger.LEVELS["ERROR"]
 
         with patch("builtins.print") as mock_print:
             logger._log("info", "module", "procedure", "message")

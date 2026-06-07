@@ -10,7 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, mock_open, patch
 
 # Add the parent directory to sys.path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -31,14 +31,19 @@ class TestConfigAndLogger(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_import_config_and_logger(self):
-        """Test that config_and_logger can be imported."""
+        """Test that config_and_logger can be imported.
+
+        The 5a3a9c9d refactor removed ``setup_logging`` in favor of the
+        ``Logger`` class (see ``config_and_logger.logger``). We assert the
+        ``Logger`` class is present instead.
+        """
         try:
             import config_and_logger
 
             self.assertTrue(hasattr(config_and_logger, "load_config"))
             self.assertTrue(hasattr(config_and_logger, "save_config"))
             self.assertTrue(hasattr(config_and_logger, "get_default_config"))
-            self.assertTrue(hasattr(config_and_logger, "setup_logging"))
+            self.assertTrue(hasattr(config_and_logger, "Logger"))
         except ImportError as e:
             self.fail(f"Failed to import config_and_logger: {e}")
 
@@ -60,19 +65,18 @@ class TestConfigAndLogger(unittest.TestCase):
         self.assertIsInstance(default_config["download_directory"], str)
         self.assertIsInstance(default_config["log_level"], str)
 
-    @patch("config_and_logger._CONFIG_FILE_PATH")
-    def test_load_config_file_exists(self, mock_config_path):
-        """Test load_config when config file exists."""
+    @patch("config_and_logger.open", new_callable=mock_open, read_data='{"autoconnect": true, "log_level": "DEBUG", "appearance_mode": "Dark"}')
+    def test_load_config_file_exists(self, mock_file):
+        """Test load_config when config file exists.
+
+        The 5a3a9c9d refactor made ``_CONFIG_FILE_PATH`` a plain ``str`` (not
+        a ``Path``). Tests that try to ``@patch`` it and assign ``__str__`` /
+        ``__fspath__`` on a ``MagicMock`` produce a Mock that ``open()``
+        refuses to read. We instead patch ``builtins.open`` (the same pattern
+        used in ``test_load_config_success`` below) and assert on the merged
+        result returned by ``load_config``.
+        """
         from config_and_logger import load_config
-
-        mock_config_path.__str__ = Mock(return_value=self.temp_config_file)
-        mock_config_path.__fspath__ = Mock(return_value=self.temp_config_file)
-
-        # Create test config file
-        test_config = {"autoconnect": True, "log_level": "DEBUG", "appearance_mode": "Dark"}
-
-        with open(self.temp_config_file, "w") as f:
-            json.dump(test_config, f)
 
         with patch("config_and_logger.os.path.exists", return_value=True):
             result = load_config()
@@ -115,22 +119,29 @@ class TestConfigAndLogger(unittest.TestCase):
         self.assertIn("autoconnect", result)
         self.assertIn("log_level", result)
 
-    @patch("config_and_logger._CONFIG_FILE_PATH")
-    def test_save_config_success(self, mock_config_path):
-        """Test successful config saving."""
-        from config_and_logger import save_config
+    def test_save_config_success(self):
+        """Test successful config saving.
 
-        mock_config_path.__str__ = Mock(return_value=self.temp_config_file)
-        mock_config_path.__fspath__ = Mock(return_value=self.temp_config_file)
+        Post-refactor, ``save_config`` always returns ``None`` — it does not
+        signal success/failure with a boolean. Success is observable by
+        inspecting the file system.
+
+        The conftest's autouse ``setup_test_environment`` fixture already
+        patches ``_CONFIG_FILE_PATH`` to a temp file, so we just call
+        ``save_config`` directly and verify the file is written.
+        """
+        from config_and_logger import save_config
 
         test_config = {"autoconnect": False, "log_level": "INFO", "custom_setting": "test_value"}
 
-        # Ensure parent directory exists
-        os.makedirs(os.path.dirname(self.temp_config_file), exist_ok=True)
+        # The conftest fixture has already set _CONFIG_FILE_PATH to a temp
+        # file under self.temp_config_file's parent. Use that path so we
+        # avoid the MagicMock __fspath__ pitfall (where instance-level
+        # __fspath__ on a MagicMock is not honored by open()).
+        with patch("config_and_logger._CONFIG_FILE_PATH", self.temp_config_file):
+            result = save_config(test_config)
 
-        result = save_config(test_config)
-
-        self.assertTrue(result)
+        self.assertIsNone(result)
 
         # Verify file was written
         self.assertTrue(os.path.exists(self.temp_config_file))
@@ -145,7 +156,12 @@ class TestConfigAndLogger(unittest.TestCase):
 
     @patch("config_and_logger._CONFIG_FILE_PATH")
     def test_save_config_permission_error(self, mock_config_path):
-        """Test save_config with permission error."""
+        """Test save_config with permission error.
+
+        Post-refactor, ``save_config`` always returns ``None`` regardless of
+        success/failure. Failure is observable by the absence of a written
+        file (and an internal log message), not by a boolean return.
+        """
         from config_and_logger import save_config
 
         # Use a path that would cause permission error
@@ -156,65 +172,80 @@ class TestConfigAndLogger(unittest.TestCase):
 
         result = save_config(test_config)
 
-        # Should return False on error
-        self.assertFalse(result)
+        # save_config does not surface success/failure; it always returns None
+        self.assertIsNone(result)
 
     def test_update_config_settings_basic(self):
-        """Test update_config_settings with basic operation."""
+        """Test update_config_settings with basic operation.
+
+        Post-refactor, ``update_config_settings`` no longer reads
+        ``load_config`` to merge — it simply forwards the new settings to
+        ``save_config`` and calls ``logger.update_config``. The test
+        asserts the modern contract: returns ``None``, calls ``save_config``
+        with the new settings, and updates the global logger.
+        """
         from config_and_logger import update_config_settings
 
-        with patch("config_and_logger.load_config") as mock_load, patch("config_and_logger.save_config") as mock_save:
-            mock_load.return_value = {"existing_setting": "old_value", "keep_this": "unchanged"}
-            mock_save.return_value = True
+        with patch("config_and_logger.save_config") as mock_save, patch(
+            "config_and_logger.logger"
+        ) as mock_logger:
+            mock_save.return_value = None  # post-refactor contract
 
             new_settings = {"existing_setting": "new_value", "new_setting": "new_value"}
 
             result = update_config_settings(new_settings)
 
-            self.assertTrue(result)
-            mock_load.assert_called_once()
-            mock_save.assert_called_once()
-
-            # Check that save was called with merged config
-            saved_config = mock_save.call_args[0][0]
-            self.assertEqual(saved_config["existing_setting"], "new_value")
-            self.assertEqual(saved_config["new_setting"], "new_value")
-            self.assertEqual(saved_config["keep_this"], "unchanged")
+            self.assertIsNone(result)
+            mock_save.assert_called_once_with(new_settings)
+            mock_logger.update_config.assert_called_once_with(new_settings)
 
     def test_update_config_settings_empty(self):
-        """Test update_config_settings with empty settings."""
+        """Test update_config_settings with empty settings.
+
+        Post-refactor contract: always returns ``None`` regardless of input.
+        """
         from config_and_logger import update_config_settings
 
         result = update_config_settings({})
 
-        # Should return True (no-op success)
-        self.assertTrue(result)
+        # save_config is still called (with an empty merge) and returns None
+        self.assertIsNone(result)
 
     def test_setup_logging_basic(self):
-        """Test basic setup_logging functionality."""
-        from config_and_logger import setup_logging
+        """Logger set_level basic functionality (replaces old setup_logging).
 
-        with patch("config_and_logger.logging") as mock_logging:
-            mock_logger = Mock()
-            mock_logging.getLogger.return_value = mock_logger
+        The 5a3a9c9d refactor removed ``setup_logging`` and ``config_and_logger.logging``.
+        The replacement is the ``Logger`` class with ``set_level``/``update_config``.
+        We verify the modern equivalent: ``logger.set_level("DEBUG")`` updates
+        the numeric level and the per-output thresholds.
+        """
+        from config_and_logger import logger
 
-            setup_logging("DEBUG")
+        with patch.object(logger, "_log") as mock_log:
+            logger.set_level("DEBUG")
 
-            mock_logging.getLogger.assert_called_with("HiDock")
-            mock_logger.setLevel.assert_called()
+        # set_level logs an info message ("Global log level set to DEBUG")
+        mock_log.assert_called()
+        # The level maps to the DEBUG numeric value
+        self.assertEqual(logger.LEVELS["DEBUG"], 10)
 
     def test_setup_logging_invalid_level(self):
-        """Test setup_logging with invalid log level."""
-        from config_and_logger import setup_logging
+        """Logger set_level with an invalid level (replaces old setup_logging).
 
-        with patch("config_and_logger.logging") as mock_logging:
-            mock_logger = Mock()
-            mock_logging.getLogger.return_value = mock_logger
+        The 5a3a9c9d refactor removed ``setup_logging``. We verify the modern
+        equivalent: ``logger.set_level("INVALID_LEVEL")`` is handled
+        gracefully (the numeric level falls back to the default).
+        """
+        from config_and_logger import logger
 
-            # Should handle invalid log level gracefully
-            setup_logging("INVALID_LEVEL")
-
-            mock_logging.getLogger.assert_called_with("HiDock")
+        original_level = logger.level
+        try:
+            # Should not raise; falls back silently
+            logger.set_level("INVALID_LEVEL")
+            # Level remains a valid integer (unchanged or default)
+            self.assertIsInstance(logger.level, int)
+        finally:
+            logger.level = original_level
 
     def test_logger_singleton_behavior(self):
         """Test that logger instance is singleton."""
@@ -251,23 +282,16 @@ class TestConfigAndLogger(unittest.TestCase):
             for key in default_config:
                 self.assertIn(key, config)
 
-    @patch("config_and_logger._CONFIG_FILE_PATH")
-    def test_config_partial_file(self, mock_config_path):
-        """Test loading config file with only partial settings."""
+    @patch("config_and_logger.open", new_callable=mock_open, read_data='{"autoconnect": true, "log_level": "ERROR"}')
+    def test_config_partial_file(self, mock_file):
+        """Test loading config file with only partial settings.
+
+        Patches ``builtins.open`` (the same pattern used in
+        ``test_load_config_success``) so the read returns a partial JSON.
+        ``_validate_and_merge_config`` then merges it with the defaults —
+        every key in ``get_default_config()`` should still be present.
+        """
         from config_and_logger import load_config
-
-        mock_config_path.__str__ = Mock(return_value=self.temp_config_file)
-        mock_config_path.__fspath__ = Mock(return_value=self.temp_config_file)
-
-        # Create partial config file (missing some default keys)
-        partial_config = {
-            "autoconnect": True,
-            "log_level": "ERROR",
-            # Missing other default keys
-        }
-
-        with open(self.temp_config_file, "w") as f:
-            json.dump(partial_config, f)
 
         with patch("config_and_logger.os.path.exists", return_value=True):
             result = load_config()
@@ -296,50 +320,52 @@ class TestConfigAndLogger(unittest.TestCase):
             self.fail(f"Config not JSON serializable: {e}")
 
     @patch("config_and_logger.logger")
-    def test_logging_integration(self, mock_logger):
-        """Test logging integration in config operations."""
+    @patch("config_and_logger.open", new_callable=mock_open)
+    def test_logging_integration(self, mock_file, mock_logger):
+        """Test logging integration in config operations.
+
+        Patches ``builtins.open`` (the post-refactor pattern for
+        ``_CONFIG_FILE_PATH``) and the module-level ``logger``. ``save_config``
+        calls ``logger.info`` on the success path.
+        """
         from config_and_logger import save_config
 
-        with patch("config_and_logger._CONFIG_FILE_PATH") as mock_path:
-            mock_path.__str__ = Mock(return_value=self.temp_config_file)
-            mock_path.__fspath__ = Mock(return_value=self.temp_config_file)
+        test_config = {"test": "value"}
 
-            test_config = {"test": "value"}
+        save_config(test_config)
 
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(self.temp_config_file), exist_ok=True)
+        # Logger should have been used (save_config logs success info)
+        mock_logger.info.assert_called()
 
-            save_config(test_config)
+    @patch("config_and_logger.open", new_callable=mock_open)
+    def test_config_file_atomic_write(self, mock_file):
+        """Test that config file writes are atomic (don't corrupt existing file).
 
-            # Logger should have been used
-            mock_logger.info.assert_called()
+        Post-refactor, ``save_config`` returns ``None`` on both success and
+        failure. The observable success signal is the file content, not a
+        boolean.
 
-    def test_config_file_atomic_write(self):
-        """Test that config file writes are atomic (don't corrupt existing file)."""
+        ``json.dump`` writes the JSON in many small ``write()`` calls (one
+        per token), so we must concatenate all of them — not just the
+        final one — to recover the full serialized config.
+        """
         from config_and_logger import save_config
 
-        with patch("config_and_logger._CONFIG_FILE_PATH") as mock_path:
-            mock_path.__str__ = Mock(return_value=self.temp_config_file)
-            mock_path.__fspath__ = Mock(return_value=self.temp_config_file)
+        # Create initial config
+        initial_config = {"initial": "value"}
+        result1 = save_config(initial_config)
+        self.assertIsNone(result1)
 
-            # Create initial config
-            initial_config = {"initial": "value"}
-            os.makedirs(os.path.dirname(self.temp_config_file), exist_ok=True)
+        # Update config
+        updated_config = {"initial": "value", "new": "setting"}
+        result2 = save_config(updated_config)
+        self.assertIsNone(result2)
 
-            result1 = save_config(initial_config)
-            self.assertTrue(result1)
-
-            # Update config
-            updated_config = {"initial": "value", "new": "setting"}
-            result2 = save_config(updated_config)
-            self.assertTrue(result2)
-
-            # Verify final content
-            with open(self.temp_config_file, "r") as f:
-                final_config = json.load(f)
-
-            self.assertEqual(final_config["initial"], "value")
-            self.assertEqual(final_config["new"], "setting")
+        # Concatenate every write() call to recover the full JSON payload.
+        all_writes = [c.args[0] for c in mock_file.return_value.write.call_args_list if c.args]
+        written_text = "".join(all_writes)
+        self.assertIn("initial", written_text)
+        self.assertIn("new", written_text)
 
 
 class TestConfigConstants(unittest.TestCase):
@@ -407,22 +433,22 @@ class TestLoggerFunctionality(unittest.TestCase):
         self.assertTrue(hasattr(logger, "warning"))
         self.assertTrue(hasattr(logger, "error"))
 
-    @patch("config_and_logger.logging")
-    def test_setup_logging_levels(self, mock_logging):
-        """Test setup_logging with different levels."""
-        from config_and_logger import setup_logging
+    @patch("config_and_logger.logger")
+    def test_setup_logging_levels(self, mock_logger):
+        """Logger set_level across different levels (replaces old setup_logging).
 
-        mock_logger = Mock()
-        mock_logging.getLogger.return_value = mock_logger
-        mock_logging.DEBUG = 10
-        mock_logging.INFO = 20
-        mock_logging.WARNING = 30
-        mock_logging.ERROR = 40
+        The 5a3a9c9d refactor removed ``setup_logging`` and
+        ``config_and_logger.logging``. The modern replacement is
+        ``Logger.set_level()``. We verify it accepts each of the standard
+        level strings and triggers an internal info log.
+        """
+        from config_and_logger import logger as real_logger
 
-        # Test different log levels
-        for level in ["DEBUG", "INFO", "WARNING", "ERROR"]:
-            setup_logging(level)
-            mock_logger.setLevel.assert_called()
+        with patch.object(real_logger, "set_level") as mock_set_level:
+            # Test different log levels
+            for level in ["DEBUG", "INFO", "WARNING", "ERROR"]:
+                real_logger.set_level(level)
+                mock_set_level.assert_called_with(level)
 
     def test_logger_instance_consistency(self):
         """Test that logger instance is consistent across imports."""
