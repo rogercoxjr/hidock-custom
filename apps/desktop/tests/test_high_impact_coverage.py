@@ -43,20 +43,30 @@ class TestConfigAndLoggerHighCoverage(unittest.TestCase):
         # Test get_default_config structure
         config = config_and_logger.get_default_config()
 
-        # Verify all required keys exist
-        required_keys = ["autoconnect", "log_level", "theme", "last_directory"]
+        # Verify all required keys exist. The 5a3a9c9d refactor renamed
+        # the legacy "theme" key into two distinct fields (appearance_mode
+        # + color_theme); the legacy "last_directory" was dropped along
+        # with the SimpleCalendarMixin it was paired with.
+        required_keys = ["autoconnect", "log_level", "appearance_mode", "color_theme"]
         for key in required_keys:
             self.assertIn(key, config, f"Missing required config key: {key}")
 
         # Test config data types
         self.assertIsInstance(config["autoconnect"], bool)
         self.assertIsInstance(config["log_level"], str)
-        self.assertIsInstance(config["theme"], str)
+        self.assertIsInstance(config["appearance_mode"], str)
 
-    @patch("config_and_logger.os.path.makedirs")
     @patch("config_and_logger.os.path.dirname")
-    def test_config_directory_creation(self, mock_dirname, mock_makedirs):
-        """Test config directory creation logic."""
+    def test_config_directory_creation(self, mock_dirname):
+        """Test config directory creation logic.
+
+        NOTE: Pre-2026 refactor, save_config() called os.makedirs() to ensure
+        the config directory existed. After the refactor the config file path
+        is guaranteed to exist by the platform-specific venv / setup flow
+        (see docs/VENV.md) and the call was removed. The test now verifies
+        the save path completes successfully instead of asserting on a
+        makedirs call that production no longer makes.
+        """
         import config_and_logger
 
         mock_dirname.return_value = "/test/config/dir"
@@ -66,8 +76,10 @@ class TestConfigAndLoggerHighCoverage(unittest.TestCase):
             with patch("config_and_logger.json.dump"):
                 result = config_and_logger.save_config({"test": "data"})
 
-        # Verify directory creation was attempted
-        mock_makedirs.assert_called()
+        # Save should succeed; the open() call now writes directly to the
+        # pre-existing config path. (The makedirs call was removed in the
+        # 5a3a9c9d refactor — directory creation is the bootstrap's job.)
+        self.assertIsNone(result)
 
     def test_config_error_handling(self):
         """Test configuration error handling scenarios."""
@@ -94,9 +106,12 @@ class TestConfigAndLoggerHighCoverage(unittest.TestCase):
                 # Should have autoconnect from file
                 self.assertEqual(config["autoconnect"], False)
 
-                # Should have other keys from defaults
+                # Should have other keys from defaults. The "theme" key
+                # was split into appearance_mode + color_theme in the
+                # 5a3a9c9d refactor.
                 self.assertIn("log_level", config)
-                self.assertIn("theme", config)
+                self.assertIn("appearance_mode", config)
+                self.assertIn("color_theme", config)
 
 
 class TestCalendarModulesHighCoverage(unittest.TestCase):
@@ -141,31 +156,35 @@ class TestCalendarModulesHighCoverage(unittest.TestCase):
             self.skipTest(f"calendar_service test failed: {e}")
 
     def test_simple_calendar_mixin_extended(self):
-        """Extended tests for SimpleCalendarMixin."""
-        import simple_calendar_mixin
+        """Extended tests for the calendar mixin (renamed in 5a3a9c9d).
 
-        class TestMixin(simple_calendar_mixin.SimpleCalendarMixin):
+        The pre-refactor ``simple_calendar_mixin.SimpleCalendarMixin`` was
+        merged into ``async_calendar_mixin.AsyncCalendarMixin``. We verify
+        that the modern replacement exposes the same ``enhance_files_with_meeting_data``
+        contract: returns a list with one entry per input file, each with
+        ``has_meeting`` and ``meeting_subject`` keys.
+        """
+        import async_calendar_mixin
+
+        class TestMixin(async_calendar_mixin.AsyncCalendarMixin):
             def __init__(self):
                 self._calendar_integration = None
-                self._calendar_cache = {}
-                self._calendar_cache_date = None
+                self._calendar_cache_manager = None
+                self._calendar_work_queue = None
+                self._calendar_sync_status = "idle"
 
         mixin = TestMixin()
 
-        # Test more methods
-        with patch.object(mixin, "_parse_file_datetime") as mock_parse:
-            mock_parse.return_value = datetime.now()
+        files = [
+            {"name": "test1.hda", "date": "2024-01-01", "time": "10:00:00"},
+            {"name": "test2.hda", "date": "2024-01-01", "time": "14:00:00"},
+        ]
 
-            files = [
-                {"name": "test1.hda", "date": "2024-01-01", "time": "10:00:00"},
-                {"name": "test2.hda", "date": "2024-01-01", "time": "14:00:00"},
-            ]
-
-            result = mixin.enhance_files_with_meeting_data(files)
-            self.assertEqual(len(result), 2)
-            for file_data in result:
-                self.assertIn("has_meeting", file_data)
-                self.assertIn("meeting_subject", file_data)
+        result = mixin.enhance_files_with_meeting_data(files)
+        self.assertEqual(len(result), 2)
+        for file_data in result:
+            self.assertIn("has_meeting", file_data)
+            self.assertIn("meeting_subject", file_data)
 
     def test_async_calendar_mixin_extended(self):
         """Extended tests for AsyncCalendarMixin."""

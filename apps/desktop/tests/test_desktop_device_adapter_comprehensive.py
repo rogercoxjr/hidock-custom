@@ -97,7 +97,13 @@ class TestConnectionTimeoutAndRetry:
 
     @pytest.mark.asyncio
     async def test_connect_timeout_retry_still_fails(self):
-        """Test connection timeout retry that still fails (lines 142-147)."""
+        """Test connection timeout retry that still fails (lines 142-147).
+
+        Pinned to a specific VID:PID so production's auto-discovery scan
+        (which iterates ALL_VENDOR_IDS × HIDOCK_PRODUCT_IDS = 24 pairs) does
+        not run. The pinned pair gets two attempts: initial + force_reset
+        retry. Both fail → ConnectionError raised.
+        """
         # Both connection attempts fail with timeout
         self.mock_jensen.connect.side_effect = [
             (False, "Connection timeout occurred"),
@@ -105,20 +111,26 @@ class TestConnectionTimeoutAndRetry:
         ]
 
         with pytest.raises(ConnectionError) as exc_info:
-            await self.adapter.connect()
+            await self.adapter.connect(device_id="10d6:af0c")
 
         assert "Still timing out after reset" in str(exc_info.value)
-        # Should have called connect twice
+        # Should have called connect twice (initial + force_reset retry)
         assert self.mock_jensen.connect.call_count == 2
 
     @pytest.mark.asyncio
     async def test_connect_non_timeout_error_no_retry(self):
-        """Test that non-timeout errors don't trigger retry."""
+        """Test that non-timeout errors don't trigger retry.
+
+        Pinned to a specific VID:PID so production's auto-discovery scan
+        iterates exactly one pair. Non-timeout error → no force_reset
+        retry → exactly one call. The production adapter wraps the
+        inner error as ``Failed to connect to device: <reason>``.
+        """
         # Non-timeout error should not trigger retry
         self.mock_jensen.connect.return_value = (False, "Invalid device configuration")
 
         with pytest.raises(ConnectionError) as exc_info:
-            await self.adapter.connect()
+            await self.adapter.connect(device_id="10d6:af0c")
 
         assert "Invalid device configuration" in str(exc_info.value)
         # Should only call connect once (no retry for non-timeout errors)
@@ -196,10 +208,14 @@ class TestRecordingOperationsEdgeCases:
 
     @pytest.mark.asyncio
     async def test_get_recordings_empty_files_info(self):
-        """Test get_recordings when files_info is empty or malformed (line 278)."""
+        """Test get_recordings when files_info is empty or malformed (line 278).
+
+        Production calls ``list_files_with_retry`` (not ``list_files``) per
+        the refactor in commit 5a3a9c9d.
+        """
         self.mock_jensen.is_connected.return_value = True
         # Return None or malformed data
-        self.mock_jensen.list_files.return_value = None
+        self.mock_jensen.list_files_with_retry.return_value = None
 
         result = await self.adapter.get_recordings()
 
@@ -207,10 +223,13 @@ class TestRecordingOperationsEdgeCases:
 
     @pytest.mark.asyncio
     async def test_get_recordings_no_files_key(self):
-        """Test get_recordings when files_info lacks 'files' key (line 278)."""
+        """Test get_recordings when files_info lacks 'files' key (line 278).
+
+        Production calls ``list_files_with_retry`` (not ``list_files``).
+        """
         self.mock_jensen.is_connected.return_value = True
         # Return dict without 'files' key
-        self.mock_jensen.list_files.return_value = {"status": "ok"}
+        self.mock_jensen.list_files_with_retry.return_value = {"status": "ok"}
 
         result = await self.adapter.get_recordings()
 
@@ -362,57 +381,66 @@ class TestDeleteRecordingEdgeCases:
 
     @pytest.mark.asyncio
     async def test_delete_recording_not_found(self):
-        """Test delete when recording not found (line 433)."""
+        """Test delete when device rejects the filename (was 'not found' in old code).
+
+        After the 5a3a9c9d refactor, ``delete_recording`` no longer pre-checks
+        ``get_recordings`` — it deletes by filename directly. The "not found"
+        case is now expressed as the device returning a non-success result
+        (e.g. ``file_not_found``) which ``delete_recording`` re-raises as
+        ``Delete failed: <reason>``.
+        """
         progress_callback = Mock()
         self.mock_jensen.is_connected.return_value = True
+        # Device says the file does not exist
+        self.mock_jensen.delete_file.return_value = {"result": "file_not_found"}
 
-        # Mock get_recordings to return empty list
-        with patch.object(self.adapter, "get_recordings", return_value=[]):
-            with pytest.raises(FileNotFoundError) as exc_info:
-                await self.adapter.delete_recording("nonexistent.hta", progress_callback)
+        with pytest.raises(RuntimeError) as exc_info:
+            await self.adapter.delete_recording("nonexistent.hta", progress_callback)
 
-            assert "Recording nonexistent.hta not found" in str(exc_info.value)
+        assert "Delete failed: file_not_found" in str(exc_info.value)
+        # Error progress callback should fire
+        error_calls = [
+            call for call in progress_callback.call_args_list if call[0][0].status == OperationStatus.ERROR
+        ]
+        assert len(error_calls) > 0
 
     @pytest.mark.asyncio
     async def test_delete_recording_device_error(self):
         """Test delete when device returns error (line 449)."""
         progress_callback = Mock()
 
-        class MockRecording:
-            def __init__(self, id_val, filename):
-                self.id = id_val
-                self.filename = filename
-
-        mock_recording = MockRecording("test.hta", "test.hta")
-
         self.mock_jensen.is_connected.return_value = True
         # Device returns failure result
         self.mock_jensen.delete_file.return_value = {"result": "file_locked"}
 
-        with patch.object(self.adapter, "get_recordings", return_value=[mock_recording]):
-            with pytest.raises(RuntimeError) as exc_info:
-                await self.adapter.delete_recording("test.hta", progress_callback)
+        with pytest.raises(RuntimeError) as exc_info:
+            await self.adapter.delete_recording("test.hta", progress_callback)
 
-            assert "Delete failed: file_locked" in str(exc_info.value)
+        assert "Delete failed: file_locked" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_delete_recording_exception_handling(self):
-        """Test delete recording exception handling (lines 461-473)."""
+        """Test delete recording exception handling (lines 461-473).
+
+        The 5a3a9c9d refactor removed the pre-``delete_file`` ``get_recordings``
+        call. The exception path is now triggered by ``delete_file`` itself
+        raising. Production re-raises and emits an error progress callback.
+        """
         progress_callback = Mock()
         self.mock_jensen.is_connected.return_value = True
+        # delete_file raises an exception — production re-raises it.
+        self.mock_jensen.delete_file.side_effect = Exception("Communication error")
 
-        # Mock get_recordings to raise exception
-        with patch.object(self.adapter, "get_recordings", side_effect=Exception("Communication error")):
-            with pytest.raises(Exception) as exc_info:
-                await self.adapter.delete_recording("test.hta", progress_callback)
+        with pytest.raises(Exception) as exc_info:
+            await self.adapter.delete_recording("test.hta", progress_callback)
 
-            assert "Communication error" in str(exc_info.value)
+        assert "Communication error" in str(exc_info.value)
 
-            # Should call error progress callback
-            error_calls = [
-                call for call in progress_callback.call_args_list if call[0][0].status == OperationStatus.ERROR
-            ]
-            assert len(error_calls) > 0
+        # Should call error progress callback
+        error_calls = [
+            call for call in progress_callback.call_args_list if call[0][0].status == OperationStatus.ERROR
+        ]
+        assert len(error_calls) > 0
 
 
 class TestFormatStorageEdgeCases:

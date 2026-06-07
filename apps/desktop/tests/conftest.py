@@ -237,6 +237,15 @@ def setup_test_environment(monkeypatch, tmp_path):
     try:
         import settings_window
 
+        # Capture the REAL SettingsDialog class BEFORE we monkey-patch it onto
+        # settings_window below. test_file_status_and_api_key_fixes.py constructs
+        # ``SettingsDialog.__new__(SettingsDialog)`` (which now returns a
+        # MockSettingsDialog instance due to the patch) and calls
+        # _decrypt_api_key / _load_api_key_status on it. Those tests assert on
+        # the real encryption/decryption side effects, so we route the mock
+        # methods through ``_RealSettingsDialog``.
+        _RealSettingsDialog = settings_window.SettingsDialog
+
         # Mock the entire SettingsDialog class to prevent GUI initialization
         # This is safer than trying to monkey-patch __init__
         class MockSettingsDialog:
@@ -306,6 +315,65 @@ def setup_test_environment(monkeypatch, tmp_path):
                     # set_enabled(False) — mirrored from settings_window.py:_populate_connection_tab
                     selector.set_enabled(False)
                 return None
+
+            def _decrypt_api_key(self, encrypted_b64):
+                """Decrypt an API key (mocked: route to real SettingsDialog).
+
+                test_file_status_and_api_key_fixes.py::TestAPIKeyFixes
+                constructs ``SettingsDialog.__new__(SettingsDialog)`` and
+                calls _decrypt_api_key on the (now-Mock) instance. The
+                patched mock must run the real Fernet decryption so tests
+                can assert on the real encryption contract (returns "" on
+                failure, raises on bad base64, etc.). We instantiate a
+                bare real SettingsDialog (no GUI) and delegate.
+
+                The real method reads self.local_vars["ai_api_provider_var"]
+                and self.parent_gui.config, so we forward our local_vars
+                to the real instance first.
+                """
+                real = _RealSettingsDialog.__new__(_RealSettingsDialog)
+                real.local_vars = getattr(self, "local_vars", {})
+                real.parent_gui = getattr(self, "parent_gui", None)
+                return real._decrypt_api_key(encrypted_b64)
+
+            def _load_api_key_status(self):
+                """Load and display the API key status (mocked: route to real).
+
+                test_file_status_and_api_key_fixes.py::TestAPIKeyFixes::
+                test_load_api_key_status_decryption_failure patches Fernet
+                to raise, then calls this method on the mock. The real
+                implementation logs and updates local_vars[api_key_status_var];
+                we delegate so those assertions hold.
+
+                Some tests override ``_decrypt_api_key`` on the mock
+                instance (e.g. ``settings_dialog._decrypt_api_key =
+                Mock(return_value="")``) — in that case we route the call
+                back through the mock's own method so the override is
+                honored.
+                """
+                # If a test has overridden _decrypt_api_key on this mock
+                # instance, honor that override by re-implementing the real
+                # method's flow using self's own state.
+                import settings_window as _sw
+
+                decrypted_key_getter = (
+                    self._decrypt_api_key
+                    if getattr(self._decrypt_api_key, "__func__", None)
+                    is not _RealSettingsDialog._decrypt_api_key
+                    else None
+                )
+                real = _RealSettingsDialog.__new__(_RealSettingsDialog)
+                real.local_vars = getattr(self, "local_vars", {})
+                real.parent_gui = getattr(self, "parent_gui", None)
+                if decrypted_key_getter is not None:
+                    real._decrypt_api_key = decrypted_key_getter
+                # Forward UI widgets set on the mock so the real method's
+                # ``hasattr(self, "api_key_entry")`` branch executes against
+                # the test's mocks rather than skipping the assertion block.
+                for attr in ("api_key_entry", "api_key_status_label"):
+                    if hasattr(self, attr):
+                        setattr(real, attr, getattr(self, attr))
+                return real._load_api_key_status()
 
         monkeypatch.setattr(settings_window, "SettingsDialog", MockSettingsDialog)
     except ImportError:

@@ -8,7 +8,7 @@ This module tests the specific fixes implemented for:
 """
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, mock_open, patch
 
 from file_operations_manager import FileOperationStatus, FileOperationType
 from gui_actions_file import FileActionsMixin
@@ -182,18 +182,23 @@ class TestAPIKeyFixes(unittest.TestCase):
                 with patch("base64.b64decode") as mock_b64decode:
                     with patch("os.path.exists", return_value=True):
                         with patch("os.remove") as mock_remove:
-                            # Simulate decryption failure
-                            mock_fernet.return_value.decrypt.side_effect = Exception("Decryption failed")
-                            mock_b64decode.return_value = b"encrypted_data"
+                            # _generate_encryption_key reads the key file via
+                            # builtins.open; patch it to return a fake Fernet key
+                            # so Fernet(key) succeeds and f.decrypt can raise.
+                            fake_key_file = mock_open(read_data=b"z" * 44)
+                            with patch("builtins.open", fake_key_file):
+                                # Simulate decryption failure
+                                mock_fernet.return_value.decrypt.side_effect = Exception("Decryption failed")
+                                mock_b64decode.return_value = b"encrypted_data"
 
-                            # Test decryption with corrupted key
-                            result = settings_dialog._decrypt_api_key("dGVzdF9lbmNyeXB0ZWRfZGF0YQ==")
+                                # Test decryption with corrupted key
+                                result = settings_dialog._decrypt_api_key("dGVzdF9lbmNyeXB0ZWRfZGF0YQ==")
 
-                            # Should return empty string
-                            assert result == ""
+                                # Should return empty string
+                                assert result == ""
 
-                            # Should attempt to remove corrupted key file
-                            mock_remove.assert_called_once()
+                                # Should attempt to remove corrupted key file
+                                mock_remove.assert_called_once()
 
     def test_load_api_key_status_decryption_failure(self):
         """Test that API key status loading handles decryption failures gracefully."""
