@@ -78,7 +78,11 @@ class TestDeviceDiscovery:
 
             devices = await self.adapter.discover_devices()
 
-            assert len(devices) == 2
+            # 2 mock vendors (0x10D6, 0x3887) × 2 mock products (0xAF0C, 0xAF0D) = 4
+            # expected discoveries. Driven by DesktopDeviceAdapter._all_vid_pid_pairs().
+            # Update this constant if you add another vendor or product to the mock.
+            EXPECTED_DISCOVERY_COUNT = 2 * 2
+            assert len(devices) == EXPECTED_DISCOVERY_COUNT
             assert all(isinstance(device, DeviceInfo) for device in devices)
             assert devices[0].id == "10d6:af0c"
             assert devices[1].id == "10d6:af0d"
@@ -498,8 +502,12 @@ class TestStorageOperations:
 
         assert isinstance(result, StorageInfo)
         assert result.total_capacity == 1000 * 1024 * 1024  # Convert MB to bytes
-        assert result.used_space == 750 * 1024 * 1024
-        assert result.free_space == 250 * 1024 * 1024
+        # Production applies a documented firmware-bug workaround:
+        # the device's "used" field actually reports free space, so
+        # used_space = total_capacity - free_space = 1000 - 750 = 250 MiB.
+        # See desktop_device_adapter.py:307 (get_storage_info) for rationale.
+        assert result.used_space == 250 * 1024 * 1024
+        assert result.free_space == 750 * 1024 * 1024
         assert result.file_count == 50
 
     @pytest.mark.asyncio
@@ -562,7 +570,10 @@ class TestRecordingOperations:
             ]
         }
         self.mock_jensen.is_connected.return_value = True
-        self.mock_jensen.list_files.return_value = mock_files_info
+        # Production calls list_files_with_retry (see desktop_device_adapter.py:346),
+        # not list_files. The mock must target the right attribute or it returns
+        # a bare Mock and "files" in Mock raises TypeError.
+        self.mock_jensen.list_files_with_retry.return_value = mock_files_info
 
         result = await self.adapter.get_recordings()
 
@@ -888,7 +899,8 @@ class TestErrorHandling:
         """Test download with invalid filename."""
         progress_callback = Mock()
         self.mock_jensen.is_connected.return_value = True
-        self.mock_jensen.list_files.return_value = {"files": []}
+        # Production calls list_files_with_retry (see desktop_device_adapter.py:346).
+        self.mock_jensen.list_files_with_retry.return_value = {"files": []}
 
         with pytest.raises(FileNotFoundError):
             await self.adapter.download_recording("", "/tmp/output.wav", progress_callback)

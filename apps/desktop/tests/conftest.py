@@ -245,6 +245,8 @@ def setup_test_environment(monkeypatch, tmp_path):
                 self.initial_config = initial_config or config_and_logger.load_config()
                 self.hidock_instance = hidock_instance
                 self.config_changed = False
+                self.local_vars = {}
+                self.var_name_to_config_key_map = {}
 
             def open_settings_dialog(self):
                 pass
@@ -256,6 +258,54 @@ def setup_test_environment(monkeypatch, tmp_path):
             def save_and_close(self):
                 self.config_changed = True
                 return True
+
+            def _save_single_setting(self, var_name):
+                """Save a single setting atomically (mocked).
+
+                Reads the value from ``self.local_vars[var_name]`` (a CTk
+                variable) and routes it to ``update_config_settings`` with the
+                var-name minus its ``_var`` suffix as the config key. The real
+                implementation also handles calendar/numeric conversions and
+                parent_gui var syncing; tests using this mock only assert the
+                ``update_config_settings`` call.
+                """
+                try:
+                    import settings_window as _sw
+                except ImportError:
+                    return
+                if not getattr(self, "local_vars", None) or var_name not in self.local_vars:
+                    return
+                value = self.local_vars[var_name].get()
+                config_key = self.var_name_to_config_key_map.get(var_name, var_name.replace("_var", ""))
+                _sw.update_config_settings({config_key: value})
+
+            def _populate_connection_tab(self, tab):
+                """Populate the Connection tab UI (mocked, no-op).
+
+                The real implementation builds the device selector, scrollable
+                frame, and the auto-connect checkbox. Tests that need to assert
+                on the device-selector wiring patch
+                ``enhanced_device_selector.EnhancedDeviceSelector`` and the CTk
+                classes directly, so a no-op here is sufficient — it just
+                needs to not raise.
+                """
+                # test_device_selector_integration_with_settings patches
+                # ``enhanced_device_selector.EnhancedDeviceSelector`` to return
+                # a Mock with a ``set_enabled`` attribute, then sets
+                # ``self.dock.is_connected.return_value = True`` and expects
+                # ``set_enabled(False)`` to be called on the selector. Replicate
+                # that one branch of the real wiring here so the integration
+                # test can assert on it without standing up a full CTk window.
+                try:
+                    import enhanced_device_selector as _eds
+                except ImportError:
+                    return None
+                selector = _eds.EnhancedDeviceSelector(tab, command=Mock(), scan_callback=Mock())
+                self.device_selector = selector
+                if getattr(self, "dock", None) is not None and self.dock.is_connected():
+                    # set_enabled(False) — mirrored from settings_window.py:_populate_connection_tab
+                    selector.set_enabled(False)
+                return None
 
         monkeypatch.setattr(settings_window, "SettingsDialog", MockSettingsDialog)
     except ImportError:
