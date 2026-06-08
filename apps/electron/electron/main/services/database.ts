@@ -1386,7 +1386,12 @@ export async function initializeDatabase(): Promise<void> {
     // --- PHASE 1: CORE TABLES ---
     console.log('[Database] Phase 1: Ensuring core tables exist...')
     for (const sql of statements) {
-      if (sql.toUpperCase().startsWith('CREATE TABLE')) {
+      // Strip leading `-- ...` comment lines before the CREATE TABLE check: every
+      // SCHEMA statement is preceded by a comment, so a plain startsWith('CREATE TABLE')
+      // matches none of them — leaving Phase 1 creating zero tables and Phases 2/3
+      // crashing on a fresh (empty) database (first-launch crash). See seedless fresh-init.
+      const code = sql.replace(/^\s*(?:--[^\n]*\n)+/, '').trimStart()
+      if (code.toUpperCase().startsWith('CREATE TABLE')) {
         try {
           database.run(sql)
         } catch (e) {
@@ -1401,7 +1406,7 @@ export async function initializeDatabase(): Promise<void> {
     
     // Repair Recordings
     const recordingsInfo = database.exec("PRAGMA table_info(recordings)")
-    const recCols = recordingsInfo[0].values.map(col => col[1])
+    const recCols = recordingsInfo.length > 0 && recordingsInfo[0].values ? recordingsInfo[0].values.map(col => col[1]) : []
     const recordingRepairs = [
       { name: 'migrated_to_capture_id', def: "TEXT" },
       { name: 'migration_status', def: "TEXT CHECK(migration_status IN ('pending', 'migrated', 'skipped', 'error')) DEFAULT 'pending'" },
@@ -1416,7 +1421,7 @@ export async function initializeDatabase(): Promise<void> {
 
     // Repair Knowledge Captures
     const captureInfo = database.exec("PRAGMA table_info(knowledge_captures)")
-    const capCols = captureInfo[0].values.map(col => col[1])
+    const capCols = captureInfo.length > 0 && captureInfo[0].values ? captureInfo[0].values.map(col => col[1]) : []
     const knowledgeRepairs = [
       { name: 'category', def: "category TEXT CHECK(category IN ('meeting', 'interview', '1:1', 'brainstorm', 'note', 'other')) DEFAULT 'meeting'" },
       { name: 'status', def: "status TEXT CHECK(status IN ('processing', 'ready', 'enriched')) DEFAULT 'ready'" },
