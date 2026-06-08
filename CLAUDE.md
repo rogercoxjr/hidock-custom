@@ -93,8 +93,11 @@ The project evolved through four iterations, each building toward the ultimate v
 - `apps/audio-insights/` - Insights prototype (AI analysis)
 - `apps/electron/` - **Universal knowledge hub** (integration of all capabilities) — current focus
 - `apps/meeting-recorder/` - Standalone cross-platform meeting recorder (real-time transcription, summarization, system tray)
-- `packages/` - Shared workspace packages (e.g., `audio-capture`, `transcription`) consumed by Electron/meeting-assistant apps
+- `apps/meeting-assistant/` - Phased build that reuses `packages/*` (active track; state in `.claude/workflow-state-meeting-assistant.md`)
+- `packages/` - Five shared libraries published as `@hidock/*`: `ai-providers`, `audio-capture`, `calendar-sync`, `storage-controller`, `transcription`
 - `docs/superpowers/specs/` - Phased design specs (e.g., meeting assistant)
+
+> **No npm workspace.** There is no root `package.json`. Each JS/TS project owns its own `node_modules` and must be `npm install`'d in its own directory — there is no hoisting and no single root install. `packages/*` are linked via `file:../../packages/*` references (currently consumed by `apps/meeting-assistant` and by sibling packages), so after changing a package, reinstall it in any dependent app before the change is picked up. `apps/audio/` is an empty stray directory — ignore it.
 
 **Shared Protocols:**
 - Jensen protocol for USB communication with HiDock devices
@@ -222,6 +225,8 @@ python scripts/build/build_desktop.py
 **Vision:** The central intelligence system that transforms any information source into actionable insights.
 
 **Entry Point:** `apps/electron/electron/main/index.ts` → Electron main process
+
+> **Doc caveat:** the `apps/electron/` root holds ~58 `*.md` files (e.g. `*_FIXES.md`, `*_AUDIT.md`, `BUGS_*.md`) — these are historical, session-scoped bug/audit reports, not authoritative specs. Treat them as point-in-time notes; the current sources of truth are `apps/electron/README.md`, `apps/electron/ARCHITECTURE.md`, and `apps/electron/docs/`.
 
 **What Makes It Different:**
 - **Not just audio**: Handles recordings, PDFs, presentations, documents, markdown, notes, calendar, email, Slack, etc.
