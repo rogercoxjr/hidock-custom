@@ -253,7 +253,17 @@ class TestMPEGFormatParsing:
 
     @patch("pydub.AudioSegment")
     def test_parse_hta_format_1_pydub_success(self, mock_audio_segment):
-        """Test MPEG parsing with pydub success."""
+        """Test MPEG parsing with pydub success.
+
+        Production calls ``audio_segment.set_sample_width(2)`` and
+        ``audio_segment.set_frame_rate(target_rate)``, both of which return
+        a NEW AudioSegment-like object. With the original test mock setup,
+        those return-value objects had ``.frame_rate`` as a Mock, breaking
+        the ``12000 <= sample_rate <= 20000`` check in
+        ``_get_compatible_sample_rate``. Make those setters return the same
+        mock_segment (which has frame_rate=16000 already) so the rate
+        comparison succeeds and ``_parse_wav_data`` is reached.
+        """
         # Setup mock AudioSegment
         mock_segment = Mock()
         mock_segment.frame_rate = 16000
@@ -262,6 +272,10 @@ class TestMPEGFormatParsing:
 
         mock_export_data = b"RIFF" + b"\x00" * 100  # Mock WAV data
         mock_segment.export.return_value = None
+
+        # Mutating setters return the same segment so .frame_rate stays 16000
+        mock_segment.set_sample_width.return_value = mock_segment
+        mock_segment.set_frame_rate.return_value = mock_segment
 
         mock_audio_segment.from_file.return_value = mock_segment
 
