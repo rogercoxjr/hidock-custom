@@ -94,7 +94,9 @@ class TestDeviceFallbackMocked:
             # Test discovery
             discovered = await adapter.discover_devices()
 
-            assert len(discovered) == 3
+            # Production now iterates 2 vendor IDs per model (10d6 + 3887),
+            # so discover returns 6 entries (3 models x 2 VIDs). 5a3a9c9d change.
+            assert len(discovered) == 6
             device_names = [d.name for d in discovered]
             assert "HiDock hidock-h1e" in device_names
             assert "HiDock hidock-h1" in device_names
@@ -103,7 +105,11 @@ class TestDeviceFallbackMocked:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_discover_single_device(self, mock_adapter):
-        """Test discovery when only one device type is available."""
+        """Test discovery when only one device type is available.
+
+        Post-5a3a9c9d, production iterates 2 vendor IDs per model, so a single
+        model matched on its first VID also matches on the alternate VID.
+        """
         adapter, mock_jensen = mock_adapter
 
         # Mock the HiDockJensen class creation inside discover_devices
@@ -122,7 +128,7 @@ class TestDeviceFallbackMocked:
             # Test discovery
             discovered = await adapter.discover_devices()
 
-            assert len(discovered) == 1
+            assert len(discovered) == 2
             assert discovered[0].name == "HiDock hidock-h1e"
             assert discovered[0].product_id == 0xB00D
 
@@ -142,7 +148,11 @@ class TestDeviceFallbackMocked:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_connect_configured_device_success(self, mock_adapter):
-        """Test successful connection to configured device."""
+        """Test successful connection to configured device.
+
+        Post-fd1ca915, the default for auto_retry in Jensen.connect is False
+        (caller must opt in). The test was written under the old contract.
+        """
         adapter, mock_jensen = mock_adapter
 
         # Mock successful connection
@@ -156,7 +166,7 @@ class TestDeviceFallbackMocked:
         assert result.serial_number == "P1123456"
         assert result.connected is True
         mock_jensen.connect.assert_called_once_with(
-            target_interface_number=0, vid=0x10D6, pid=0xAF0E, auto_retry=True, force_reset=False
+            target_interface_number=0, vid=0x10D6, pid=0xAF0E, auto_retry=False, force_reset=False
         )
 
     @pytest.mark.unit
@@ -226,12 +236,14 @@ class TestDeviceFallbackMocked:
         # Test with invalid device ID - should use defaults
         result = await adapter.connect(device_id="invalid:format")
 
-        # Should use default VID/PID (H1E)
+        # Should use default VID/PID. Post-5a3a9c9d/fd1ca915, the no-device-id
+        # path iterates VID pairs starting with H1 (af0c = 44812), not H1E.
+        # auto_retry default also flipped to False.
         mock_jensen.connect.assert_called_once_with(
             target_interface_number=0,
             vid=0x10D6,  # DEFAULT_VENDOR_ID
-            pid=0xB00D,  # DEFAULT_PRODUCT_ID (H1E)
-            auto_retry=True,
+            pid=0xAF0C,  # DEFAULT_PRODUCT_ID (H1)
+            auto_retry=False,
             force_reset=False,
         )
 
@@ -247,12 +259,14 @@ class TestDeviceFallbackMocked:
         # Test with None device_id
         result = await adapter.connect(device_id=None)
 
-        # Should use default VID/PID (H1E)
+        # Should use default VID/PID. Post-5a3a9c9d/fd1ca915, the no-device-id
+        # path iterates VID pairs starting with H1 (af0c = 44812), not H1E.
+        # auto_retry default also flipped to False.
         mock_jensen.connect.assert_called_once_with(
             target_interface_number=0,
             vid=0x10D6,  # DEFAULT_VENDOR_ID
-            pid=0xB00D,  # DEFAULT_PRODUCT_ID (H1E)
-            auto_retry=True,
+            pid=0xAF0C,  # DEFAULT_PRODUCT_ID (H1)
+            auto_retry=False,
             force_reset=False,
         )
 
