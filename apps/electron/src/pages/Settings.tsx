@@ -38,7 +38,7 @@ export function Settings() {
   const [showApiKey, setShowApiKey] = useState(false)
   const [storageLoading, setStorageLoading] = useState(false)
   // C-CHAT: RAG context window — default matches config.ts (10)
-  const [ragContextSize, setRagContextSize] = useState(RAG_DEFAULTS.MAX_CONTEXT_CHUNKS)
+  const [ragContextSize, setRagContextSize] = useState<number>(RAG_DEFAULTS.MAX_CONTEXT_CHUNKS)
 
   // Available Gemini models for transcription (audio-capable)
   // From: https://ai.google.dev/gemini-api/docs/models

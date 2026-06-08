@@ -1,0 +1,24 @@
+# Normalize line endings. The repo's text files are LF-committed; without this,
+# editors/tools on Windows rewrite files as CRLF and produce massive spurious diffs.
+# `text=auto` lets git detect text vs binary; `eol=lf` checks out text files with LF.
+* text=auto eol=lf
+
+# Binary file types — never normalize or diff as text.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.icns  binary
+*.webp  binary
+*.wasm  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.mp3   binary
+*.wav   binary
+*.hda   binary

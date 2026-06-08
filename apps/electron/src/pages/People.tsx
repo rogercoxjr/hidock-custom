@@ -79,7 +79,6 @@ export function People() {
   // Initial load: fire immediately
   useEffect(() => {
     loadPeople(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Subsequent changes: debounce search/filter and reset to first page

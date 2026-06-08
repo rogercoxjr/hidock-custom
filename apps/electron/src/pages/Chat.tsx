@@ -421,7 +421,7 @@ export function Chat() {
       } else {
         setStatus({ ollamaAvailable: false, documentCount: 0, meetingCount: 0, ready: false })
       }
-    } catch (error) {
+    } catch {
       setStatus({ ollamaAvailable: false, documentCount: 0, meetingCount: 0, ready: false })
     }
   }
@@ -490,7 +490,7 @@ export function Chat() {
       if (result.success) {
         toast.success('Conversation exported', result.data)
       } else {
-        toast.error('Export failed', result.error || 'Unknown error')
+        toast.error('Export failed', result.error?.message || 'Unknown error')
       }
     } catch (error) {
       console.error('Export error:', error)

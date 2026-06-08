@@ -247,7 +247,7 @@ function validateCalendarUrl(url: string): { valid: boolean; error?: string } {
     }
 
     return { valid: true }
-  } catch (e) {
+  } catch {
     return { valid: false, error: 'Invalid URL format' }
   }
 }
@@ -613,15 +613,15 @@ export async function parseICSAsync(icsData: string): Promise<Omit<Meeting, 'cre
         subject: summary,
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
-        location,
-        organizer_name: organizerName,
-        organizer_email: organizerEmail,
-        attendees: attendees.length > 0 ? JSON.stringify(attendees) : undefined,
-        description,
+        location: location ?? null,
+        organizer_name: organizerName ?? null,
+        organizer_email: organizerEmail ?? null,
+        attendees: attendees.length > 0 ? JSON.stringify(attendees) : null,
+        description: description ?? null,
         // CS-005: Use actual isRecurring flag instead of hardcoded 0
         is_recurring: isRecurring ? 1 : 0,
-        recurrence_rule: undefined,
-        meeting_url: meetingUrl
+        recurrence_rule: null,
+        meeting_url: meetingUrl ?? null
       })
     }
   }

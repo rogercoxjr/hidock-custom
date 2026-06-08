@@ -7,6 +7,9 @@
     "electron/preload/*.d.ts",
     "electron/main/types/*.ts"
   ],
+  "exclude": [
+    "electron/main/types/jensen.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",

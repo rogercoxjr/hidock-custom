@@ -184,7 +184,6 @@ export function useDeviceSubscriptions() {
       // When the component truly unmounts and remounts, React creates a NEW ref(false).
     }
   // SM-M02: Dependencies are stable (deviceService is singleton), refs handle action freshness
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceService])
 
   // ---- Initial auto-sync for pre-connected devices ----
@@ -278,6 +277,5 @@ export function useDeviceSubscriptions() {
       unsubDeviceDisconnect()
     }
   // SM-M02: Dependencies are stable (deviceService is singleton), refs handle action freshness
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deviceService])
 }

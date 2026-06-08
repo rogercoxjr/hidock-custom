@@ -53,7 +53,7 @@ function parseSpeaker(text: string): { speaker: string | undefined; remainingTex
  */
 function parseTimestamp(timestampStr: string): number | null {
   // Remove brackets if present
-  const cleaned = timestampStr.replace(/[\[\]]/g, '').trim()
+  const cleaned = timestampStr.replace(/[[\]]/g, '').trim()
 
   // Split by colons
   const parts = cleaned.split(':').map(part => parseInt(part, 10))

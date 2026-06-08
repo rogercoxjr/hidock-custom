@@ -21,6 +21,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock electron modules BEFORE importing the service
 vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/tmp'),
+    getName: vi.fn(() => 'test')
+  },
   BrowserWindow: {
     getAllWindows: vi.fn(() => [])
   },
@@ -33,11 +37,11 @@ vi.mock('electron', () => ({
 }))
 
 // Mock database functions
-const mockIsFileSynced = vi.fn(() => false)
+const mockIsFileSynced = vi.fn((_filename: string): boolean => false)
 vi.mock('../database', () => ({
   markRecordingDownloaded: vi.fn(),
   addSyncedFile: vi.fn(),
-  isFileSynced: (...args: any[]) => mockIsFileSynced(...args),
+  isFileSynced: (filename: string) => mockIsFileSynced(filename),
   getRecordingByFilename: vi.fn(() => null),
   getSyncedFilenames: vi.fn(() => new Set()),
   queryOne: vi.fn(() => null),

@@ -317,7 +317,6 @@ export function Library() {
     if (recordings.length > 0) {
       loadEnrichment()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrichmentKey])
 
   // Filter recordings based on location and search
@@ -675,11 +674,6 @@ export function Library() {
   const handleStopCallback = useCallback(() => {
     audioControls.stop()
   }, [audioControls])
-
-  const handleClosePlayer = useCallback(() => {
-    audioControls.stop()
-    setSelectedSourceId(null)
-  }, [audioControls, setSelectedSourceId])
 
   const handleNavigateToMeeting = useCallback(
     (meetingId: string) => {

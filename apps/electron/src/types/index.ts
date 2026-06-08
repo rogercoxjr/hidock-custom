@@ -28,6 +28,7 @@
 // =============================================================================
 
 export * from './stores'
+import type { Actionable } from './knowledge'
 export type { Actionable } from './knowledge'
 
 // =============================================================================

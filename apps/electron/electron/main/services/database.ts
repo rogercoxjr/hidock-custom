@@ -530,7 +530,7 @@ const MIGRATIONS: Record<number, () => void> = {
     for (const sql of columnsToAdd) {
       try {
         database.run(sql)
-      } catch (e) {
+      } catch {
         // Column likely already exists, ignore
         console.log(`Column may already exist: ${sql}`)
       }
@@ -614,7 +614,7 @@ const MIGRATIONS: Record<number, () => void> = {
           }
           console.log('[Migration v7] Updated device_files_cache durations')
         }
-      } catch (e) {
+      } catch {
         // device_files_cache may not exist
         console.log('[Migration v7] device_files_cache not found or empty')
       }
@@ -692,7 +692,7 @@ const MIGRATIONS: Record<number, () => void> = {
           }
           console.log('[Migration v8] Fixed device_files_cache durations')
         }
-      } catch (e) {
+      } catch {
         console.log('[Migration v8] device_files_cache not found or empty')
       }
     } catch (e) {
@@ -771,7 +771,7 @@ const MIGRATIONS: Record<number, () => void> = {
           }
           console.log('[Migration v9] Fixed device_files_cache durations')
         }
-      } catch (e) {
+      } catch {
         console.log('[Migration v9] device_files_cache not found or empty')
       }
     } catch (e) {
@@ -793,7 +793,7 @@ const MIGRATIONS: Record<number, () => void> = {
         CHECK(storage_tier IN (NULL, 'hot', 'warm', 'cold', 'archive'))
       `)
       console.log('[Migration v10] Added storage_tier column to recordings')
-    } catch (e) {
+    } catch {
       // Column likely already exists
       console.log('[Migration v10] storage_tier column may already exist')
     }
@@ -802,7 +802,7 @@ const MIGRATIONS: Record<number, () => void> = {
     try {
       database.run('CREATE INDEX IF NOT EXISTS idx_recordings_storage_tier ON recordings(storage_tier)')
       console.log('[Migration v10] Created storage_tier index')
-    } catch (e) {
+    } catch {
       console.log('[Migration v10] storage_tier index may already exist')
     }
 
@@ -828,7 +828,7 @@ const MIGRATIONS: Record<number, () => void> = {
           "ALTER TABLE recordings ADD COLUMN migrated_at TEXT"
         ]
         for (const sql of columnsToAdd) {
-          try { database.run(sql) } catch (e) { /* ignore duplicate */ }
+          try { database.run(sql) } catch { /* ignore duplicate */ }
         }
       }
 
@@ -843,7 +843,7 @@ const MIGRATIONS: Record<number, () => void> = {
           const schemaSQL = readFileSync(schemaPath, 'utf-8')
           const statements = schemaSQL.split('\n').filter(line => !line.trim().startsWith('--')).join('\n').split(';').map(s => s.trim()).filter(s => s.length > 0)
           for (const sql of statements) {
-            try { database.run(sql) } catch (e) { /* ignore existing */ }
+            try { database.run(sql) } catch { /* ignore existing */ }
           }
         }
       } else {
@@ -904,7 +904,7 @@ const MIGRATIONS: Record<number, () => void> = {
     try {
       database.run('ALTER TABLE chat_messages ADD COLUMN conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE')
       console.log('[Migration v12] Added conversation_id column to chat_messages')
-    } catch (e) {
+    } catch {
       console.log('[Migration v12] conversation_id column may already exist')
     }
 
@@ -926,7 +926,7 @@ const MIGRATIONS: Record<number, () => void> = {
     for (const sql of columnsToAdd) {
       try {
         database.run(sql)
-      } catch (e) {
+      } catch {
         console.log(`Column may already exist: ${sql}`)
       }
     }
@@ -940,7 +940,7 @@ const MIGRATIONS: Record<number, () => void> = {
     try {
       database.run("ALTER TABLE projects ADD COLUMN status TEXT CHECK(status IN ('active', 'archived')) DEFAULT 'active'")
       console.log('[Migration v14] Added status column to projects')
-    } catch (e) {
+    } catch {
       console.log('[Migration v14] status column may already exist')
     }
     console.log('Migration v14 complete: Projects table enhanced')
@@ -963,7 +963,7 @@ const MIGRATIONS: Record<number, () => void> = {
     for (const sql of columnsToAdd) {
       try {
         database.run(sql)
-      } catch (e) {
+      } catch {
         // Column likely already exists, ignore
         console.log(`Column may already exist: ${sql}`)
       }
@@ -1410,7 +1410,7 @@ export async function initializeDatabase(): Promise<void> {
     for (const col of recordingRepairs) {
       if (!recCols.includes(col.name)) {
         console.log(`[Database] Repairing recordings: adding ${col.name}`)
-        try { database.run(`ALTER TABLE recordings ADD COLUMN ${col.name} ${col.def}`) } catch (e) {}
+        try { database.run(`ALTER TABLE recordings ADD COLUMN ${col.name} ${col.def}`) } catch {}
       }
     }
 
@@ -1434,7 +1434,7 @@ export async function initializeDatabase(): Promise<void> {
     for (const col of knowledgeRepairs) {
       if (!capCols.includes(col.name)) {
         console.log(`[Database] Repairing knowledge_captures: adding ${col.name}`)
-        try { database.run(`ALTER TABLE knowledge_captures ADD COLUMN ${col.def}`) } catch (e) {}
+        try { database.run(`ALTER TABLE knowledge_captures ADD COLUMN ${col.def}`) } catch {}
       }
     }
 
@@ -1449,7 +1449,7 @@ export async function initializeDatabase(): Promise<void> {
       for (const col of queueRepairs) {
         if (!queueCols.includes(col.name)) {
           console.log(`[Database] Repairing transcription_queue: adding ${col.name}`)
-          try { database.run(`ALTER TABLE transcription_queue ADD COLUMN ${col.name} ${col.def}`) } catch (e) {}
+          try { database.run(`ALTER TABLE transcription_queue ADD COLUMN ${col.name} ${col.def}`) } catch {}
         }
       }
     }
@@ -1467,7 +1467,7 @@ export async function initializeDatabase(): Promise<void> {
       for (const col of chatRepairs) {
         if (!chatCols.includes(col.name)) {
           console.log(`[Database] Repairing chat_messages: adding ${col.name}`)
-          try { database.run(`ALTER TABLE chat_messages ADD COLUMN ${col.name} ${col.def}`) } catch (e) {}
+          try { database.run(`ALTER TABLE chat_messages ADD COLUMN ${col.name} ${col.def}`) } catch {}
         }
       }
     }
@@ -1692,14 +1692,14 @@ export interface Meeting {
   subject: string
   start_time: string
   end_time: string
-  location?: string
-  organizer_name?: string
-  organizer_email?: string
-  attendees?: string
-  description?: string
+  location: string | null
+  organizer_name: string | null
+  organizer_email: string | null
+  attendees: string | null
+  description: string | null
   is_recurring: number
-  recurrence_rule?: string
-  meeting_url?: string
+  recurrence_rule: string | null
+  meeting_url: string | null
   created_at: string
   updated_at: string
 }
@@ -1856,7 +1856,7 @@ function extractContactsFromMeetingDataInternal(meeting: Omit<Meeting, 'created_
           emailsToLookup.push(attendee.email)
         }
       }
-    } catch (e) {
+    } catch {
       // Invalid JSON, skip attendees
     }
   }

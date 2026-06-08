@@ -143,7 +143,7 @@ function parseICSInWorker(icsData: string): MeetingData[] {
           next = iterator.next()
           count++
         }
-      } catch (e) {
+      } catch {
         // If recurrence expansion fails, just add the base event
         meetings.push({
           id: uid,

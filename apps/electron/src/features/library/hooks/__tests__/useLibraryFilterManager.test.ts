@@ -61,7 +61,7 @@ describe('useLibraryFilterManager', () => {
     }
 
     // Mock useLibraryStore implementation
-    // @ts-ignore
+    // @ts-expect-error - test mock intentionally narrows/omits types
     useLibraryStore.mockImplementation((selector) => {
       const fullState = { ...storeState, ...storeActions }
       return selector(fullState)

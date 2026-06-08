@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- standalone CommonJS Electron benchmark script */
 const { app, BrowserWindow } = require('electron');
 
 let mainWindow;

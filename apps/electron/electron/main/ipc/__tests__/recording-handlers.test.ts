@@ -155,12 +155,12 @@ vi.mock('../../services/config', () => ({
 }))
 
 describe('Recording IPC Handlers', () => {
-  let handlers: Record<string, Function> = {}
+  let handlers: Record<string, (...args: any[]) => any> = {}
 
   beforeEach(async () => {
     vi.clearAllMocks()
     handlers = {}
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: Function) => {
+    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: any[]) => any) => {
       handlers[channel] = handler
       return undefined as any
     })
@@ -391,7 +391,7 @@ describe('Recording IPC Handlers', () => {
 
   describe('recordings:deleteBatch', () => {
     it('should delete multiple recordings and return results', async () => {
-      const { getRecordingById, updateRecordingStatus } = await import('../../services/database')
+      const { getRecordingById } = await import('../../services/database')
       const { deleteRecording } = await import('../../services/file-storage')
 
       const id1 = '550e8400-e29b-41d4-a716-446655440000'
@@ -411,7 +411,7 @@ describe('Recording IPC Handlers', () => {
     })
 
     it('should return partial results when some deletions fail', async () => {
-      const { getRecordingById, updateRecordingStatus } = await import('../../services/database')
+      const { getRecordingById } = await import('../../services/database')
       const { deleteRecording } = await import('../../services/file-storage')
 
       const id1 = '550e8400-e29b-41d4-a716-446655440000'

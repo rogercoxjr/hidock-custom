@@ -488,13 +488,15 @@ export function Actionables() {
                               try {
                                 const result = await window.electronAPI.outputs.getByActionableId(actionable.id)
 
-                                if (result.success && result.data) {
+                                if (!result.success) {
+                                  toast.error('Failed to load output', result.error?.message || 'Unknown error')
+                                } else if (result.data) {
                                   const output = { ...result.data, sourceId: actionable.sourceKnowledgeId }
                                   // C-ACT-004: Cache the fetched output
                                   cacheOutput(actionable.id, output)
                                   setGeneratedOutput(output)
                                   setShowOutputModal(true)
-                                } else if (result.success && !result.data) {
+                                } else {
                                   // No existing output found -- fall back to regeneration
                                   const templateId = actionable.suggestedTemplate || 'meeting_minutes'
                                   setGenerating(true)
@@ -512,8 +514,6 @@ export function Actionables() {
                                     toast.error('Failed to load output', genResult.error?.message || 'Unknown error')
                                   }
                                   setGenerating(false)
-                                } else {
-                                  toast.error('Failed to load output', result.error?.message || 'Unknown error')
                                 }
                               } catch (error: any) {
                                 toast.error('Failed to load output', error?.message || 'An unexpected error occurred')
