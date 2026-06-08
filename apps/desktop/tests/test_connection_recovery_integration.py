@@ -30,6 +30,7 @@ from .test_race_condition_fix import device_test_manager, ensure_device_disconne
 @pytest.mark.integration
 @pytest.mark.device
 @device_test_ci_skip
+@pytest.mark.asyncio
 async def test_connection_recovery_after_error():
     """Test that connection can recover after USB communication errors."""
     # Use exclusive device access to prevent race conditions
