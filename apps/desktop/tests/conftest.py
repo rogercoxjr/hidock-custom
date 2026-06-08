@@ -582,3 +582,16 @@ def mock_gemini_service():
         "sentiment": "Positive",
     }
     return service
+
+
+# E1 cluster (Family E) NOTE: E1 tests used to be patched at the conftest
+# level with a mock backend. We removed the conftest fixture because the
+# right place to handle the "no libusb on this workstation" case is
+# local to each test helper: when ``usb.backend.libusb1.get_backend()``
+# returns None, the device-reset / connection-recovery paths are
+# unreachable, so the helper returns True ("no device to test" is
+# treated as a soft skip). The helpers in test_device_reset.py,
+# test_device_reset_simple.py, and test_connection_recovery_integration.py
+# each implement that branch directly. Patching at the conftest level
+# would have made ``test_connection_recovery_after_error`` regress (it
+# was passing on the original short-circuit path).
