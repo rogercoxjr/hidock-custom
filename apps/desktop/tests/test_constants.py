@@ -27,9 +27,12 @@ class TestConstants:
         assert isinstance(constants.DEFAULT_VENDOR_ID, int)
         assert isinstance(constants.DEFAULT_PRODUCT_ID, int)
 
-        # Test expected values
+        # Test expected values.
+        # The post-5a3a9c9d refactor changed DEFAULT_PRODUCT_ID from 0xB00D
+        # (H1E) to 0xAF0C (H1) — the most common model, which is the right
+        # default for the desktop app's connect-target.
         assert constants.DEFAULT_VENDOR_ID == 0x10D6
-        assert constants.DEFAULT_PRODUCT_ID == 0xB00D
+        assert constants.DEFAULT_PRODUCT_ID == 0xAF0C
 
     def test_endpoint_constants(self):
         """Test endpoint address constants."""

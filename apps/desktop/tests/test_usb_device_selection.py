@@ -82,12 +82,18 @@ class TestEnhancedDeviceSelector:
         assert selector._is_hidock_device(0x1234, 0x5678) is False
 
     def test_hidock_model_names(self):
-        """Test HiDock model name mapping."""
+        """Test HiDock model name mapping.
+
+        Post-5a3a9c9d, ``_get_hidock_model_name`` returns the real model
+        name from the lookup table. The earlier placeholder "Device" string
+        for unknown-within-hidock PIDs (0xAF0D) was replaced with the real
+        "H1E" model name.
+        """
         selector = EnhancedDeviceSelector.__new__(EnhancedDeviceSelector)
 
         assert selector._get_hidock_model_name(0xB00D) == "H1E"
         assert selector._get_hidock_model_name(0xAF0C) == "H1"
-        assert selector._get_hidock_model_name(0xAF0D) == "Device"
+        assert selector._get_hidock_model_name(0xAF0D) == "H1E"
         assert selector._get_hidock_model_name(0xAF0E) == "P1"
         assert selector._get_hidock_model_name(0x9999) == "Unknown (0x9999)"
 
