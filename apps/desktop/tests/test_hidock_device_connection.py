@@ -152,7 +152,7 @@ class TestHiDockJensenConnection:
         success, error = jensen_device._attempt_connection(0, DEFAULT_VENDOR_ID, DEFAULT_PRODUCT_ID)
 
         assert success is False
-        assert "Device is busy" in error
+        assert "Device busy" in error
         assert jensen_device._error_counts["connection_lost"] == 1
 
     @patch("hidock_device.usb.core.find")
@@ -235,7 +235,7 @@ class TestHiDockJensenConnection:
         success, error = jensen_device._attempt_connection(0, DEFAULT_VENDOR_ID, DEFAULT_PRODUCT_ID)
 
         assert success is False
-        assert "Device is busy" in error
+        assert "Device busy" in error
         assert jensen_device._error_counts["connection_lost"] == 1
 
     @patch("hidock_device.usb.core.find")
@@ -336,7 +336,7 @@ class TestHiDockJensenConnection:
         mock_find.side_effect = usb_error
         success, error = jensen_device._attempt_connection(0, DEFAULT_VENDOR_ID, DEFAULT_PRODUCT_ID)
         assert success is False
-        assert "Device is busy" in error
+        assert "currently in use" in error
 
         # Test generic USBError
         usb_error = usb.core.USBError("Generic USB error")
