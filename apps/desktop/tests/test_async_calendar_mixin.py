@@ -21,6 +21,7 @@ Gate 4 Task 2 — fixes applied:
     test_initialize_components_success + test_enhance_files_with_meeting_data_no_calendar.
 """
 
+import queue
 import sys
 import unittest
 from datetime import datetime
@@ -200,7 +201,7 @@ class TestAsyncCalendarMixin(unittest.TestCase):
                 # so they exist when the method checks them.
                 self._calendar_integration = None
                 self._calendar_cache_manager = None
-                self._calendar_work_queue = __import__("queue").Queue()
+                self._calendar_work_queue = queue.Queue()
 
         mixin = TestMixin()
 
@@ -234,7 +235,7 @@ class TestAsyncCalendarMixin(unittest.TestCase):
                 self.gui = Mock()
                 self._calendar_integration = None
                 self._calendar_cache_manager = None
-                self._calendar_work_queue = __import__("queue").Queue()
+                self._calendar_work_queue = queue.Queue()
 
         mixin = TestMixin()
 
