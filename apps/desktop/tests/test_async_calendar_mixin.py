@@ -316,6 +316,48 @@ class TestAsyncCalendarMixin(unittest.TestCase):
         # Should only schedule once or be protected by the lock
         self.assertTrue(self.mock_gui.after.called)
 
+    def test_parse_file_datetime_edge_cases_ported(self):
+        """Ported from the deleted simple_calendar tests (Gate 4 Task 1).
+
+        Asserts the surviving _parse_file_datetime edge behavior on
+        async_calendar_mixin.AsyncCalendarMixin: a datetime 'time' field is
+        returned as-is; device 'YYYY/MM/DD HH:MM:SS' strings parse; missing
+        and malformed inputs return None.
+        """
+        from async_calendar_mixin import AsyncCalendarMixin
+
+        class TestMixin(AsyncCalendarMixin):
+            def __init__(self):
+                # Mirror the established TestMixin attribute set used elsewhere in
+                # this file so the test stays robust if _parse_file_datetime later
+                # reads a self-attribute. (A real Mock GUI is used here rather than
+                # self.mock_gui, which is a TestCase attribute not visible inside
+                # this inner mixin __init__.)
+                self.gui = Mock()
+                self._calendar_integration = None
+                self._calendar_available = False
+                self._calendar_status = "Not Available"
+                self._initialization_lock = asyncio.Lock()
+                self._initialization_complete = False
+
+        mixin = TestMixin()
+
+        # 1. datetime 'time' field returned unchanged
+        ts = datetime(2023, 1, 15, 10, 30, 0)
+        self.assertEqual(mixin._parse_file_datetime({"time": ts}), ts)
+
+        # 2. device createDate/createTime strings parse. NOTE: the device uses the
+        # slash format "%Y/%m/%d %H:%M:%S" (per CLAUDE.md Jensen protocol), NOT the
+        # hyphen format the old deleted simple_calendar test asserted.
+        parsed = mixin._parse_file_datetime({"createDate": "2023/01/15", "createTime": "10:30:00"})
+        self.assertEqual(parsed, datetime(2023, 1, 15, 10, 30, 0))
+
+        # 3. missing datetime data -> None
+        self.assertIsNone(mixin._parse_file_datetime({"name": "test.wav"}))
+
+        # 4. malformed date string -> None
+        self.assertIsNone(mixin._parse_file_datetime({"createDate": "invalid-date", "createTime": "10:30:00"}))
+
 
 class TestAsyncCalendarMixinIntegration(unittest.TestCase):
     """Integration tests for AsyncCalendarMixin with actual components."""
@@ -370,37 +412,6 @@ class TestAsyncCalendarMixinIntegration(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertTrue(result[0]["has_meeting"])
         self.assertEqual(result[0]["meeting_subject"], "Test Meeting")
-
-
-    def test_parse_file_datetime_edge_cases_ported(self):
-        """Ported from the deleted simple_calendar tests (Gate 4 Task 1).
-
-        Asserts the surviving _parse_file_datetime edge behavior on
-        async_calendar_mixin.AsyncCalendarMixin: a datetime 'time' field is
-        returned as-is; device 'YYYY/MM/DD HH:MM:SS' strings parse; missing
-        and malformed inputs return None.
-        """
-        from async_calendar_mixin import AsyncCalendarMixin
-
-        class TestMixin(AsyncCalendarMixin):
-            def __init__(self):
-                self._calendar_integration = None
-
-        mixin = TestMixin()
-
-        # 1. datetime 'time' field returned unchanged
-        ts = datetime(2023, 1, 15, 10, 30, 0)
-        self.assertEqual(mixin._parse_file_datetime({"time": ts}), ts)
-
-        # 2. device createDate/createTime strings (slash format) parse
-        parsed = mixin._parse_file_datetime({"createDate": "2023/01/15", "createTime": "10:30:00"})
-        self.assertEqual(parsed, datetime(2023, 1, 15, 10, 30, 0))
-
-        # 3. missing datetime data -> None
-        self.assertIsNone(mixin._parse_file_datetime({"name": "test.wav"}))
-
-        # 4. malformed date string -> None
-        self.assertIsNone(mixin._parse_file_datetime({"createDate": "invalid-date", "createTime": "10:30:00"}))
 
 
 if __name__ == "__main__":
