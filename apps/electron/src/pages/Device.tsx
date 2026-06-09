@@ -314,6 +314,7 @@ export function Device() {
     }
   // DV-03: Removed connectionStatus.step/message from deps — they change ~8x per connect.
   // Connection status is tracked in a separate effect below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearConnectionTimers, refreshSyncedFilenames])
 
   // DV-03: Separate effect for connection status sync — runs when status changes

@@ -12,7 +12,7 @@ import type {
   Project,
   ProjectWithMeetings
 } from './database'
-import type { Person } from '../../../src/types/knowledge'
+import type { Person, PersonType } from '../../../src/types/knowledge'
 
 // =============================================================================
 // Result Wrapper Pattern
@@ -139,7 +139,7 @@ export interface RAGSource {
  */
 export interface GetContactsRequest {
   search?: string
-  type?: 'team' | 'candidate' | 'customer' | 'external' | 'unknown' | 'all'
+  type?: PersonType | 'all'
   limit?: number
   offset?: number
 }

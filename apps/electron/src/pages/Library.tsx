@@ -317,6 +317,7 @@ export function Library() {
     if (recordings.length > 0) {
       loadEnrichment()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrichmentKey])
 
   // Filter recordings based on location and search

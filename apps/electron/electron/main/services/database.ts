@@ -818,7 +818,9 @@ const MIGRATIONS: Record<number, () => void> = {
     try {
       // 1. Check if recordings table needs migration columns (v11)
       const recordingsInfo = database.exec("PRAGMA table_info(recordings)")
-      const hasMigrationStatus = recordingsInfo[0].values.some(col => col[1] === 'migration_status')
+      const hasMigrationStatus = recordingsInfo.length > 0 && recordingsInfo[0].values
+        ? recordingsInfo[0].values.some(col => col[1] === 'migration_status')
+        : false
 
       if (!hasMigrationStatus) {
         console.log('[Migration v11] Migration columns not found in recordings, adding them...')
@@ -1386,12 +1388,12 @@ export async function initializeDatabase(): Promise<void> {
     // --- PHASE 1: CORE TABLES ---
     console.log('[Database] Phase 1: Ensuring core tables exist...')
     for (const sql of statements) {
-      // Strip leading `-- ...` comment lines before the CREATE TABLE check: every
-      // SCHEMA statement is preceded by a comment, so a plain startsWith('CREATE TABLE')
-      // matches none of them — leaving Phase 1 creating zero tables and Phases 2/3
-      // crashing on a fresh (empty) database (first-launch crash). See seedless fresh-init.
-      const code = sql.replace(/^\s*(?:--[^\n]*\n)+/, '').trimStart()
-      if (code.toUpperCase().startsWith('CREATE TABLE')) {
+      // Match CREATE TABLE robustly regardless of leading/inline comments. Every SCHEMA
+      // statement is comment-prefixed, so a plain startsWith('CREATE TABLE') matched NONE —
+      // leaving Phase 1 to create zero tables and Phases 2/3 to crash on a fresh DB
+      // (first-launch crash). `includes` can never miss a CREATE TABLE and also tolerates
+      // block comments / CRLF that a leading-comment strip would not.
+      if (sql.toUpperCase().includes('CREATE TABLE')) {
         try {
           database.run(sql)
         } catch (e) {

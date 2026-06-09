@@ -99,6 +99,7 @@ export function Projects() {
   // Initial load: fire immediately
   useEffect(() => {
     loadProjects()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Subsequent changes: debounce search/filter

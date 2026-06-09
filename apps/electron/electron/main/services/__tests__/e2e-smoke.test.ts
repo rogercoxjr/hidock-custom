@@ -198,6 +198,8 @@ import { syncCalendar } from '../calendar-sync'
 import { getJensenDevice } from '../jensen'
 
 describe('E2E knowledge pipeline smoke test (real services)', () => {
+  let originalFetch: typeof global.fetch
+
   beforeEach(async () => {
     // Ensure a clean temp layout for this run.
     fs.mkdirSync(shared.dataDir, { recursive: true })
@@ -205,6 +207,7 @@ describe('E2E knowledge pipeline smoke test (real services)', () => {
     if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
 
     // Fresh fetch mock per test: serve the ICS fixture to the real calendar-sync.
+    originalFetch = global.fetch
     global.fetch = vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -229,6 +232,7 @@ describe('E2E knowledge pipeline smoke test (real services)', () => {
       /* ignore */
     }
     vi.restoreAllMocks()
+    global.fetch = originalFetch
     try {
       fs.rmSync(shared.tmpDir, { recursive: true, force: true })
     } catch {

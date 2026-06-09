@@ -176,6 +176,7 @@ export function Explore() {
     if (searchError) {
       setSearchError(null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query])
 
   const totalResults = results
