@@ -175,7 +175,7 @@ class TestErrorHandling:
     @patch("ai_service.genai")
     def test_gemini_provider_handles_api_exceptions(self, mock_genai):
         """Test GeminiProvider handling of API exceptions."""
-        mock_genai.configure.side_effect = Exception("API configuration error")
+        mock_genai.Client.side_effect = Exception("API configuration error")
 
         # Should raise the exception since we're not handling it in init
         with pytest.raises(Exception, match="API configuration error"):
