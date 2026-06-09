@@ -67,7 +67,7 @@ class TestGeminiProvider:
 
         assert provider.api_key == self.test_api_key
         assert provider.config == self.test_config
-        mock_genai.configure.assert_called_once_with(api_key=self.test_api_key)
+        mock_genai.Client.assert_called_once_with(api_key=self.test_api_key)
 
     @patch("ai_service.GEMINI_AVAILABLE", False)
     def test_gemini_provider_initialization_unavailable(self):
@@ -96,22 +96,22 @@ class TestGeminiProvider:
     @patch("ai_service.genai")
     def test_gemini_validate_api_key_success(self, mock_genai):
         """Test successful API key validation."""
-        mock_model = Mock()
-        mock_model.generate_content.return_value = Mock(text="test response")
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client = mock_genai.Client.return_value
+        mock_client.models.generate_content.return_value = Mock(text="test response")
 
         provider = GeminiProvider(self.test_api_key)
 
         assert provider.validate_api_key() is True
-        mock_model.generate_content.assert_called_once_with("Test validation message")
+        mock_client.models.generate_content.assert_called_once_with(
+            model="gemini-2.0-flash-exp", contents="Test validation message"
+        )
 
     @patch("ai_service.GEMINI_AVAILABLE", True)
     @patch("ai_service.genai")
     def test_gemini_validate_api_key_failure(self, mock_genai):
         """Test API key validation failure."""
-        mock_model = Mock()
-        mock_model.generate_content.side_effect = Exception("Invalid API key")
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client = mock_genai.Client.return_value
+        mock_client.models.generate_content.side_effect = Exception("Invalid API key")
 
         provider = GeminiProvider(self.test_api_key)
 
@@ -219,33 +219,34 @@ class TestAudioTranscription:
 
     @patch("ai_service.GEMINI_AVAILABLE", True)
     @patch("ai_service.genai")
-    @patch("builtins.open", mock_open(read_data=b"mock audio data"))
-    @patch("ai_service.base64.b64encode")
-    def test_gemini_transcribe_audio_success(self, mock_b64encode, mock_genai):
+    def test_gemini_transcribe_audio_success(self, mock_genai):
         """Test successful audio transcription with Gemini."""
-        # Setup mocks
-        mock_b64encode.return_value = b"encoded_audio_data"
-        mock_model = Mock()
+        # Setup mocks using new google-genai Client SDK
+        mock_client = mock_genai.Client.return_value
+        mock_audio_file = Mock()
+        mock_audio_file.uri = "files/abc123"
+        mock_audio_file.name = "files/abc123"
+        mock_client.files.upload.return_value = mock_audio_file
         mock_response = Mock()
-        # Return valid JSON response that the implementation expects
-        mock_response.text = (  # pylint: disable=implicit-str-concat
-            '{"transcription": "Transcribed text from audio", ' '"language": "en", "confidence": 0.95}'
-        )
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_response.text = "Transcribed text from audio"
+        mock_client.models.generate_content.return_value = mock_response
 
         provider = GeminiProvider("test_key")
         result = provider.transcribe_audio(self.test_audio_file)
 
         assert result["success"] is True
         assert "Transcribed text from audio" in result["transcription"]
-        mock_model.generate_content.assert_called_once()
+        mock_client.files.upload.assert_called_once_with(file=self.test_audio_file)
+        mock_client.models.generate_content.assert_called_once()
+        mock_client.files.delete.assert_called_once_with(name="files/abc123")
 
     @patch("ai_service.GEMINI_AVAILABLE", True)
     @patch("ai_service.genai")
-    @patch("builtins.open", side_effect=FileNotFoundError())
-    def test_gemini_transcribe_audio_file_not_found(self, mock_open, mock_genai):
+    def test_gemini_transcribe_audio_file_not_found(self, mock_genai):
         """Test audio transcription with missing file."""
+        mock_client = mock_genai.Client.return_value
+        mock_client.files.upload.side_effect = FileNotFoundError("No such file or directory")
+
         provider = GeminiProvider("test_key")
         result = provider.transcribe_audio("/nonexistent/file.wav")
 
@@ -282,8 +283,8 @@ class TestTextAnalysis:
     @patch("ai_service.genai")
     def test_gemini_analyze_text_insights(self, mock_genai):
         """Test text analysis for insights with Gemini."""
-        # Setup mocks
-        mock_model = Mock()
+        # Setup mocks using new google-genai Client SDK
+        mock_client = mock_genai.Client.return_value
         mock_response = Mock()
         # Return valid JSON response that the implementation expects
         mock_response.text = (
@@ -291,22 +292,21 @@ class TestTextAnalysis:
             '"key_points": ["point 1"], "action_items": ["action 1"], '
             '"sentiment": "neutral", "topics": ["analysis"]}'
         )
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client.models.generate_content.return_value = mock_response
 
         provider = GeminiProvider("test_key")
         result = provider.analyze_text(self.sample_text, "insights")
 
         assert result["success"] is True
         assert "insights" in result["analysis"]["summary"].lower()
-        mock_model.generate_content.assert_called_once()
+        mock_client.models.generate_content.assert_called_once()
 
     @patch("ai_service.GEMINI_AVAILABLE", True)
     @patch("ai_service.genai")
     def test_gemini_analyze_text_summary(self, mock_genai):
         """Test text analysis for summary with Gemini."""
-        # Setup mocks
-        mock_model = Mock()
+        # Setup mocks using new google-genai Client SDK
+        mock_client = mock_genai.Client.return_value
         mock_response = Mock()
         # Return valid JSON response that the implementation expects
         mock_response.text = (
@@ -314,8 +314,7 @@ class TestTextAnalysis:
             '"key_points": ["point 1"], "action_items": ["action 1"], '
             '"sentiment": "neutral", "topics": ["analysis"]}'
         )
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client.models.generate_content.return_value = mock_response
 
         provider = GeminiProvider("test_key")
         result = provider.analyze_text(self.sample_text, "summary")
@@ -327,10 +326,9 @@ class TestTextAnalysis:
     @patch("ai_service.genai")
     def test_gemini_analyze_text_api_error(self, mock_genai):
         """Test text analysis with API error."""
-        # Setup mocks
-        mock_model = Mock()
-        mock_model.generate_content.side_effect = Exception("API Error")
-        mock_genai.GenerativeModel.return_value = mock_model
+        # Setup mocks using new google-genai Client SDK
+        mock_client = mock_genai.Client.return_value
+        mock_client.models.generate_content.side_effect = Exception("API Error")
 
         provider = GeminiProvider("test_key")
         result = provider.analyze_text(self.sample_text)
@@ -408,9 +406,8 @@ class TestErrorHandling:
     @patch("ai_service.genai")
     def test_provider_handles_network_errors(self, mock_genai):
         """Test provider handling of network errors."""
-        mock_model = Mock()
-        mock_model.generate_content.side_effect = ConnectionError("Network error")
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client = mock_genai.Client.return_value
+        mock_client.models.generate_content.side_effect = ConnectionError("Network error")
 
         provider = GeminiProvider("test_key")
         result = provider.analyze_text("test text")
@@ -422,11 +419,10 @@ class TestErrorHandling:
     @patch("ai_service.genai")
     def test_provider_handles_invalid_response(self, mock_genai):
         """Test provider handling of invalid API responses."""
-        mock_model = Mock()
+        mock_client = mock_genai.Client.return_value
         mock_response = Mock()
         mock_response.text = None  # Invalid response
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client.models.generate_content.return_value = mock_response
 
         provider = GeminiProvider("test_key")
         result = provider.analyze_text("test text")
