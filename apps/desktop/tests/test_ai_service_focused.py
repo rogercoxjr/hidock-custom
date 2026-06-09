@@ -66,7 +66,6 @@ class TestGeminiProviderBasics:
     @patch("ai_service.genai")
     def test_gemini_provider_can_be_instantiated(self, mock_genai):
         """Test that GeminiProvider can be instantiated."""
-        mock_genai.configure.return_value = None
         provider = GeminiProvider(self.test_api_key, self.test_config)
         assert provider.api_key == self.test_api_key
         assert provider.config == self.test_config
@@ -75,7 +74,6 @@ class TestGeminiProviderBasics:
     @patch("ai_service.genai")
     def test_gemini_provider_is_available_when_available(self, mock_genai):
         """Test is_available returns True when Gemini is available."""
-        mock_genai.configure.return_value = None
         provider = GeminiProvider(self.test_api_key)
         assert provider.is_available() is True
 

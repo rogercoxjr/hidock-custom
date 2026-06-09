@@ -437,9 +437,7 @@ class TestProcessAudioFileForInsights:
     @patch("transcription_module.os.path.exists")
     @patch("transcription_module.ai_service")
     @patch("transcription_module._get_audio_duration")
-    async def test_process_audio_file_with_duration_calculation(
-        self, mock_get_duration, mock_ai_service, mock_exists
-    ):
+    async def test_process_audio_file_with_duration_calculation(self, mock_get_duration, mock_ai_service, mock_exists):
         """Test process_audio_file_for_insights with duration calculation for WAV files (openai two-step path)"""
         mock_exists.return_value = True
         mock_get_duration.return_value = 2  # 2 minutes
@@ -512,7 +510,6 @@ class TestProcessAudioFileForInsights:
             patch("transcription_module.ai_service") as mock_ai_service,
             patch("transcription_module.os.remove"),
         ):
-            mock_copy2.return_value = None
             mock_ai_service.configure_provider.return_value = True
             mock_provider = Mock()
             mock_provider.transcribe_and_analyze_audio.return_value = {
@@ -541,7 +538,9 @@ class TestProcessAudioFileForInsights:
     async def test_process_audio_file_hta_conversion_failure(self, mock_remove, mock_exists):
         """Test process_audio_file_for_insights when HTA shutil.copy2 fails"""
         mock_exists.return_value = True
-        mock_remove.return_value = None  # allow cleanup to proceed without error
+        # os.remove patch is load-bearing: os.path.exists is mocked True, so the copy-failure
+        # except block calls os.remove(temp_wav). Without this patch, removing the nonexistent
+        # /tmp/hda_test.wav would raise and mask the "Failed to prepare HDA file" error.
         temp_wav = "/tmp/hda_test.wav"
 
         with (
@@ -762,13 +761,13 @@ class TestTranscriptionModuleUtilities:
                 },
             }
 
-            # Use openai (two-step path) to test non-WAV duration skipping
+            # Use openai (two-step path) so extract_meeting_insights supplies meeting_details
             result = await process_audio_file_for_insights("/test/audio.mp3", "openai", "test_key")
 
             assert result["transcription"] == "MP3 transcription"
             assert result["insights"]["summary"] == "MP3 summary"
-            # Duration should NOT be calculated for non-WAV/MP3 files... actually mp3 IS in the list
-            # The code checks: if ext in [".wav", ".mp3"] — so duration IS calculated for mp3
+            # Duration IS calculated for .wav and .mp3 (code: if ext in [".wav", ".mp3"]);
+            # _get_audio_duration is mocked to return 3 here.
             assert result["insights"]["meeting_details"]["duration_minutes"] == 3
 
     @pytest.mark.asyncio
@@ -933,7 +932,8 @@ class TestTranscriptionModuleUtilities:
             patch("transcription_module.extract_meeting_insights") as mock_extract_insights,
         ):
             mock_ai_service.configure_provider.return_value = True
-            # Two-step path: transcribe_audio -> extract_meeting_insights
+            # Two-step (openai) path: module-level transcribe_audio (via ai_service.transcribe_audio)
+            # returns a failure, which becomes the "Transcription failed: ..." string.
             mock_ai_service.transcribe_audio.return_value = {
                 "success": False,
                 "error": "some error",
@@ -941,9 +941,10 @@ class TestTranscriptionModuleUtilities:
 
             result = await process_audio_file_for_insights("/test/audio.wav", "openai", "test_key")
 
-            # Should skip insights extraction when transcription fails
             assert result["transcription"] == "Transcription failed: some error"
             assert result["insights"]["summary"] == "N/A - Transcription failed"
+            # Load-bearing: the live two-step path must skip extract_meeting_insights when the
+            # transcription string starts with "Transcription failed" — this assert guards that branch.
             mock_extract_insights.assert_not_called()
 
     def test_import_google_generativeai_module_check(self):
