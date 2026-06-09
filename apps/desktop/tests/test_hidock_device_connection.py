@@ -13,6 +13,10 @@ import usb.util
 from constants import DEFAULT_PRODUCT_ID, DEFAULT_VENDOR_ID, EP_IN_ADDR, EP_OUT_ADDR
 from hidock_device import HiDockJensen
 
+# Gate 4 (Task 0a): a runaway protocol loop must fail one test fast, not hang
+# the whole suite. 20s is generous vs. the ~286s full suite.
+pytestmark = pytest.mark.timeout(20)
+
 
 class TestHiDockJensenConnection:
     """Test device connection functionality."""

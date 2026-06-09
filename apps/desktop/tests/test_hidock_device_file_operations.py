@@ -14,6 +14,10 @@ import usb.core
 from constants import CMD_DELETE_FILE, CMD_GET_FILE_BLOCK, CMD_GET_FILE_COUNT, CMD_GET_FILE_LIST, CMD_TRANSFER_FILE
 from hidock_device import HiDockJensen
 
+# Gate 4 (Task 0a): a runaway protocol loop must fail one test fast, not hang
+# the whole suite. 20s is generous vs. the ~286s full suite.
+pytestmark = pytest.mark.timeout(20)
+
 
 class TestHiDockJensenFileListOperations:
     """Test file listing operations with streaming - targeting lines 1191-1369."""
