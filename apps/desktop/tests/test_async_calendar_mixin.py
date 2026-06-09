@@ -214,21 +214,20 @@ class TestAsyncCalendarMixin(unittest.TestCase):
     @patch("async_calendar_mixin.SIMPLE_CALENDAR_AVAILABLE", True)
     @patch("async_calendar_mixin.create_simple_outlook_integration")
     @patch("async_calendar_mixin.CalendarCacheManager")
-    def test_initialize_components_integration_unavailable(self, mock_cache_cls, mock_create_integration):
-        """Realigned (Gate 4 Task 2): analogous to the old failure test — integration
-        is created but reports is_available()=False.  The mixin still stores it
-        (the live code does not null it on is_available failure), but the
-        get_calendar_status_text_for_gui_async method will report unavailability.
+    def test_initialize_components_handles_integration_exception(self, mock_cache_cls, mock_create_integration):
+        """Realigned (Gate 4 Task 2): _initialize_async_calendar_components must
+        swallow an exception raised by create_simple_outlook_integration (the
+        src except branch at async_calendar_mixin.py:74-75) rather than propagate.
+        After the swallowed exception _calendar_integration stays None.
+
+        create_simple_outlook_integration is called *inside* the try, after the
+        CalendarCacheManager is constructed, so making it raise drives execution
+        straight into the except block.  No test previously covered this branch.
         """
         from async_calendar_mixin import AsyncCalendarMixin
 
-        mock_integration = Mock()
-        mock_integration.is_available.return_value = False
-        mock_integration.get_calendar_status_text.return_value = "Calendar: Not Available"
-        mock_create_integration.return_value = mock_integration
-
-        mock_cache = Mock()
-        mock_cache_cls.return_value = mock_cache
+        mock_cache_cls.return_value = Mock()
+        mock_create_integration.side_effect = Exception("boom")
 
         class TestMixin(AsyncCalendarMixin):
             def __init__(self):
@@ -240,11 +239,49 @@ class TestAsyncCalendarMixin(unittest.TestCase):
         mixin = TestMixin()
 
         with patch.object(mixin, "_calendar_worker_loop"):
+            # Must NOT raise — the except branch swallows the exception.
             mixin._initialize_async_calendar_components()
 
-        # Integration is stored even when unavailable — the live code doesn't null it.
-        self.assertIsNotNone(mixin._calendar_integration)
+        # The integration assignment (line 64) raised, so it stays None.
+        self.assertIsNone(mixin._calendar_integration)
         mock_create_integration.assert_called_once()
+
+    @patch("async_calendar_mixin.SIMPLE_CALENDAR_AVAILABLE", True)
+    def test_status_text_reports_integration_unavailable(self):
+        """Realigned (Gate 4 Task 2): exercises the availability branch that the
+        old (misnamed, near-duplicate) test failed to reach.
+
+        _initialize_async_calendar_components never calls is_available(), so the
+        availability branch lives in get_calendar_status_text_for_gui_async
+        (async_calendar_mixin.py:887-888): when the integration exists but
+        is_available() is False, the live code returns the integration's own
+        get_calendar_status_text() output.  This asserts that real "unavailable"
+        output is surfaced verbatim.
+        """
+        from async_calendar_mixin import AsyncCalendarMixin
+
+        mock_integration = Mock()
+        mock_integration.is_available.return_value = False
+        mock_integration.get_calendar_status_text.return_value = "Calendar: Outlook Not Connected"
+
+        class TestMixin(AsyncCalendarMixin):
+            def __init__(self):
+                self.gui = Mock()
+
+        mixin = TestMixin()
+        # Mark init done and inject an unavailable integration so the status
+        # method reaches the is_available()==False branch.
+        mixin._async_calendar_initialized = True
+        mixin._calendar_integration = mock_integration
+        mixin._calendar_cache_manager = Mock()
+        mixin._calendar_sync_status = "idle"
+
+        status = mixin.get_calendar_status_text_for_gui()
+
+        # The unavailable branch surfaces the integration's own status text verbatim.
+        self.assertEqual(status, "Calendar: Outlook Not Connected")
+        mock_integration.is_available.assert_called()
+        mock_integration.get_calendar_status_text.assert_called_once()
 
     @patch("async_calendar_mixin.SIMPLE_CALENDAR_AVAILABLE", False)
     def test_calendar_status_before_initialization(self):
