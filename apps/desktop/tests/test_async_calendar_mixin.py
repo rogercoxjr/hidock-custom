@@ -372,5 +372,36 @@ class TestAsyncCalendarMixinIntegration(unittest.TestCase):
         self.assertEqual(result[0]["meeting_subject"], "Test Meeting")
 
 
+    def test_parse_file_datetime_edge_cases_ported(self):
+        """Ported from the deleted simple_calendar tests (Gate 4 Task 1).
+
+        Asserts the surviving _parse_file_datetime edge behavior on
+        async_calendar_mixin.AsyncCalendarMixin: a datetime 'time' field is
+        returned as-is; device 'YYYY/MM/DD HH:MM:SS' strings parse; missing
+        and malformed inputs return None.
+        """
+        from async_calendar_mixin import AsyncCalendarMixin
+
+        class TestMixin(AsyncCalendarMixin):
+            def __init__(self):
+                self._calendar_integration = None
+
+        mixin = TestMixin()
+
+        # 1. datetime 'time' field returned unchanged
+        ts = datetime(2023, 1, 15, 10, 30, 0)
+        self.assertEqual(mixin._parse_file_datetime({"time": ts}), ts)
+
+        # 2. device createDate/createTime strings (slash format) parse
+        parsed = mixin._parse_file_datetime({"createDate": "2023/01/15", "createTime": "10:30:00"})
+        self.assertEqual(parsed, datetime(2023, 1, 15, 10, 30, 0))
+
+        # 3. missing datetime data -> None
+        self.assertIsNone(mixin._parse_file_datetime({"name": "test.wav"}))
+
+        # 4. malformed date string -> None
+        self.assertIsNone(mixin._parse_file_datetime({"createDate": "invalid-date", "createTime": "10:30:00"}))
+
+
 if __name__ == "__main__":
     unittest.main()
