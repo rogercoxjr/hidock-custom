@@ -102,7 +102,14 @@ class TestHiDockJensenFileListOperations:
                 file_data.extend(b"\x00" * 6)  # skip 6 bytes
                 file_data.extend(b"\x00" * 16)  # signature
 
-                mock_receive.return_value = {"id": CMD_GET_FILE_LIST, "sequence": 1, "body": bytes(file_data)}
+                # Gate 4 (Task 0b): the prior constant return_value spun the list_files
+                # accumulation loop forever. A finite side_effect ending in an empty
+                # CMD_GET_FILE_LIST body terminates deterministically via the empty-body
+                # completion path (see test_list_files_empty_response_completion).
+                mock_receive.side_effect = [
+                    {"id": CMD_GET_FILE_LIST, "sequence": 1, "body": bytes(file_data)},
+                    {"id": CMD_GET_FILE_LIST, "sequence": 1, "body": b""},
+                ]
 
                 result = jensen_device.list_files()
 
