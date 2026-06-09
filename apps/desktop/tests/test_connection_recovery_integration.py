@@ -100,8 +100,12 @@ async def test_connection_recovery_after_error():
                 error_msg = str(e)
                 if "Access denied" in error_msg or "permission" in error_msg.lower():
                     pytest.skip(f"Device access denied - skipping test: {e}")
-                else:
-                    raise
+                # No HiDock device plugged in — the recovery path is unreachable,
+                # so treat as a soft skip rather than a hard failure (matches
+                # test_gui_connection_retry_logic + the conftest no-device contract).
+                if "not found" in error_msg.lower():
+                    pytest.skip(f"No HiDock device found on this workstation: {e}")
+                raise
 
         finally:
             # Clean up
