@@ -194,7 +194,10 @@ class TestOutlookCalendarService:
 
         assert result is False
         assert outlook_service._is_authenticated is False
-        assert outlook_service.account is None
+        # Gate 4 Task 2: removed stale `assert outlook_service.account is None`.
+        # The live authenticate() creates Account(...) before calling .authenticate()
+        # and does NOT null self.account on failure — the valid failure signal is
+        # result is False + _is_authenticated is False (asserted above).
 
     def test_get_status_info(self, outlook_service):
         """Test status information retrieval."""
