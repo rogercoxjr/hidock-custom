@@ -459,5 +459,5 @@ class TestGetStatusDisplayText:
         )
         meta = db.get_metadata("analyzed.hda")
         text = db.get_status_display_text(meta)
-        # display_title was set to AI summary first line
-        assert "Key meeting summary" in text or text != ""
+        # AI-analyzed status surfaces in the display text.
+        assert "Key meeting summary" in text

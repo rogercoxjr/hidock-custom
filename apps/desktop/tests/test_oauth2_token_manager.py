@@ -85,9 +85,9 @@ class TestIsTokenValid:
 
     def test_token_without_expires_at_is_invalid(self, manager):
         """Token stored without an expires_at is treated as invalid."""
+        # save_tokens with no expires_in stamps no expires_at, so the token
+        # has no validity window and is treated as invalid.
         manager.save_tokens("microsoft", {"access_token": "T"})
-        # Manually strip the expires_at from the file so load_tokens returns it without that key
-        raw = manager._load_tokens_file()
         assert manager.is_token_valid("microsoft") is False
 
     def test_missing_provider_is_invalid(self, manager):

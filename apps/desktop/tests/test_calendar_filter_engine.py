@@ -89,12 +89,13 @@ class TestApplyFilters:
         assert result[0]["name"] == "rec1.hda"
 
     def test_apply_filters_returns_original_on_error(self, engine):
-        """If a filter crashes, original data is returned unchanged."""
-        bad_events = [{"name": "x.hda"}]  # missing expected keys
-        # subject filter gracefully skips entries with no meeting_subject
-        result = engine.apply_filters(bad_events, {"subject": "anything"})
-        # Should return empty (no meeting_subject), not raise
-        assert isinstance(result, list)
+        """If a filter crashes, original data is returned unchanged (src:66-68)."""
+        bad_events = [{"name": "x.hda", "meeting_subject": "standup"}]
+        # A non-string subject makes filter_by_subject raise on .lower() (outside
+        # its per-file try), which propagates to apply_filters' except branch.
+        result = engine.apply_filters(bad_events, {"subject": 123})
+        # The except branch returns the original list unchanged, not [].
+        assert result == bad_events
 
 
 # ---------------------------------------------------------------------------
@@ -122,8 +123,10 @@ class TestFilterBySubject:
         """'stadup' (typo) should fuzzy-match 'standup'."""
         event = [{"name": "r.hda", "meeting_subject": "standup"}]
         result = engine.filter_by_subject(event, "stadup", fuzzy=True)
-        # With SequenceMatcher similarity ≥ 0.6 this should match
-        assert len(result) >= 0  # just check no crash; fuzzy is heuristic
+        # SequenceMatcher("stadup", "standup").ratio() == 0.923 ≥ 0.6 threshold,
+        # so the match is deterministic — the typo event must be included.
+        assert len(result) == 1
+        assert result[0]["name"] == "r.hda"
 
     def test_no_meeting_subject_skipped(self, engine):
         """Events without meeting_subject are excluded from results."""
