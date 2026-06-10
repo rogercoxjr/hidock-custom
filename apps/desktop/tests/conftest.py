@@ -572,6 +572,24 @@ def device_test_isolation(request):
 
 
 @pytest.fixture
+def connected_jensen():
+    """A HiDockJensen wired for mock-only protocol tests (Gate 4 Task 7).
+
+    Consolidates the connected-device fixture copy-pasted across
+    test_hidock_device_*.py. No real USB — device/endpoints are Mocks.
+    """
+    from hidock_device import HiDockJensen
+
+    device = HiDockJensen(Mock())
+    device.device = Mock()
+    device.ep_in = Mock()
+    device.ep_out = Mock()
+    device.is_connected_flag = True
+    device.device_info = {"versionNumber": 12345}
+    return device
+
+
+@pytest.fixture
 def mock_gemini_service():
     """Mock Gemini AI service for testing."""
     service = Mock()

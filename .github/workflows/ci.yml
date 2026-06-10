@@ -48,28 +48,44 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        cd hidock-desktop-app && pip install -e ".[dev]"
+        cd apps/desktop && pip install -e ".[dev]"
 
     - name: Lint with flake8
-      working-directory: ./hidock-desktop-app
+      working-directory: apps/desktop
       run: |
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
 
     - name: Format check with black
-      working-directory: ./hidock-desktop-app
+      working-directory: apps/desktop
       run: |
         black --check --diff .
 
     - name: Type check with mypy
-      working-directory: ./hidock-desktop-app
+      working-directory: apps/desktop
       run: |
         mypy . --ignore-missing-imports
 
     - name: Test with pytest
-      working-directory: ./hidock-desktop-app
+      working-directory: apps/desktop
       run: |
-        pytest tests/
+        python -m pytest tests/ --cov=. --cov-report=xml
+
+    - name: Gate 4 Part-2 — per-module 80% on critical mockable allowlist
+      working-directory: apps/desktop
+      run: |
+        set -e
+        modules="file_operations_manager storage_management audio_metadata_db device_interface hta_converter calendar_cache_manager calendar_filter_engine gemini_models oauth2_pkce oauth2_token_manager config_and_logger"
+        fail=0
+        for m in $modules; do
+          if python -m coverage report --include=src/$m.py --fail-under=80 >/dev/null 2>&1; then
+            echo "PASS  $m >= 80%"
+          else
+            echo "FAIL  $m < 80%"
+            fail=1
+          fi
+        done
+        exit $fail
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
