@@ -187,10 +187,9 @@ class TestResampleAudio:
         """If resampling raises, returns original data."""
         original_bytes = b"\x00\x01" * 50
 
-        with patch("hta_converter.np", create=True):
-            # Patch numpy to raise during frombuffer
-            with patch("numpy.frombuffer", side_effect=ValueError("bad buffer")):
-                result = self.converter._resample_audio(original_bytes, 8000, 16000, 1)
+        # _resample_audio does a local `import numpy as np`, so patch numpy itself.
+        with patch("numpy.frombuffer", side_effect=ValueError("bad buffer")):
+            result = self.converter._resample_audio(original_bytes, 8000, 16000, 1)
 
         # Should return original data on failure
         assert result == original_bytes
@@ -451,7 +450,8 @@ class TestVerifyWavFile:
         with open(corrupt_file, "wb") as f:
             f.write(b"NOT_A_WAV_FILE")
 
-        with pytest.raises((ValueError, Exception)):
+        # _verify_wav_file catches the wave.Error and re-raises it wrapped as ValueError.
+        with pytest.raises(ValueError, match="Invalid WAV file created"):
             self.converter._verify_wav_file(corrupt_file)
 
     def test_verify_valid_wav_returns_true(self, tmp_path):

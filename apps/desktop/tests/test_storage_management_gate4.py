@@ -228,17 +228,9 @@ class TestStorageMonitorLoop:
             monitor.storage_info["/tmp/loop"] = changed_info
 
         monitor._update_storage_info = fake_update
-        monitor.stop_event.set()  # One pass only
 
-        with patch.object(monitor.stop_event, "wait", return_value=True):
-            monitor._monitoring_loop()
-
-        # After the loop body completes, since we changed warning_level, callback fires
-        # (the loop calls fake_update which changes storage_info, then checks)
-        # We need to let it run one iteration
-        monitor.stop_event.clear()
-        monitor._update_storage_info = fake_update
-
+        # wait() returns False for the first iteration (body runs, warning_level
+        # changes NORMAL->WARNING so the callback fires) then True to stop.
         with patch.object(monitor.stop_event, "wait", side_effect=[False, True]):
             monitor._monitoring_loop()
 
