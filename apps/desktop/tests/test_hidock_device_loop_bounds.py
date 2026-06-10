@@ -9,7 +9,6 @@ bound they pass fast with a terminating status.
 from unittest.mock import Mock, patch
 
 import pytest
-from constants import CMD_GET_FILE_LIST
 from hidock_device import HiDockJensen
 
 # Tighter than the module-level 20s elsewhere: a true spin must fail in 10s.
