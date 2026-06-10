@@ -1589,6 +1589,8 @@ class HiDockJensen:
                 total_bytes_received = 0
                 consecutive_timeouts = 0
                 max_consecutive_timeouts = 10  # Increased for large file lists
+                consecutive_mismatch = 0
+                max_consecutive_mismatch = 50  # Gate 4: bound stuck wrong-id streams
                 adaptive_timeout = 1000
 
                 while True:
@@ -1599,6 +1601,7 @@ class HiDockJensen:
                     if response and response["id"] == CMD_GET_FILE_LIST:
                         seq_id = response["sequence"]
                         consecutive_timeouts = 0
+                        consecutive_mismatch = 0  # Gate 4: valid chunk resets the mismatch cap
                         adaptive_timeout = 1000
 
                         chunk = response["body"]
@@ -1632,6 +1635,16 @@ class HiDockJensen:
                             )
                             break
                     else:
+                        # Unexpected response - count; cap prevents infinite spin
+                        consecutive_mismatch += 1
+                        if consecutive_mismatch >= max_consecutive_mismatch:
+                            logger.warning(
+                                "Jensen",
+                                "parallel_receive",
+                                f"Max consecutive mismatches ({max_consecutive_mismatch}) reached, "
+                                f"returning {len(file_list_chunks)} chunks collected",
+                            )
+                            break
                         continue  # Unexpected response
 
                 return file_list_chunks
@@ -1939,6 +1952,8 @@ class HiDockJensen:
                 final_files = None
                 consecutive_timeouts = 0
                 max_consecutive_timeouts = 10  # Increased for large file lists (488+ files)
+                consecutive_mismatch = 0
+                max_consecutive_mismatch = 50  # Gate 4: bound stuck wrong-id streams
                 adaptive_timeout = 1000  # Back to original timeout
 
                 while final_files is None:
@@ -1956,6 +1971,7 @@ class HiDockJensen:
                     if response and response["id"] == CMD_GET_FILE_LIST:
                         seq_id = response["sequence"]
                         consecutive_timeouts = 0
+                        consecutive_mismatch = 0  # Gate 4: valid chunk resets the mismatch cap
                         # Reset to shorter timeout after successful receive
                         adaptive_timeout = 1000
 
@@ -1997,13 +2013,24 @@ class HiDockJensen:
                             final_files = file_list_handler(b"")  # Empty data signals completion
                             break
                     else:
-                        # Unexpected response - log and continue
+                        # Unexpected response - log and count; cap prevents infinite spin
+                        consecutive_mismatch += 1
                         logger.debug(
                             "Jensen",
                             "list_files",
                             f"Unexpected response CMD:{response.get('id', 'unknown')} "
-                            f"SEQ:{response.get('sequence', 'unknown')} during file list",
+                            f"SEQ:{response.get('sequence', 'unknown')} during file list "
+                            f"({consecutive_mismatch}/{max_consecutive_mismatch})",
                         )
+                        if consecutive_mismatch >= max_consecutive_mismatch:
+                            logger.warning(
+                                "Jensen",
+                                "list_files",
+                                f"Max consecutive mismatches ({max_consecutive_mismatch}) reached, "
+                                f"aborting file list with {len(file_list_chunks)} chunks collected",
+                            )
+                            final_files = file_list_handler(b"")  # Gate 4: process whatever was collected
+                            break
                         continue
 
                 if not final_files:
