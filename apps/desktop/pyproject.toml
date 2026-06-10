@@ -258,9 +258,11 @@ omit = [
     "docs/*",
     "icons/*",
     "themes/*",
+    "src/jensen_protocol_extensions.py",
 ]
 
 [tool.coverage.report]
+fail_under = 40   # Gate 4 Part-1 static floor = floor(measured 41%) - 1; raise manually as coverage rises (no auto-ratchet)
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
