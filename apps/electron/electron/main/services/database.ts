@@ -7,7 +7,7 @@ import { getDatabasePath } from './file-storage'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 24
+const SCHEMA_VERSION = 25
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -252,6 +252,8 @@ CREATE TABLE IF NOT EXISTS transcripts (
     transcription_model TEXT,
     title_suggestion TEXT,
     question_suggestions TEXT,
+    summarization_provider TEXT,
+    summarization_model TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (recording_id) REFERENCES recordings(id)
 );
@@ -286,6 +288,8 @@ CREATE TABLE IF NOT EXISTS transcription_queue (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     started_at TEXT,
     completed_at TEXT,
+    parked_until TEXT,
+    first_parked_at TEXT,
     FOREIGN KEY (recording_id) REFERENCES recordings(id)
 );
 
@@ -295,6 +299,14 @@ CREATE TABLE IF NOT EXISTS transcription_service_lock (
     process_id TEXT,
     acquired_at TEXT,
     updated_at TEXT
+);
+
+-- Auto-pipeline first-sync baseline (spec 2026-06-11 §5.5) — filename snapshot per device
+CREATE TABLE IF NOT EXISTS sync_baseline_files (
+    device_serial TEXT NOT NULL,
+    filename      TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    PRIMARY KEY (device_serial, filename)
 );
 
 -- Download queue (v20) - spec-007
@@ -1346,6 +1358,48 @@ const MIGRATIONS: Record<number, () => void> = {
     } catch (e) {
       console.warn('[Migration v24] Failed:', e)
     }
+  },
+
+  25: () => {
+    // v25: Auto-pipeline P1 (spec 2026-06-11 §5.8) — two-stage worker columns,
+    // quota-parking columns, baseline snapshot table, and Stage-2 backfill.
+    console.log('Running migration to schema v25: auto-pipeline two-stage columns')
+    const database = getDatabase()
+
+    const columnsToAdd = [
+      'ALTER TABLE transcripts ADD COLUMN summarization_provider TEXT',
+      'ALTER TABLE transcripts ADD COLUMN summarization_model TEXT',
+      'ALTER TABLE transcription_queue ADD COLUMN parked_until TEXT',
+      'ALTER TABLE transcription_queue ADD COLUMN first_parked_at TEXT'
+    ]
+    for (const sql of columnsToAdd) {
+      try {
+        database.run(sql)
+      } catch {
+        // Column already exists (fresh DB created from current SCHEMA) — ignore.
+        console.log(`Column may already exist: ${sql}`)
+      }
+    }
+
+    database.run(`
+      CREATE TABLE IF NOT EXISTS sync_baseline_files (
+        device_serial TEXT NOT NULL,
+        filename      TEXT NOT NULL,
+        created_at    TEXT NOT NULL,
+        PRIMARY KEY (device_serial, filename)
+      )
+    `)
+
+    // Backfill: fused-flow transcripts with a REAL summary are Stage-2-complete.
+    // Rows with NULL summary (the historical silent-failure path) keep a NULL marker:
+    // they stay Stage-2-resumable and are recovered via Re-summarize (spec §5.6/§5.8).
+    database.run(`
+      UPDATE transcripts
+      SET summarization_provider = 'gemini', summarization_model = transcription_model
+      WHERE full_text IS NOT NULL AND summary IS NOT NULL AND summarization_provider IS NULL
+    `)
+
+    console.log('Migration v25 complete')
   }
 
 }
@@ -2164,6 +2218,8 @@ export interface Transcript {
   transcription_model?: string
   title_suggestion?: string
   question_suggestions?: string
+  summarization_provider?: string
+  summarization_model?: string
   created_at: string
 }
 
@@ -2281,6 +2337,8 @@ export interface QueueItem {
   created_at: string
   started_at?: string
   completed_at?: string
+  parked_until?: string
+  first_parked_at?: string
 }
 
 export function addToQueue(recordingId: string): string {
