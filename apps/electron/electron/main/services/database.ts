@@ -1375,9 +1375,14 @@ const MIGRATIONS: Record<number, () => void> = {
     for (const sql of columnsToAdd) {
       try {
         database.run(sql)
-      } catch {
-        // Column already exists (fresh DB created from current SCHEMA) — ignore.
-        console.log(`Column may already exist: ${sql}`)
+      } catch (e) {
+        const msg = (e as Error).message
+        if (msg.includes('duplicate column name')) {
+          // Column already exists (fresh DB created from current SCHEMA) — expected, ignore.
+          console.log(`Column already exists: ${sql}`)
+        } else {
+          console.warn(`[Migration v25] ALTER failed (${sql}):`, e)
+        }
       }
     }
 
@@ -1391,8 +1396,11 @@ const MIGRATIONS: Record<number, () => void> = {
     `)
 
     // Backfill: fused-flow transcripts with a REAL summary are Stage-2-complete.
-    // Rows with NULL summary (the historical silent-failure path) keep a NULL marker:
-    // they stay Stage-2-resumable and are recovered via Re-summarize (spec §5.6/§5.8).
+    // The fused flow was Gemini-only and a single model produced both stages —
+    // that's why 'gemini' is hardcoded and transcription_model is copied into
+    // summarization_model. Rows with NULL summary (the historical silent-failure
+    // path) keep a NULL marker: they stay Stage-2-resumable and are recovered
+    // via Re-summarize (spec §5.6/§5.8).
     database.run(`
       UPDATE transcripts
       SET summarization_provider = 'gemini', summarization_model = transcription_model

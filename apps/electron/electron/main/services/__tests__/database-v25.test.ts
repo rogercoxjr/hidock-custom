@@ -129,7 +129,9 @@ describe('schema v25 (auto-pipeline P1)', () => {
     const tCols = queryAll<{ name: string }>("SELECT name FROM pragma_table_info('transcripts')").map(c => c.name)
     expect(tCols).toContain('summarization_provider')
     expect(tCols).toContain('summarization_model')
-    const qCols = queryAll<{ name: string }>("SELECT name FROM pragma_table_info('transcription_queue')").map(c => c.name)
+    const qCols = queryAll<{ name: string }>(
+      "SELECT name FROM pragma_table_info('transcription_queue')"
+    ).map(c => c.name)
     expect(qCols).toContain('parked_until')
     expect(qCols).toContain('first_parked_at')
   })
@@ -141,17 +143,25 @@ describe('schema v25 (auto-pipeline P1)', () => {
     expect(t?.name).toBe('sync_baseline_files')
   })
 
-  it('backfill marks fused-flow rows complete but leaves NULL-summary rows resumable', () => {
-    // Insert recording rows first (FK), then two legacy-shaped transcripts.
+  it('backfill marks fused-flow rows complete but leaves NULL-summary rows resumable', async () => {
+    // Genuine upgrade-path test: seed legacy-shaped rows, rewind the recorded
+    // schema version to 24, then re-init against the SAME db file so the REAL
+    // MIGRATIONS[25] (including its actual backfill UPDATE) executes — no
+    // hand-copied SQL that could drift from the migration.
     insertTestRecording('rec_legacy_ok')
     insertTestRecording('rec_legacy_null')
     run(`INSERT INTO transcripts (id, recording_id, full_text, language, summary, transcription_model)
          VALUES ('trans_rec_legacy_ok', 'rec_legacy_ok', 'text', 'en', 'a real summary', 'gemini-2.0-flash-exp')`)
     run(`INSERT INTO transcripts (id, recording_id, full_text, language, summary, transcription_model)
          VALUES ('trans_rec_legacy_null', 'rec_legacy_null', 'text', 'en', NULL, 'gemini-2.0-flash-exp')`)
-    // Run the exact backfill statement from MIGRATIONS[25]:
-    run(`UPDATE transcripts SET summarization_provider='gemini', summarization_model=transcription_model
-         WHERE full_text IS NOT NULL AND summary IS NOT NULL AND summarization_provider IS NULL`)
+
+    // Rewind to v24 and force a re-migration. run() persists each statement to
+    // disk and closeDatabase() saves again, so the re-init below loads this state.
+    run('DELETE FROM schema_version')
+    run('INSERT INTO schema_version (version) VALUES (24)')
+    closeDatabase()
+    await initializeDatabase()
+
     const ok = queryOne<{ summarization_provider: string }>(
       "SELECT summarization_provider FROM transcripts WHERE recording_id='rec_legacy_ok'")
     const nul = queryOne<{ summarization_provider: string | null }>(
