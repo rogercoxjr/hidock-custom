@@ -1,10 +1,10 @@
 # Auto-Pipeline with Model of Choice — Design Spec
 
-**Date:** 2026-06-11 (rev 2 — post-antagonistic-review)
+**Date:** 2026-06-11 (rev 3 — post-antagonistic-review + verification pass)
 **App:** `apps/electron` (universal knowledge hub)
 **Goal:** Plug in a HiDock P1 → the app automatically downloads new recordings, transcribes them with **OpenAI Whisper**, and summarizes them with an **Ollama Cloud** model of the user's choice — silently, with results appearing in the Knowledge Library.
 
-> **Rev 2:** an adversarial review (4 lenses, web-verified API facts) found 3 blockers and ~8 majors in rev 1. This revision replaces the timestamp baseline with a filename snapshot, replaces the `summary IS NULL` stage marker with `summarization_provider IS NULL`, makes the Whisper path always-transcode with `whisper-1` pinned, and adds the operational hardening listed in §7–§9. Every change traces to a verified failure scenario.
+> **Rev 2/3:** an adversarial review (4 lenses, web-verified API facts) found 3 blockers and ~8 majors in rev 1; a 3-verifier pass on rev 2 surfaced 11 further findings (parking state design, per-stage key checks, fresh-device baseline gate), all resolved in rev 3. This revision replaces the timestamp baseline with a filename snapshot, replaces the `summary IS NULL` stage marker with `summarization_provider IS NULL`, makes the Whisper path always-transcode with `whisper-1` pinned, and adds the operational hardening listed in §7–§9. Every change traces to a verified failure scenario.
 
 ## 1. User decisions (locked during brainstorming)
 
@@ -212,7 +212,7 @@ Existing Gemini-default configs: provider `gemini` + summarization `gemini` repr
 
 ## 8. Testing
 
-- **Unit (Vitest, mocked `fetch`/`spawn`):** whisper-asr (always-transcode invocation, multipart shape with `verbose_json`, chunk path, ffmpeg asar path rewrite, temp-dir cleanup, disk-space guard); ollama-cloud-llm (Bearer header, `format:json`, 404/401/429 classification, timeout abort); meeting-selection validator (`'none'`, hallucinated id, string confidence); config (defaults, both-site encryption round-trip incl. cold-start decrypt, `__enc__` idempotency guard); baseline (`ensure-baseline` first-run snapshot, set-difference filtering, `auto:false` default leaves display callers untouched, null-serial fallback, 100-file cap); queue (addToQueue dedupe, worker short-circuit, stage-resume on `summarization_provider IS NULL`, resummarize keeps old summary on failure, actionables delete-and-replace, `recordings:transcribe` enqueues); failure taxonomy (429 parking doesn't touch retry_count, key-save re-pend).
+- **Unit (Vitest, mocked `fetch`/`spawn`):** whisper-asr (always-transcode invocation, multipart shape with `verbose_json`, chunk path, ffmpeg asar path rewrite, temp-dir cleanup, disk-space guard); ollama-cloud-llm (Bearer header, `format:json`, 404/401/429 classification, timeout abort); meeting-selection validator (`'none'`, hallucinated id, string confidence); config (defaults, both-site encryption round-trip incl. cold-start decrypt, `__enc__` idempotency guard); baseline (`ensure-baseline` first-run snapshot, set-difference filtering, `auto:false` default leaves display callers untouched, null-serial skips auto-sync, 100-file cap); queue (addToQueue dedupe, worker short-circuit, stage-resume on `summarization_provider IS NULL`, resummarize keeps old summary on failure, actionables delete-and-replace, `recordings:transcribe` enqueues); failure taxonomy (429 parking doesn't touch retry_count, key-save re-pend).
 - **Integration:** a second e2e-smoke variant (real in-memory sql.js + temp audio file) with provider = `openai-whisper` + summarization = `ollama-cloud`, both HTTP boundaries mocked; asserts per-stage provider/model columns, the backfill, and fresh-boot column existence.
 - **Must stay green:** `download-service.test.ts` (+ b007/c004), `transcription.test.ts` (+ b007), `e2e-smoke.test.ts`, `useDownloadOrchestrator`, `useUnifiedRecordings`, `Settings.test.tsx`, `usb-smoke.test.ts`, **`useOperations` tests (updated for the preflight)**; gates `npm run typecheck && npm run lint && npm run test:run`.
 - **USB:** zero real-device testing during development. AC1 is the sole physical-device criterion.
