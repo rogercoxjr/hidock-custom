@@ -1,6 +1,6 @@
 # Applications
 
-This directory contains the three main HiDock Next applications.
+This directory contains the active HiDock Next applications. (The early `audio-insights` prototype has been archived to `../legacy/audio-insights/`; its capabilities are integrated into the Electron app.)
 
 ## 📁 Directory Structure
 
@@ -9,9 +9,6 @@ Full-featured desktop application built with Python and CustomTkinter for comple
 
 ### [web/](web/) - Web Application  
 Modern web interface built with React and TypeScript for browser-based device access.
-
-### [audio-insights/](audio-insights/) - Audio Insights Tool
-Specialized tool for extracting AI-powered insights from audio recordings.
 
 ## 🚀 Quick Start
 
@@ -27,10 +24,4 @@ cd desktop
 ```bash
 cd web
 # See web/README.md for setup
-```
-
-### Audio Insights
-```bash
-cd audio-insights
-# See audio-insights/README.md for setup
 ```
