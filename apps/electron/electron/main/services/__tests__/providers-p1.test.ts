@@ -60,9 +60,22 @@ describe('getAsrProvider (P1: gemini only)', () => {
     const result = await asr.transcribe(tempAudioPath, { meetingContext: '\nCTX' })
     expect(result.text).toBe('TRANSCRIBED')
     expect(result.language).toBeUndefined() // gemini-asr supplies no language (spec §5.3)
-    const callArg = mockGenerateContent.mock.calls[0][0]
-    expect(JSON.stringify(callArg)).toContain('inlineData')
+    const callArg = mockGenerateContent.mock.calls[0][0] as Array<Record<string, unknown>>
+    const inline = callArg[0].inlineData as { mimeType: string; data: string }
+    expect(inline.mimeType).toBe('audio/wav')
+    expect(typeof inline.data).toBe('string')
     expect(JSON.stringify(callArg)).toContain('CTX')
+  })
+
+  it("maps the HiDock '.hda' extension to audio/mp3 (H1E MPEG output)", async () => {
+    mockGenerateContent.mockResolvedValueOnce({ response: { text: () => 'X' } })
+    const hdaPath = join(tempDir, 'rec.hda')
+    writeFileSync(hdaPath, Buffer.alloc(16))
+    const asr = getAsrProvider(geminiConfig)
+    await asr.transcribe(hdaPath, {})
+    const callArg = mockGenerateContent.mock.calls[0][0] as Array<Record<string, unknown>>
+    const inline = callArg[0].inlineData as { mimeType: string }
+    expect(inline.mimeType).toBe('audio/mp3') // the one HiDock-specific MIME rule
   })
 })
 

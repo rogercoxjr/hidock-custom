@@ -2,6 +2,8 @@ import type { AppConfig } from '../config'
 import { createGeminiLlm } from './gemini-llm'
 
 export interface LlmProvider {
+  /** opts.json is a HINT only (providers that support a JSON mode may use it;
+   *  gemini ignores it) — callers must still parse/validate output defensively. */
   generate(prompt: string, opts?: { json?: boolean }): Promise<string>
 }
 
