@@ -1,14 +1,11 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
-import { readFile, existsSync } from 'fs'
-import { promisify } from 'util'
-import { extname } from 'path'
-
-const readFileAsync = promisify(readFile)
+import { existsSync } from 'fs'
 import { getConfig } from './config'
 import {
   getRecordingById,
+  getTranscriptByRecordingId,
+  upsertTranscriptStage1,
+  updateTranscriptStage2,
   updateRecordingTranscriptionStatus,
-  insertTranscript,
   getQueueItems,
   updateQueueItem,
   updateQueueProgress,
@@ -24,9 +21,10 @@ import {
   acquireTranscriptionLock,
   releaseTranscriptionLock,
   clearStaleTranscriptionLock,
-  resetStuckTranscriptions,
-  type Transcript
+  resetStuckTranscriptions
 } from './database'
+import { getAsrProvider } from './asr/asr-provider'
+import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
 import { BrowserWindow } from 'electron'
 import { getVectorStore } from './vector-store'
 
@@ -104,31 +102,12 @@ async function processQueue(): Promise<void> {
   }
 
   try {
-    const config = getConfig()
-    if (!config.transcription.geminiApiKey) {
-      console.error('[Transcription] Cannot process queue: Gemini API key not configured')
-
-      // Mark all pending items as failed with clear error message
-      const pendingItems = getQueueItems('pending')
-      const processingItems = getQueueItems('processing')
-
-      const allStuckItems = [...pendingItems, ...processingItems]
-      if (allStuckItems.length > 0) {
-        console.log(`[Transcription] Marking ${allStuckItems.length} stuck items as failed (no API key)`)
-
-        for (const item of allStuckItems) {
-          updateQueueItem(item.id, 'failed', 'Gemini API key not configured. Please add your API key in Settings.')
-          updateRecordingTranscriptionStatus(item.recording_id, 'error')
-          notifyRenderer('transcription:failed', {
-            queueItemId: item.id,
-            recordingId: item.recording_id,
-            error: 'Gemini API key not configured. Please add your API key in Settings.'
-          })
-        }
-      }
-
-      return
-    }
+    // Auto-pipeline P1 (spec §5.3): the queue-level Gemini key pre-check is
+    // GONE. Per-stage provider factories (getAsrProvider / getLlmProvider) throw
+    // the canonical 'Gemini API key not configured' string at construction, so a
+    // missing key now fails each item one-by-one as it is processed (same
+    // terminal state, still matched by NON_RETRYABLE_ERRORS) instead of being
+    // mass-marked here. This is spec AC7's one deliberate exception (b).
     // spec-014: Retry failed items with max attempts
     // B-TXN-001: Exponential backoff before retrying failed items
     // C-005: Skip non-retryable errors (missing files, missing API key)
@@ -286,15 +265,15 @@ interface ActionableDetection {
 }
 
 async function detectActionables(
+  llm: LlmProvider,
   transcriptText: string,
   knowledgeCaptureId: string,
   metadata: { title?: string; questions?: string[] }
 ): Promise<ActionableDetection[]> {
-  const config = getConfig()
-  if (!config.transcription.geminiApiKey) {
-    console.log('[Actionable Detection] Gemini API key not configured, skipping')
-    return []
-  }
+  // Auto-pipeline P1 (spec §5.3): the LLM provider is constructed once in
+  // Stage 2 and passed in here — its key check already happened at the factory.
+  // The own GoogleGenerativeAI construction + key early-return are gone; a
+  // failure now lands in the catch below (graceful skip — unchanged).
 
   // Skip very short transcripts
   const wordCount = transcriptText.split(/\s+/).filter(w => w.length > 0).length
@@ -335,11 +314,7 @@ Return as JSON array. If no actionables detected, return empty array [].
 Only include detections with confidence >= 0.6.`
 
   try {
-    const genAI = new GoogleGenerativeAI(config.transcription.geminiApiKey)
-    const model = genAI.getGenerativeModel({ model: config.transcription.geminiModel || 'gemini-2.0-flash-exp' })
-
-    const result = await model.generateContent(prompt)
-    const responseText = result.response.text()
+    const responseText = await llm.generate(prompt, { json: true })
 
     // Extract JSON from response (might be wrapped in markdown code blocks)
     const jsonMatch = responseText.match(/\[[\s\S]*\]/)
@@ -366,53 +341,52 @@ async function transcribeRecording(
   progressCallback?: (stage: string, progress: number) => void
 ): Promise<void> {
   const recording = getRecordingById(recordingId)
-  if (!recording || !recording.file_path) {
+  if (!recording) {
     throw new Error(`Recording not found or no local file: ${recordingId}`)
   }
 
-  if (!existsSync(recording.file_path)) {
-    throw new Error(`Recording file not found: ${recording.file_path}`)
-  }
-
   const config = getConfig()
-  if (!config.transcription.geminiApiKey) {
-    throw new Error('Gemini API key not configured')
+  const existing = getTranscriptByRecordingId(recordingId)
+
+  // Short-circuit (spec §5.3): both stages done -> duplicate queue items are no-ops.
+  if (existing?.full_text && existing.summarization_provider) {
+    console.log(`[Transcription] ${recordingId} already fully transcribed — short-circuit`)
+    updateRecordingTranscriptionStatus(recordingId, 'complete')
+    return
   }
 
   console.log(`Transcribing: ${recording.filename}`)
   // AI-13: Use standard enum values matching Recording.transcription_status
   updateRecordingTranscriptionStatus(recordingId, 'processing')
 
-  progressCallback?.('reading_file', 5) // spec-014: progress reporting
-
-  // Read the audio file asynchronously to avoid blocking the main process
-  const audioBuffer = await readFileAsync(recording.file_path)
-  const base64Audio = audioBuffer.toString('base64')
-
-  // Determine MIME type
-  const ext = extname(recording.file_path).toLowerCase()
-  const mimeTypes: Record<string, string> = {
-    '.wav': 'audio/wav',
-    '.mp3': 'audio/mp3',
-    '.m4a': 'audio/mp4',
-    '.ogg': 'audio/ogg',
-    '.webm': 'audio/webm',
-    '.hda': 'audio/mp3' // HiDock H1E outputs MPEG MP3 format
-  }
-  const mimeType = mimeTypes[ext] || 'audio/wav'
-
-  // Initialize Gemini
-  const genAI = new GoogleGenerativeAI(config.transcription.geminiApiKey)
-  const model = genAI.getGenerativeModel({ model: config.transcription.geminiModel || 'gemini-2.0-flash-exp' })
-
   // Find candidate meetings for this recording's time window
   const candidateMeetings = findCandidateMeetingsForRecording(recordingId)
   console.log(`Found ${candidateMeetings.length} candidate meetings for recording ${recordingId}`)
 
-  // Build meeting context for better transcription
-  let meetingContext = ''
-  if (candidateMeetings.length > 0) {
-    meetingContext = `\n\nPOSSIBLE MEETING CONTEXT (use this to improve transcription accuracy):
+  // Resume rule (spec §5.3): full_text set + marker NULL -> run Stage 2 only.
+  const stage2Only = Boolean(existing?.full_text && !existing.summarization_provider)
+  let fullText: string
+
+  if (stage2Only) {
+    // Stage-2-only run (resume / resummarize): needs only full_text — no audio file.
+    fullText = existing!.full_text
+    progressCallback?.('analyzing', 50)
+  } else {
+    // ===== Stage 1: ASR =====
+    // File-existence checks are Stage-1-only (spec §5.3).
+    if (!recording.file_path) {
+      throw new Error(`Recording not found or no local file: ${recordingId}`)
+    }
+    if (!existsSync(recording.file_path)) {
+      throw new Error(`Recording file not found: ${recording.file_path}`)
+    }
+
+    progressCallback?.('reading_file', 5) // spec-014: progress reporting
+
+    // Build meeting context for better transcription
+    let meetingContext = ''
+    if (candidateMeetings.length > 0) {
+      meetingContext = `\n\nPOSSIBLE MEETING CONTEXT (use this to improve transcription accuracy):
 ${candidateMeetings.map((m, i) => `
 Meeting ${i + 1}: "${m.subject}"
   Time: ${new Date(m.start_time).toLocaleString()} - ${new Date(m.end_time).toLocaleString()}
@@ -420,31 +394,32 @@ Meeting ${i + 1}: "${m.subject}"
   ${m.location ? `Location: ${m.location}` : ''}
   ${m.description ? `Description: ${m.description.slice(0, 200)}...` : ''}
 `).join('\n')}`
+    }
+
+    progressCallback?.('transcribing', 20) // spec-014: progress reporting
+
+    // Stage-1 key check: getAsrProvider throws the canonical key-missing string.
+    const asr = getAsrProvider(config)
+    const asrResult = await asr.transcribe(recording.file_path, { meetingContext })
+    fullText = asrResult.text
+
+    // Stage-1 write: never touches Stage-2 columns (spec §5.3).
+    const stage1WordCount = fullText.split(/\s+/).filter((w) => w.length > 0).length
+    upsertTranscriptStage1({
+      recording_id: recordingId,
+      full_text: fullText,
+      language: asrResult.language,
+      word_count: stage1WordCount,
+      transcription_provider: config.transcription.provider,
+      transcription_model: config.transcription.geminiModel
+    })
+
+    progressCallback?.('analyzing', 50) // spec-014: progress reporting
   }
 
-  progressCallback?.('transcribing', 20) // spec-014: progress reporting
-
-  // First, transcribe the audio with meeting context
-  const transcriptionPrompt = `Transcribe this audio recording.
-The audio may be in Spanish or English - transcribe in the original language.
-Provide a clean, accurate transcription of all speech.
-If there are multiple speakers, try to indicate speaker changes with "Speaker 1:", "Speaker 2:", etc.
-${meetingContext}
-Return ONLY the transcription, no additional commentary.`
-
-  const transcriptionResult = await model.generateContent([
-    {
-      inlineData: {
-        mimeType,
-        data: base64Audio
-      }
-    },
-    { text: transcriptionPrompt }
-  ])
-
-  const fullText = transcriptionResult.response.text()
-
-  progressCallback?.('analyzing', 50) // spec-014: progress reporting
+  // ===== Stage 2: Analysis =====
+  // Stage-2 key check: getLlmProvider throws the canonical key-missing string.
+  const llm = getLlmProvider(config)
 
   // Build meeting selection prompt if there are multiple candidates
   let meetingSelectionSection = ''
@@ -505,10 +480,13 @@ Respond in JSON format:
   "selection_reason": "..."` : ''}
 }`
 
-  const analysisResult = await model.generateContent(analysisPrompt)
-  const analysisText = analysisResult.response.text()
+  const analysisText = await llm.generate(analysisPrompt, { json: true })
 
-  // Parse the analysis JSON
+  // Parse the analysis JSON.
+  // Extraction failure (spec §5.3): BOTH the regex no-match path and the
+  // JSON.parse error path THROW (intentionally changing today's swallow-and-
+  // complete behavior). The queue retries Stage 2; the marker stays NULL and any
+  // pre-existing summary is untouched. No sentinel strings are ever written.
   let analysis: {
     summary?: string
     action_items?: string[]
@@ -520,17 +498,20 @@ Respond in JSON format:
     selected_meeting_id?: string
     meeting_confidence?: number
     selection_reason?: string
-  } = {}
+  }
 
+  const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    throw new Error(
+      `Analysis JSON extraction failed: no JSON object in response (${analysisText.slice(0, 120)})`
+    )
+  }
   try {
-    // Extract JSON from the response (might be wrapped in markdown code blocks)
-    const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      analysis = JSON.parse(jsonMatch[0])
-    }
+    analysis = JSON.parse(jsonMatch[0])
   } catch (e) {
-    console.warn('Failed to parse analysis JSON:', e)
-    analysis = { summary: 'Analysis failed', language: 'unknown' }
+    throw new Error(
+      `Analysis JSON extraction failed: ${e instanceof Error ? e.message : 'parse error'}`
+    )
   }
 
   // Process AI meeting selection
@@ -563,34 +544,33 @@ Respond in JSON format:
     }
   }
 
-  // Count words
-  const wordCount = fullText.split(/\s+/).filter((w) => w.length > 0).length
+  // Auto-rename predicate (spec §5.3): pre-read the current title_suggestion
+  // BEFORE the Stage-2 write. Auto-rename runs iff it was NULL (first time a
+  // title is written) — a resummarize on a row that already has a title never
+  // renames, and a retried first run still renames (it left NULL on failure).
+  const preUpdate = getTranscriptByRecordingId(recordingId)
+  const isFirstTitle = !preUpdate?.title_suggestion
 
-  // Create transcript record
-  const transcript: Omit<Transcript, 'created_at'> = {
-    id: `trans_${recordingId}`,
-    recording_id: recordingId,
-    full_text: fullText,
-    language: analysis.language || 'unknown',
+  // Stage-2 write: the single atomic marker write (spec §5.3).
+  updateTranscriptStage2(recordingId, {
     summary: analysis.summary,
     action_items: analysis.action_items ? JSON.stringify(analysis.action_items) : undefined,
     topics: analysis.topics ? JSON.stringify(analysis.topics) : undefined,
     key_points: analysis.key_points ? JSON.stringify(analysis.key_points) : undefined,
-    sentiment: undefined,
-    speakers: undefined,
-    word_count: wordCount,
-    transcription_provider: 'gemini',
-    transcription_model: config.transcription.geminiModel,
     title_suggestion: analysis.title_suggestion,
-    question_suggestions: analysis.question_suggestions ? JSON.stringify(analysis.question_suggestions) : undefined
-  }
-
-  insertTranscript(transcript)
-  // AI-13: Use standard enum value 'complete' (not 'transcribed')
+    question_suggestions: analysis.question_suggestions
+      ? JSON.stringify(analysis.question_suggestions)
+      : undefined,
+    language: analysis.language || 'unknown',
+    summarization_provider: 'gemini', // P3 will derive this from config.summarization
+    summarization_model: config.transcription.geminiModel
+  })
+  // AI-13: Use standard enum value 'complete' (not 'transcribed').
+  // Same point as today (immediately after the Stage-2 UPDATE, before the tail).
   updateRecordingTranscriptionStatus(recordingId, 'complete')
 
-  // Auto-update recording title if we have a title suggestion
-  if (analysis.title_suggestion) {
+  // Auto-update recording title only on the first title write.
+  if (analysis.title_suggestion && isFirstTitle) {
     updateKnowledgeCaptureTitle(recordingId, analysis.title_suggestion)
   }
 
@@ -604,10 +584,18 @@ Respond in JSON format:
     )
     const sourceKnowledgeId = knowledgeCapture?.id || recordingId
 
-    const detections = await detectActionables(fullText, sourceKnowledgeId, {
+    const detections = await detectActionables(llm, fullText, sourceKnowledgeId, {
       title: analysis.title_suggestion,
       questions: analysis.question_suggestions
     })
+
+    // Delete-and-replace for PENDING rows only (spec §5.3, refined): clearing
+    // duplicates prevents the historical re-run append-duplication while leaving
+    // user-actioned (in_progress/generated/shared/dismissed) actionables intact.
+    run(
+      "DELETE FROM actionables WHERE source_knowledge_id = ? AND status = 'pending'",
+      [sourceKnowledgeId]
+    )
 
     // Create actionable entries with TEXT IDs
     const VALID_TEMPLATE_IDS = ['meeting_minutes', 'interview_feedback', 'project_status', 'action_items']
@@ -674,7 +662,7 @@ Respond in JSON format:
   }
 
   progressCallback?.('complete', 100) // spec-014: progress reporting
-  console.log(`Transcription complete: ${recording.filename} (${wordCount} words)`)
+  console.log(`Transcription complete: ${recording.filename}`)
 }
 
 export async function transcribeManually(recordingId: string): Promise<void> {

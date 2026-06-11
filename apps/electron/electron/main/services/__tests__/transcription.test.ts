@@ -25,6 +25,13 @@ vi.mock('../database', () => ({
   updateRecordingStatus: (...args: any[]) => mockUpdateRecordingStatus(...args),
   updateRecordingTranscriptionStatus: (...args: any[]) => mockUpdateRecordingStatus(...args),
   insertTranscript: vi.fn(),
+  // Auto-pipeline P1 (spec §5.3): the two-stage worker now imports the stage-write
+  // helpers. They are no-ops here — this test drives the *failure* path (Gemini
+  // generateContent rejects at the Stage-1 ASR call), asserting only that the
+  // queue item is marked failed and the recording status set to 'error'.
+  getTranscriptByRecordingId: vi.fn(() => undefined),
+  upsertTranscriptStage1: vi.fn(),
+  updateTranscriptStage2: vi.fn(),
   getQueueItems: (...args: any[]) => mockGetQueueItems(...args),
   updateQueueItem: (...args: any[]) => mockUpdateQueueItem(...args),
   updateQueueProgress: vi.fn(),
@@ -55,20 +62,27 @@ vi.mock('electron', () => ({
 vi.mock('../config', () => ({
   getConfig: vi.fn(() => ({
     transcription: {
+      // provider drives the Stage-1 ASR factory (auto-pipeline P1, spec §5.3).
+      provider: 'gemini',
       geminiApiKey: 'test-api-key',
       geminiModel: 'gemini-2.0-flash'
     }
   }))
 }))
 
-// Mock google generative AI - make it fail
-vi.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: vi.fn(() => ({
-    getGenerativeModel: vi.fn(() => ({
-      generateContent: vi.fn().mockRejectedValue(new Error('API rate limit exceeded'))
-    }))
-  }))
-}))
+// Mock google generative AI - make it fail.
+// Newable-class idiom (matches e2e-smoke / providers-p1): the auto-pipeline P1
+// provider modules call `new GoogleGenerativeAI(...)`, so the export must be a
+// real class. generateContent rejects to exercise the Stage-1 ASR failure path.
+vi.mock('@google/generative-ai', () => {
+  const generateContent = vi.fn().mockRejectedValue(new Error('API rate limit exceeded'))
+  class GoogleGenerativeAI {
+    getGenerativeModel() {
+      return { generateContent }
+    }
+  }
+  return { GoogleGenerativeAI }
+})
 
 // Mock fs - simple approach that works in jsdom environment
 vi.mock('fs', async (importOriginal) => {
