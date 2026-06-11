@@ -71,10 +71,11 @@ The project evolved through four iterations, each building toward the ultimate v
    - Web-based device access (no drivers needed)
    - **Focus**: Making recordings accessible and transcribable anywhere
 
-3. **Audio Insights** (`apps/audio-insights/`) - **Third iteration: Insights prototype**
+3. **Audio Insights** (`legacy/audio-insights/`) - **Third iteration: Insights prototype** _(archived)_
    - AI-powered audio analysis tool
    - Extracting insights from transcriptions
    - **Focus**: Proving the concept of knowledge extraction from audio
+   - **Status**: Superseded — its Gemini transcription + insight-extraction flow is now integrated into the Electron app (`apps/electron/electron/main/services/transcription.ts`). Moved to `legacy/` for reference. (One micro-gap: it produced a `sentiment` field the Electron analysis prompt doesn't currently request, though the `transcripts.sentiment` DB column exists.)
 
 4. **Electron App** (`apps/electron/`) - **Fourth iteration: The integrated hub** ⭐ **CURRENT FOCUS**
    - **Vision**: Universal knowledge hub integrating all previous capabilities
@@ -90,7 +91,7 @@ The project evolved through four iterations, each building toward the ultimate v
 **Monorepo Structure:**
 - `apps/desktop/` - Device management (Python/CustomTkinter) - Original entry point
 - `apps/web/` - Transcription focus (React/TypeScript/WebUSB)
-- `apps/audio-insights/` - Insights prototype (AI analysis)
+- `legacy/audio-insights/` - Insights prototype (AI analysis) — **archived**, absorbed into the Electron app
 - `apps/electron/` - **Universal knowledge hub** (integration of all capabilities) — current focus
 - `apps/meeting-recorder/` - Standalone cross-platform meeting recorder (real-time transcription, summarization, system tray)
 - `apps/meeting-assistant/` - Phased build that reuses `packages/*` (active track; state in `.claude/workflow-state-meeting-assistant.md`)
@@ -140,7 +141,7 @@ run-web.bat             # Windows
 cd apps/web && npm run dev
 
 # Audio Insights (Prototype)
-cd apps/audio-insights && npm run dev
+cd legacy/audio-insights && npm run dev   # archived prototype
 
 # Meeting Recorder (standalone, electron-vite; real-time AI transcription)
 cd apps/meeting-recorder && npm run dev

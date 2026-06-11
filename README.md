@@ -56,11 +56,13 @@ cd hidock-next
 - Responsive design
 - Cross-browser support
 
-### [Audio Insights](apps/audio-insights/) - AI Analysis Tool
+### [Audio Insights](legacy/audio-insights/) - AI Analysis Tool _(archived)_
 
 - Audio file analysis
 - Transcription extraction
 - Insights generation
+
+> **Archived prototype.** Its capabilities (Gemini audio transcription + insight extraction) are now integrated into the Electron app. Kept under `legacy/` for reference.
 
 ## 🛠️ Requirements
 
@@ -84,8 +86,9 @@ cd hidock-next
 hidock-next/
 ├── apps/               # Applications
 │   ├── desktop/        # Desktop application (Python/Tkinter)
-│   ├── web/            # Web application (React/TypeScript)
-│   └── audio-insights/ # Audio analysis tool
+│   └── web/            # Web application (React/TypeScript)
+├── legacy/             # Archived prototypes (superseded)
+│   └── audio-insights/ # Audio analysis tool (absorbed into Electron app)
 ├── research/           # Research and reverse engineering tools
 ├── firmware/           # Device firmware files
 ├── docs/               # Documentation

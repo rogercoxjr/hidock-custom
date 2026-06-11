@@ -5,7 +5,7 @@ PYTHON ?= python
 SETUP = $(PYTHON) setup.py
 DESKTOP_DIR = apps/desktop
 WEB_DIR = apps/web
-AUDIO_DIR = apps/audio-insights
+AUDIO_DIR = legacy/audio-insights   # archived prototype; capabilities absorbed by apps/electron
 RECORDER_DIR = apps/meeting-recorder
 # Default Linux venv path; on Windows or macOS activate the matching tagged venv (.venv.win/.venv.mac/.venv.wsl)
 # This keeps Make targets simple while multi-OS logic lives in setup.py
