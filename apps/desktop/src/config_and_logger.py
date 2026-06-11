@@ -25,7 +25,7 @@ from constants import CONFIG_FILE_NAME, DEFAULT_PRODUCT_ID, DEFAULT_VENDOR_ID
 
 # Get the directory where this script is located (src directory).
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# Go up one level to the main hidock-desktop-app directory, then into config/
+# Go up one level to the main apps/desktop directory, then into config/
 _APP_ROOT_DIR = os.path.dirname(_SCRIPT_DIR)
 # Construct the absolute path to the config file in the config/ directory
 _CONFIG_FILE_PATH = os.path.join(_APP_ROOT_DIR, "config", CONFIG_FILE_NAME)
@@ -36,7 +36,7 @@ def get_default_config() -> dict:
     """Returns the default configuration dictionary."""
     return {
         "autoconnect": False,
-        "download_directory": os.path.join(_APP_ROOT_DIR, "..", "audio"),  # ../audio relative to hidock-desktop-app
+        "download_directory": os.path.join(_APP_ROOT_DIR, "..", "audio"),  # ../audio relative to apps/desktop
         "log_level": "INFO",
         "selected_vid": DEFAULT_VENDOR_ID,  # From constants.py
         "selected_pid": DEFAULT_PRODUCT_ID,  # From constants.py

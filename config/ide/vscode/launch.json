@@ -5,11 +5,11 @@
             "name": "Python: Desktop App",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/hidock-desktop-app/main.py",
+            "program": "${workspaceFolder}/apps/desktop/main.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/hidock-desktop-app",
+            "cwd": "${workspaceFolder}/apps/desktop",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/hidock-desktop-app"
+                "PYTHONPATH": "${workspaceFolder}/apps/desktop"
             }
         },
         {
@@ -23,9 +23,9 @@
                 "--tb=short"
             ],
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/hidock-desktop-app",
+            "cwd": "${workspaceFolder}/apps/desktop",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/hidock-desktop-app"
+                "PYTHONPATH": "${workspaceFolder}/apps/desktop"
             }
         },
         {
@@ -34,7 +34,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/hidock-desktop-app"
+            "cwd": "${workspaceFolder}/apps/desktop"
         },
         {
             "name": "Python: Test File (Sequential)",
@@ -47,9 +47,9 @@
                 "--tb=short"
             ],
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/hidock-desktop-app",
+            "cwd": "${workspaceFolder}/apps/desktop",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/hidock-desktop-app"
+                "PYTHONPATH": "${workspaceFolder}/apps/desktop"
             }
         },
         {
@@ -64,9 +64,9 @@
                 "--tb=short"
             ],
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/hidock-desktop-app",
+            "cwd": "${workspaceFolder}/apps/desktop",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/hidock-desktop-app"
+                "PYTHONPATH": "${workspaceFolder}/apps/desktop"
             }
         },
         {
@@ -81,10 +81,10 @@
                 "--tb=short"
             ],
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/hidock-desktop-app",
+            "cwd": "${workspaceFolder}/apps/desktop",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/hidock-desktop-app"
+                "PYTHONPATH": "${workspaceFolder}/apps/desktop"
             }
         }
     ]
-}
+}

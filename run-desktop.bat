@@ -42,7 +42,7 @@ if errorlevel 1 (
 
 echo Checking if main.py exists...
 if not exist "main.py" (
-    echo Error: main.py not found in hidock-desktop-app directory!
+    echo Error: main.py not found in apps/desktop directory!
     pause
     exit /b 1
 )
@@ -67,4 +67,4 @@ if errorlevel 1 (
     echo.
     echo Application exited with an error.
     pause
-)
+)

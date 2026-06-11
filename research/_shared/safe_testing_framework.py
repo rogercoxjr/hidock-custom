@@ -17,8 +17,8 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
-# Add hidock-desktop-app to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "hidock-desktop-app"))
+# Add apps/desktop/src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "apps", "desktop", "src"))
 
 import usb.backend.libusb1
 from config_and_logger import logger
@@ -45,8 +45,8 @@ class SafeCommandTester:
     def initialize_backend(self) -> bool:
         """Initialize USB backend safely"""
         try:
-            # Look for libusb in hidock-desktop-app directory
-            app_dir = os.path.join(os.path.dirname(__file__), "..", "..", "hidock-desktop-app")
+            # Look for libusb in apps/desktop directory
+            app_dir = os.path.join(os.path.dirname(__file__), "..", "..", "apps", "desktop")
             lib_path = os.path.join(app_dir, "libusb-1.0.dll")
 
             if os.path.exists(lib_path):

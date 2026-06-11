@@ -470,7 +470,6 @@ def setup_usb_permissions():
         for path in [
             Path("99-hidock.rules"),
             Path("scripts/linux-monitoring/99-hidock.rules"),
-            Path("hidock-desktop-app/99-hidock.rules"),
         ]:
             if path.exists():
                 udev_rule_path = path
@@ -651,14 +650,14 @@ def show_post_install_instructions(pkg_manager):
     print("")
     print("2. Or manually set up the Python environment:")
     print("   # From project root directory:")
-    print("   cd hidock-desktop-app")
+    print("   cd apps/desktop")
     print("   python3 -m venv .venv")
     print("   source .venv/bin/activate")
     print('   pip install -e ".[dev]"')
     print("")
     print("3. Test the application:")
     print("   # From project root directory:")
-    print("   cd hidock-desktop-app")
+    print("   cd apps/desktop")
     print("   source .venv/bin/activate")
     print("   python3 main.py")
 

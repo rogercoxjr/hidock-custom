@@ -493,7 +493,7 @@ if __name__ == "__main__":
     # To run:
     # 1. Set the `test_audio_file` variable in `main_test`.
     # 2. Set the `GEMINI_API_KEY` environment variable.
-    # 3. Run `python -m asyncio hidock-desktop-app/transcription_module.py`
+    # 3. Run `python -m asyncio apps/desktop/src/transcription_module.py`
     import asyncio
 
     print("Running transcription module test...")
