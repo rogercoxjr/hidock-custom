@@ -522,14 +522,21 @@ describe('Recording IPC Handlers', () => {
   })
 
   describe('recordings:transcribe', () => {
-    it('should call transcribeManually with valid recording ID', async () => {
-      const { transcribeManually } = await import('../../services/transcription')
+    // Realigned per spec §5.7: recordings:transcribe now routes through the queue
+    // (addToQueue + processQueueManually) instead of calling transcribeManually directly.
+    // transcribeManually is preserved as an export for e2e-smoke.test.ts only.
+    it('should enqueue recording and call processQueueManually', async () => {
+      const { addToQueue } = await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
       const recId = '550e8400-e29b-41d4-a716-446655440000'
-      vi.mocked(transcribeManually).mockResolvedValue(undefined)
+      vi.mocked(addToQueue).mockReturnValue('queue-item-id')
+      vi.mocked(processQueueManually).mockResolvedValue(undefined)
 
       await handlers['recordings:transcribe'](null, recId)
 
-      expect(transcribeManually).toHaveBeenCalledWith(recId)
+      // spec §5.7: handler enqueues first, then triggers the queue processor
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(processQueueManually).toHaveBeenCalled()
     })
 
     it('should throw on validation error for invalid ID', async () => {
@@ -538,14 +545,15 @@ describe('Recording IPC Handlers', () => {
       ).rejects.toThrow()
     })
 
-    it('should propagate transcription errors', async () => {
-      const { transcribeManually } = await import('../../services/transcription')
+    it('should propagate errors from processQueueManually', async () => {
+      // spec §5.7: the handler awaits processQueueManually — its errors propagate.
+      const { processQueueManually } = await import('../../services/transcription')
       const recId = '550e8400-e29b-41d4-a716-446655440000'
-      vi.mocked(transcribeManually).mockRejectedValue(new Error('Transcription failed'))
+      vi.mocked(processQueueManually).mockRejectedValue(new Error('Queue processing failed'))
 
       await expect(
         handlers['recordings:transcribe'](null, recId)
-      ).rejects.toThrow('Transcription failed')
+      ).rejects.toThrow('Queue processing failed')
     })
   })
 

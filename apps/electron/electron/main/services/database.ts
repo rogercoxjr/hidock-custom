@@ -2445,7 +2445,17 @@ export interface QueueItem {
   first_parked_at?: string
 }
 
+/** Insert a queue item — deduped (spec §5.7): if a pending/processing item already
+ *  exists for this recording, return ITS id (truthy contract — useOperations.ts
+ *  treats falsy as failure and would otherwise toast a spurious error). Parked
+ *  items keep status='pending' (§7.2), so the dedupe covers them automatically.
+ *  Terminal items (completed/failed/cancelled) do not block a fresh queue entry. */
 export function addToQueue(recordingId: string): string {
+  const existing = queryOne<{ id: string }>(
+    "SELECT id FROM transcription_queue WHERE recording_id = ? AND status IN ('pending', 'processing') ORDER BY created_at DESC LIMIT 1",
+    [recordingId]
+  )
+  if (existing) return existing.id
   const id = crypto.randomUUID()
   run('INSERT INTO transcription_queue (id, recording_id) VALUES (?, ?)', [id, recordingId])
   return id

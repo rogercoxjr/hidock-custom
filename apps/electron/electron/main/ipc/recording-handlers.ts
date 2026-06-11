@@ -23,7 +23,6 @@ import {
   getWatcherStatus
 } from '../services/recording-watcher'
 import {
-  transcribeManually,
   getTranscriptionStatus,
   startTranscriptionProcessor,
   stopTranscriptionProcessor,
@@ -237,7 +236,9 @@ export function registerRecordingHandlers(): void {
     }
   )
 
-  // Transcribe a recording manually
+  // Transcribe a recording manually — routed through the queue (spec §5.7):
+  // the direct transcribeManually call bypassed the mutex/retry machinery and
+  // could double-bill metered ASR by racing the queue processor.
   ipcMain.handle('recordings:transcribe', async (_, recordingId: unknown): Promise<void> => {
     try {
       const result = TranscribeRecordingSchema.safeParse({ recordingId })
@@ -246,7 +247,8 @@ export function registerRecordingHandlers(): void {
         throw new Error(result.error.issues[0]?.message || 'Invalid request')
       }
 
-      await transcribeManually(result.data.recordingId)
+      addToQueue(result.data.recordingId)
+      await processQueueManually()
     } catch (error) {
       console.error('recordings:transcribe error:', error)
       throw error

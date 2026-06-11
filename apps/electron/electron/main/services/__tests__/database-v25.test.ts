@@ -86,7 +86,9 @@ import {
   queryOne,
   run,
   upsertTranscriptStage1,
-  updateTranscriptStage2
+  updateTranscriptStage2,
+  addToQueue,
+  updateQueueItem
 } from '../database'
 
 // ---------------------------------------------------------------------------
@@ -241,5 +243,42 @@ describe('stage-write functions', () => {
     })
     const row = queryOne<{ language: string }>("SELECT language FROM transcripts WHERE recording_id='rec_s3'")
     expect(row?.language).toBe('es')   // COALESCE keeps the ASR value
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Task 5: addToQueue dedupe (spec §5.7)
+// ---------------------------------------------------------------------------
+
+describe('addToQueue dedupe (spec §5.7)', () => {
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('returns the existing pending item id instead of inserting a duplicate', () => {
+    insertTestRecording('rec_q1')
+    const first = addToQueue('rec_q1')
+    const second = addToQueue('rec_q1')
+    expect(second).toBe(first)   // truthy + identical (return contract)
+    const rows = queryAll("SELECT id FROM transcription_queue WHERE recording_id='rec_q1'")
+    expect(rows.length).toBe(1)
+  })
+
+  it('allows a new item once the prior one is terminal', () => {
+    insertTestRecording('rec_q2')
+    const first = addToQueue('rec_q2')
+    updateQueueItem(first, 'completed')
+    const second = addToQueue('rec_q2')
+    expect(second).not.toBe(first)
   })
 })
