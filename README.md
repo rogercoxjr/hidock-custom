@@ -1,12 +1,12 @@
 # HiDock Next 🎵
 
-Desktop & Web Applications for Managing Files on HiDock® Devices
+A monorepo of applications for managing files on HiDock® devices and turning recordings into actionable knowledge
 
 > **Disclaimer:** This is an unofficial, third-party application not affiliated with or endorsed by HiDock or its manufacturers. HiDock® is a trademark of its respective owners.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![TypeScript](https://img.shields.io/badge/typescript-5.0+-blue.svg)](https://www.typescriptlang.org/) [![Version](https://img.shields.io/badge/version-1.0--RC1-green.svg)](https://github.com/sgeraldes/hidock-next/releases)
 
-![Desktop Application Screenshot](docs/hidock-desktop-app.png)
+![Desktop Application Screenshot](docs/desktop/hidock-desktop-app.png)
 _Desktop file manager for HiDock® devices - Download, organize, and transcribe audio files_
 
 ## ✨ Features
@@ -41,6 +41,12 @@ cd hidock-next
 
 ## 📦 Applications
 
+### [Electron App](apps/electron/) - Universal Knowledge Hub _(current primary focus)_
+
+- Integrated knowledge hub across recordings, documents, calendar, and more
+- Device sync, RAG chat, calendar correlation, search
+- Absorbs the transcription and insight-extraction capabilities of the earlier iterations
+
 ### [Desktop App](apps/desktop/) - Full-Featured Management
 
 - Complete USB device control
@@ -55,6 +61,16 @@ cd hidock-next
 - Real-time device monitoring
 - Responsive design
 - Cross-browser support
+
+### [Meeting Recorder](apps/meeting-recorder/) - Standalone Meeting Recorder
+
+- Records system audio + microphone with real-time AI transcription
+- Summarization and meeting intelligence
+- Cross-platform Electron app, independent from the knowledge hub
+
+### Meeting Assistant (`apps/meeting-assistant/`) - Phased Build _(active track)_
+
+- Phased Electron build that reuses the shared `packages/*` libraries
 
 ### [Audio Insights](legacy/audio-insights/) - AI Analysis Tool _(archived)_
 
@@ -84,17 +100,26 @@ cd hidock-next
 
 ```folder
 hidock-next/
-├── apps/               # Applications
-│   ├── desktop/        # Desktop application (Python/Tkinter)
-│   └── web/            # Web application (React/TypeScript)
-├── legacy/             # Archived prototypes (superseded)
-│   └── audio-insights/ # Audio analysis tool (absorbed into Electron app)
-├── research/           # Research and reverse engineering tools
-├── firmware/           # Device firmware files
-├── docs/               # Documentation
-├── scripts/            # Utility scripts
-└── config/             # Configuration files
+├── apps/                   # Applications
+│   ├── electron/           # Universal knowledge hub (Electron) — current primary focus
+│   ├── desktop/            # Desktop application (Python/CustomTkinter)
+│   ├── web/                # Web application (React/TypeScript/WebUSB)
+│   ├── meeting-recorder/   # Standalone meeting recorder (Electron)
+│   └── meeting-assistant/  # Phased Electron build reusing packages/*
+├── packages/               # Shared @hidock/* libraries (ai-providers, audio-capture,
+│                           #   calendar-sync, storage-controller, transcription)
+├── legacy/                 # Archived prototypes (superseded)
+│   └── audio-insights/     # Audio analysis tool (absorbed into Electron app)
+├── research/               # Research and reverse engineering tools
+├── firmware/               # Device firmware files
+├── docs/                   # Documentation
+├── scripts/                # Utility scripts
+└── config/                 # Configuration files
 ```
+
+> **No root npm workspace.** There is no root `package.json`. Each JS/TS app owns its
+> own `node_modules` and must be `npm install`'d in its own directory. The `packages/*`
+> libraries are `file:`-linked, so build/install a package before any app that depends on it.
 
 ## 🔧 Development
 
@@ -242,6 +267,7 @@ If packages fail to install you will still be able to continue, but Python depen
 ## 📝 Documentation
 
 - [Getting Started](docs/getting-started/QUICK_START.md)
+- [Electron App Guide](apps/electron/README.md)
 - [Desktop App Guide](apps/desktop/README.md)
 - [Web App Guide](apps/web/README.md)
 - [API Documentation](docs/api/)

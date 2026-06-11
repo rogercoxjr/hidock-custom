@@ -4,11 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-HiDock Next is a comprehensive community-driven platform for HiDock device management and AI-powered audio transcription. The project consists of three main applications:
+HiDock Next is a comprehensive community-driven platform for HiDock device management and AI-powered audio transcription. It is a monorepo of 5 apps plus 5 shared `@hidock/*` packages and 1 archived prototype. There is **no root npm workspace / no root `package.json`** — each JS/TS project is `npm install`'d in its own directory, and `packages/*` are `file:`-linked (install/build a package before any app that depends on it). The applications are:
 
-1. **Desktop Application** (hidock-desktop-app/) - Python/CustomTkinter with full device control and 11 AI providers
-2. **Web Application** (hidock-web-app/) - React/TypeScript browser-based interface with WebUSB
-3. **Audio Insights Extractor** (audio-insights-extractor/) - Standalone React audio analysis tool
+1. **Desktop Application** (apps/desktop/) - Python/CustomTkinter with full device control and 11 AI providers
+2. **Web Application** (apps/web/) - React/TypeScript browser-based interface with WebUSB
+3. **Electron Application** (apps/electron/) - Universal knowledge hub (current primary focus)
+4. **Meeting Recorder** (apps/meeting-recorder/) - Standalone Electron meeting recorder with real-time AI transcription
+5. **Meeting Assistant** (apps/meeting-assistant/) - Phased Electron build that reuses `packages/*`
+
+Shared libraries live in `packages/{ai-providers,audio-capture,calendar-sync,storage-controller,transcription}`. The former Audio Insights Extractor is archived at `legacy/audio-insights/`; its Gemini transcription + insight-extraction capabilities are absorbed into apps/electron.
 
 ## Essential Commands
 
@@ -18,43 +22,43 @@ HiDock Next is a comprehensive community-driven platform for HiDock device manag
 python setup.py  # Choose option 2 for developers
 
 # Manual desktop app setup
-cd hidock-desktop-app
+cd apps/desktop
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 
 # Manual web app setup
-cd hidock-web-app
+cd apps/web
 npm install
 ```
 
 ### Running Applications
 ```bash
 # Desktop Application
-cd hidock-desktop-app
+cd apps/desktop
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 python main.py
 
 # Web Application
-cd hidock-web-app
+cd apps/web
 npm run dev  # Serves on http://localhost:5173
 
-# Audio Insights Extractor
-cd audio-insights-extractor
+# Electron Application (universal knowledge hub — current primary focus)
+cd apps/electron
 npm run dev
 ```
 
 ### Testing and Quality
 ```bash
 # Desktop app testing (581 comprehensive tests)
-cd hidock-desktop-app
+cd apps/desktop
 pytest                    # All tests with coverage
 pytest -m unit          # Unit tests only (~400 tests)
 pytest -m integration   # Integration tests (~150 tests)  
 pytest -m device        # Device tests (~30 tests, requires hardware)
 
 # Web app testing
-cd hidock-web-app
+cd apps/web
 npm test                 # Run test suite
 npm run test:coverage    # With coverage report
 
@@ -80,9 +84,12 @@ npm run build               # Includes TypeScript compilation (tsc && vite build
 ## Architecture and Code Standards
 
 ### Project Structure
-- **hidock-desktop-app/**: Main Python application with CustomTkinter GUI
-- **hidock-web-app/**: React TypeScript web application  
-- **audio-insights-extractor/**: Standalone React analysis tool
+- **apps/desktop/**: Main Python application with CustomTkinter GUI
+- **apps/web/**: React TypeScript web application  
+- **apps/electron/**: Electron universal knowledge hub (current primary focus)
+- **apps/meeting-recorder/**, **apps/meeting-assistant/**: Electron meeting apps
+- **packages/**: Shared `@hidock/*` libraries (`file:`-linked)
+- **legacy/audio-insights/**: Archived standalone React analysis prototype
 - **docs/**: Comprehensive documentation
 - **setup.py**: Automated setup script for both end users and developers
 
@@ -155,7 +162,7 @@ npm run build               # Includes TypeScript compilation (tsc && vite build
 ### Common Development Patterns
 
 #### Adding New AI Providers
-1. Study existing providers in `hidock-desktop-app/ai_service.py`
+1. Study existing providers in `apps/desktop/ai_service.py`
 2. Implement provider class following the `AIProvider` interface
 3. Add configuration to settings UI with proper validation
 4. Write comprehensive tests with mock responses
@@ -194,4 +201,4 @@ npm run build               # Includes TypeScript compilation (tsc && vite build
 - **Python Execution**: Use `python3` command rather than `python` in this environment
 - **Virtual Environment**: May have Unix-style structure (.venv/bin/) even on Windows - dependencies installed globally work fine
 - **Batch Files**: Windows batch files (.bat) need to handle multiple Python executable paths for cross-environment compatibility
-- **Application Launch**: Desktop app runs successfully with `cd hidock-desktop-app && python3 main.py`
+- **Application Launch**: Desktop app runs successfully with `cd apps/desktop && python3 main.py`

@@ -6,7 +6,7 @@ This document provides comprehensive API documentation for the HiDock Next proje
 
 - [Desktop Application APIs](#desktop-application-apis)
 - [Web Application APIs](#web-application-apis)
-- [Audio Insights Extractor APIs](#audio-insights-extractor-apis)
+- [Audio Insights APIs (archived prototype)](#audio-insights-apis-archived-prototype)
 - [Device Communication Protocol](#device-communication-protocol)
 - [AI Service Interface](#ai-service-interface)
 
@@ -297,7 +297,9 @@ interface AppSettings {
 }
 ```
 
-## Audio Insights Extractor APIs
+## Audio Insights APIs (archived prototype)
+
+> Note: the Audio Insights prototype is archived at `legacy/audio-insights/`; its Gemini transcription and insight-extraction capabilities have been absorbed into the Electron app (`apps/electron/`). The interfaces below are retained for reference.
 
 ### Audio Processing Interface
 

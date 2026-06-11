@@ -17,11 +17,12 @@ HiDock Desktop is the **first iteration** of the HiDock Next ecosystem - a devic
 - Local-first, privacy-focused device control
 
 **Part of Larger Ecosystem:**
-This is NOT the complete vision - it's a foundational component. The broader HiDock Next suite includes:
-- **Desktop App** (this app) - USB device management entry point
-- **Web App** - Browser-based WebUSB interface
-- **Audio Insights** - AI-powered transcription and analysis
-- **Electron App** - Integrated universal knowledge hub
+This is NOT the complete vision - it's a foundational component. The broader HiDock Next monorepo (5 apps + shared `packages/*`) includes:
+- **Desktop App** (this app, `apps/desktop/`) - USB device management entry point
+- **Web App** (`apps/web/`) - Browser-based WebUSB transcription interface
+- **Electron App** (`apps/electron/`) - Integrated universal knowledge hub (current primary focus; absorbs the archived `legacy/audio-insights/` transcription + insight-extraction prototype)
+- **Meeting Recorder** (`apps/meeting-recorder/`) - Standalone real-time AI meeting recorder
+- **Meeting Assistant** (`apps/meeting-assistant/`) - Phased build reusing shared `packages/*`
 
 When implementing features, consider whether they belong in this focused device management app or in the integrated Electron platform. See `../../CLAUDE.md` for ecosystem architecture.
 
@@ -276,7 +277,7 @@ python -m pytest tests/test_gui_components.py -v
 All desktop application code must follow this structure:
 
 ```text
-hidock-desktop-app/
+apps/desktop/
 ├── src/
 │   ├── main.py              # Application entry point
 │   ├── gui/

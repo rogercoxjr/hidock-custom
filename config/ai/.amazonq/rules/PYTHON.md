@@ -53,7 +53,7 @@ You must follow this exact sequence for every task. This workflow is designed to
   - **Consult INDEX.md for existing test file structure** before creating new files
   - Add to existing test classes when logical (e.g., `TestFileOperationsManager`, `TestDeviceInterface`)
   - Only create new test files when no appropriate existing file exists AND the functionality is substantial enough to warrant its own module
-  - **File Organization Priority**: Follow the comprehensive test structure documented in INDEX.md under `hidock-desktop-app/tests/`
+  - **File Organization Priority**: Follow the comprehensive test structure documented in INDEX.md under `apps/desktop/tests/`
 
 - **Test Structure:**
   - Add test methods to existing test classes when logical

@@ -25,13 +25,17 @@ This automated setup handles:
 
 ## Architecture Overview
 
-The HiDock Next platform consists of three main applications:
+HiDock Next is a monorepo of multiple applications plus shared libraries (there is **no** root npm workspace / root `package.json` — each JS/TS project is `npm install`'d in its own directory, and `packages/*` are `file:`-linked, so build a package before any app that depends on it). The applications under `apps/` are:
 
-1. **Desktop Application** (Python/CustomTkinter) - Full-featured with 11 AI providers
-2. **Web Application** (React/TypeScript) - Browser-based interface
-3. **Audio Insights Extractor** (React/TypeScript) - Standalone analysis tool
+1. **Desktop Application** (`apps/desktop/`, Python/CustomTkinter) - Full-featured with 11 AI providers
+2. **Web Application** (`apps/web/`, React/TypeScript) - Browser-based interface
+3. **Electron Application** (`apps/electron/`) - "Universal knowledge hub"; the current primary focus
+4. **Meeting Recorder** (`apps/meeting-recorder/`) - Standalone Electron meeting recorder with real-time AI transcription
+5. **Meeting Assistant** (`apps/meeting-assistant/`) - Phased Electron build that reuses `packages/*`
 
-All applications communicate with HiDock devices using USB protocols (pyusb/WebUSB).
+Shared libraries live in `packages/{ai-providers,audio-capture,calendar-sync,storage-controller,transcription}` (published as `@hidock/*`). The former Audio Insights Extractor is archived under `legacy/audio-insights/`; its Gemini transcription and insight-extraction capabilities are absorbed into `apps/electron`.
+
+The Desktop and Web apps communicate with HiDock devices using USB protocols (pyusb/WebUSB).
 
 ## Desktop Application Development
 
@@ -93,7 +97,7 @@ class HiDockJensen:
 1. **Setup environment (recommended):**
 
    ```bash
-   cd hidock-desktop-app
+   cd apps/desktop
    python -m venv .venv
    source .venv/bin/activate  # Windows: .venv\Scripts\activate
    pip install -e ".[dev]"  # Installs project + dev dependencies
@@ -225,7 +229,7 @@ interface AppStore {
 1. **Setup environment:**
 
    ```bash
-   cd hidock-web-app
+   cd apps/web
    npm install
    ```
 
@@ -493,5 +497,5 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for detailed contribution guidelines.
 - [Testing Guide](./TESTING.md) - Comprehensive testing documentation with 581 tests
 - [Technical Specification](./TECHNICAL_SPECIFICATION.md) - Detailed architecture and protocol documentation
 - [Deployment Guide](./DEPLOYMENT.md) - Production deployment instructions
-- [Project Configuration](../hidock-desktop-app/pyproject.toml) - Complete project configuration
+- [Project Configuration](../../apps/desktop/pyproject.toml) - Complete project configuration
 - [Pre-commit Configuration](../.pre-commit-config.yaml) - Code quality automation

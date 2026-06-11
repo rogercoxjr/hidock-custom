@@ -1,6 +1,6 @@
 # Security Analysis for HiDock Desktop Application
 
-This document provides a comprehensive security analysis of the `hidock-desktop-app` codebase following the implementation of multi-provider AI support and advanced security features.
+This document provides a comprehensive security analysis of the `apps/desktop` codebase following the implementation of multi-provider AI support and advanced security features.
 
 ## Current Security Architecture
 

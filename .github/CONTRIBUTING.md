@@ -63,7 +63,7 @@ This automated setup will:
 2. **Set up Python environment:**
 
    ```bash
-   cd hidock-desktop-app
+   cd apps/desktop
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    pip install -r requirements.txt
@@ -72,7 +72,7 @@ This automated setup will:
 3. **Set up web application:**
 
    ```bash
-   cd hidock-web-app
+   cd apps/web
    npm install
    cd ..
    ```
@@ -92,20 +92,30 @@ This automated setup will:
 
 ```folder
 hidock-next/
-├── .github/               # GitHub Actions workflows
-├── .vscode/               # VS Code configuration
-├── hidock_desktop_app/    # Python desktop application (as a package)
-│   ├── __init__.py
-│   ├── main.py
-│   ├── icons/
-│   └── requirements.txt
-├── hidock-web-app/        # React web application
-│   ├── src/
-│   └── package.json
-├── tests/                 # Python tests
+├── .github/                      # GitHub Actions workflows
+├── .vscode/                      # VS Code configuration
+├── apps/
+│   ├── desktop/                  # Python/CustomTkinter device-management app
+│   ├── web/                      # React/TypeScript/WebUSB transcription app
+│   ├── electron/                 # Electron "universal knowledge hub" (current primary focus)
+│   ├── meeting-recorder/         # Standalone Electron meeting recorder (real-time AI transcription)
+│   └── meeting-assistant/        # Phased Electron build that reuses packages/*
+├── packages/                     # Shared @hidock/* libraries (file:-linked)
+│   ├── ai-providers/
+│   ├── audio-capture/
+│   ├── calendar-sync/
+│   ├── storage-controller/
+│   └── transcription/
+├── legacy/
+│   └── audio-insights/           # Archived prototype (absorbed into apps/electron)
+├── tests/                        # Root-level Python tests (core infrastructure)
 ├── .gitignore
 └── README.md
 ```
+
+There is no root npm workspace and no root `package.json`. Each JS/TS project is
+`npm install`'d in its own directory; the `packages/*` libraries are `file:`-linked,
+so install/build a package before any app that depends on it.
 
 ## Development Workflow
 
@@ -138,7 +148,7 @@ hidock-next/
    pytest tests/ -v
 
    # Web app tests
-   cd hidock-web-app
+   cd apps/web
    npm run test
    ```
 
@@ -162,8 +172,11 @@ hidock-next/
 We use pytest for Python testing:
 
 ```bash
-# Run all tests
+# Run root-level (core infrastructure) tests
 pytest tests/ -v
+
+# Run the desktop app tests
+cd apps/desktop && pytest
 
 # Run with coverage
 pytest tests/ --cov=. --cov-report=html
@@ -178,7 +191,7 @@ pytest tests/ -m integration
 We use Vitest and Testing Library for React testing:
 
 ```bash
-cd hidock-web-app
+cd apps/web
 
 # Run tests
 npm run test
@@ -200,7 +213,7 @@ npm run test:watch
 
 ### Python Code Style
 
-- **Formatter**: Black (line length: 88)
+- **Formatter**: Black (line length: 120)
 - **Linter**: Flake8
 - **Import sorting**: isort
 - **Type checking**: mypy
@@ -226,7 +239,7 @@ mypy .
 - **Style**: Functional components with hooks
 
 ```bash
-cd hidock-web-app
+cd apps/web
 
 # Lint code
 npm run lint

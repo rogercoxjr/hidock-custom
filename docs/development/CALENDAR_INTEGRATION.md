@@ -98,10 +98,10 @@ The HiDock Desktop Application features comprehensive calendar integration with 
 
 ### File Structure
 
-- **`gui_main_window.py`** - Main GUI with calendar menu items and overlays
-- **`async_calendar_mixin.py`** - Async calendar operations with worker thread
-- **`calendar_cache_manager.py`** - SQLite cache for meeting data
-- **`simple_outlook_integration.py`** - Direct Outlook COM interface
+- **`apps/desktop/src/gui_main_window.py`** - Main GUI with calendar menu items and overlays
+- **`apps/desktop/src/async_calendar_mixin.py`** - Async calendar operations with worker thread
+- **`apps/desktop/src/calendar_cache_manager.py`** - SQLite cache for meeting data
+- **`apps/desktop/src/simple_outlook_integration.py`** - Direct Outlook COM interface
 - **Database**: `~/.hidock/calendar_cache.db`
 
 ## User Features
@@ -228,13 +228,17 @@ filtered = appointments.Restrict(filter_string)
 
 ### Diagnostic Tools
 
-The following diagnostic scripts are available in `hidock-desktop-app/`:
+Calendar issues are best diagnosed via the app itself:
 
-- `check_calendar_date.py` - Check specific date for meetings
-- `check_calendar_cache.py` - Inspect cache database
-- `diagnose_calendar_date.py` - Comprehensive date diagnosis
-- `check_meeting_times.py` - Verify meeting time matching
-- `test_date_formats.py` - Test Outlook date filtering
+- Enable verbose logging (`config_and_logger.py` / log level `DEBUG`) and inspect the
+  calendar worker output during a Force Refresh.
+- Inspect the SQLite cache directly at `~/.hidock/calendar_cache.db`.
+- Calendar unit tests under `apps/desktop/tests/` (e.g. `test_calendar_cache_manager_gate4.py`,
+  `test_calendar_filter_engine.py`, `test_async_calendar_mixin.py`) exercise the matching logic
+  and are the canonical reference for expected behavior.
+
+> Earlier standalone diagnostic scripts (`check_calendar_date.py`, etc.) are no longer part of the
+> repository; the logic they checked is now covered by the calendar unit tests above.
 
 ## Best Practices
 
@@ -309,4 +313,4 @@ refresh_calendar_data() -> bool
 - [Audio Metadata System](./AUDIO_METADATA_SYSTEM.md)
 - [GUI Architecture](./GUI_ARCHITECTURE.md)
 - [Testing Guide](../testing/TESTING_GUIDE.md)
-- [Configuration Guide](../SETUP.md)
+- [Configuration Guide](../SETUP.md)

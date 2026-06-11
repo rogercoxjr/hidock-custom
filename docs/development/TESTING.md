@@ -1,6 +1,6 @@
 # Testing Guide
 
-Comprehensive testing guide for the HiDock Next project covering all three applications.
+Comprehensive testing guide for the HiDock Next project covering its applications and shared packages.
 
 ## 🎯 Testing Philosophy
 
@@ -23,11 +23,17 @@ HiDock Next follows a **test-driven development (TDD)** approach with comprehens
 
 ## Overview
 
-The HiDock Next project uses different testing frameworks for each application:
+The HiDock Next project is a monorepo of 5 apps (`apps/desktop/`, `apps/web/`, `apps/electron/`,
+`apps/meeting-recorder/`, `apps/meeting-assistant/`) plus 5 shared `@hidock/*` packages under
+`packages/` and 1 archived prototype at `legacy/audio-insights/`. There is no root npm workspace and
+no root `package.json` — each JS/TS project is `npm install`'d in its own directory, and `packages/*`
+are `file:`-linked (install/build a package before any app that depends on it). The apps use different
+testing frameworks:
 
 - **Desktop App:** pytest for Python
 - **Web App:** Vitest for React/TypeScript
-- **Audio Insights:** Vitest for React/TypeScript
+- **Electron App:** Vitest for React/TypeScript
+- **Audio Insights (archived):** Vitest for React/TypeScript
 
 ### Testing Philosophy
 
@@ -41,7 +47,7 @@ The HiDock Next project uses different testing frameworks for each application:
 ### Setup
 
 ```bash
-cd hidock-desktop-app
+cd apps/desktop
 # Install with development dependencies (recommended)
 pip install -e ".[dev]"
 
@@ -78,7 +84,7 @@ pytest -m slow          # Slow running tests
 ### Test Structure
 
 ```
-hidock-desktop-app/
+apps/desktop/
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py                    # Shared fixtures
@@ -241,7 +247,7 @@ def mock_parent_gui(mocker):
 ### Setup
 
 ```bash
-cd hidock-web-app
+cd apps/web
 npm install
 ```
 
@@ -267,7 +273,7 @@ npm run test src/services/deviceService.test.ts
 ### Test Structure
 
 ```
-hidock-web-app/
+apps/web/
 ├── src/
 │   ├── test/
 │   │   ├── setup.ts           # Test setup
@@ -356,10 +362,14 @@ const mockUSBDevice = {
 
 ## Audio Insights Extractor Testing
 
+> **Archived prototype.** Audio Insights is no longer an active app; it is archived at
+> `legacy/audio-insights/`, and its Gemini transcription + insight-extraction capabilities are
+> absorbed into `apps/electron/`. The notes below are retained for the archived code.
+
 ### Setup
 
 ```bash
-cd audio-insights-extractor
+cd legacy/audio-insights
 npm install
 ```
 
@@ -444,7 +454,7 @@ jobs:
         with:
           python-version: '3.9'
       - run: |
-          cd hidock-desktop-app
+          cd apps/desktop
           pip install -r requirements.txt
           pytest --cov=. --cov-report=xml
 
@@ -456,7 +466,7 @@ jobs:
         with:
           node-version: '18'
       - run: |
-          cd hidock-web-app
+          cd apps/web
           npm ci
           npm run test:coverage
 ```

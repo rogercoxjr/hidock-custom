@@ -49,9 +49,11 @@
 
 | Document                                                                     | Purpose                   | Audience       |
 | ---------------------------------------------------------------------------- | ------------------------- | -------------- |
-| **[hidock-desktop-app/README.md](hidock-desktop-app/README.md)**             | Desktop application guide | Desktop users  |
-| **[hidock-web-app/README.md](hidock-web-app/README.md)**                     | Web application guide     | Web users      |
-| **[audio-insights-extractor/README.md](audio-insights-extractor/README.md)** | Audio insights tool guide | Audio analysts |
+| **[apps/desktop/README.md](apps/desktop/README.md)**                         | Desktop application guide (device management)        | Desktop users        |
+| **[apps/web/README.md](apps/web/README.md)**                                 | Web application guide (transcription)                | Web users            |
+| **[apps/electron/README.md](apps/electron/README.md)**                       | Electron universal knowledge hub (current focus)     | All users            |
+| **[apps/meeting-recorder/README.md](apps/meeting-recorder/README.md)**       | Standalone meeting recorder (real-time transcription)| Meeting users        |
+| **[legacy/audio-insights/README.md](legacy/audio-insights/README.md)**       | Archived audio insights prototype                    | Reference            |
 
 ## 🛠️ Setup Scripts
 
@@ -67,8 +69,9 @@
 
 1. **[QUICK_START.md](QUICK_START.md)** - Start here
 2. **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - If you have issues
-3. **[hidock-desktop-app/README.md](hidock-desktop-app/README.md)** - Desktop app features
-4. **[hidock-web-app/README.md](hidock-web-app/README.md)** - Web app features
+3. **[apps/desktop/README.md](apps/desktop/README.md)** - Desktop app features
+4. **[apps/web/README.md](apps/web/README.md)** - Web app features
+5. **[apps/electron/README.md](apps/electron/README.md)** - Electron knowledge hub features
 
 ### **👨‍💻 Developers - Want to Contribute**
 

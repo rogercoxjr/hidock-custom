@@ -49,7 +49,8 @@ class HiDockDemoControl:
 
 ### Desktop Application (Python)
 ```python
-from hidock_desktop_app.jensen_protocol import Jensen
+# apps/desktop/src/ — Jensen protocol (HiDockJensen in hidock_device.py)
+from jensen_protocol import Jensen
 
 class DemoManager:
     def __init__(self):
@@ -103,7 +104,7 @@ class DemoManager:
 
 ### Web Application (TypeScript)
 ```typescript
-// hidock-web-app/src/services/demoService.ts
+// apps/web/src/services/demoService.ts
 import { deviceService } from './deviceService';
 
 export class DemoService {
@@ -228,7 +229,7 @@ class DemoControlWidget:
 
 ### Web UI Implementation  
 ```jsx
-// hidock-web-app/src/components/DemoControls.tsx
+// apps/web/src/components/DemoControls.tsx
 import React, { useState } from 'react';
 import { DemoService } from '../services/demoService';
 
@@ -483,4 +484,4 @@ def diagnose_demo_capability(self) -> dict:
 
 **Status**: ✅ Ready for immediate production integration  
 **Risk Level**: LOW - Safe for all deployment scenarios  
-**Value**: HIGH - Significant user education and diagnostic capabilities
+**Value**: HIGH - Significant user education and diagnostic capabilities

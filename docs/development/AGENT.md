@@ -8,7 +8,7 @@ This document contains the mandatory, non-negotiable rules and procedures for al
 
 - **Component-Specific Rules First:** Always consult the component-specific `AGENT.md` file for the technology you're working with before applying these general rules.
 
-- **Multi-Platform Consistency:** Changes must maintain consistency across Desktop (Python), Web (React/TypeScript), and Audio Insights (React) applications.
+- **Multi-Platform Consistency:** Changes must maintain consistency across Desktop (Python), Web (React/TypeScript), the Electron knowledge hub, and the shared `packages/*` libraries.
 
 - **Git Workflow Mandatory:** All development must follow conventional commits, feature branch workflow, and proper testing before commits.
 
@@ -28,26 +28,35 @@ hidock-next/
 │   ├── PYTHON.md               # Python development rules
 │   ├── ARCHITECTURE.md         # Architecture requirements
 │   └── MARKDOWN.md             # Documentation standards
-├── hidock-desktop-app/         # Python GUI application
-│   ├── AGENT.md               # Desktop-specific rules
-│   ├── src/                   # Source code
-│   ├── tests/                 # Test files
-│   ├── requirements.txt       # Python dependencies
-│   └── pyproject.toml        # Python project configuration
-├── hidock-web-app/            # React web application
-│   ├── AGENT.md              # Web app-specific rules
-│   ├── src/                  # Source code
-│   ├── package.json          # Node.js dependencies
-│   └── vite.config.ts        # Vite configuration
-├── audio-insights-extractor/  # React audio analysis tool
-│   ├── AGENT.md             # Audio insights-specific rules
-│   ├── src/                 # Source code
-│   └── package.json         # Node.js dependencies
-├── docs/                    # Project documentation
-├── INDEX_AGENTS.md          # Agent files documentation
-├── README.md               # Main project documentation
-└── CONTRIBUTING.md         # Contribution guidelines
+├── apps/
+│   ├── desktop/                # Python GUI application (device management)
+│   │   ├── AGENT.md            # Desktop-specific rules
+│   │   ├── tests/              # Test files
+│   │   └── pyproject.toml      # Python project configuration
+│   ├── web/                    # React web application (transcription)
+│   │   ├── AGENT.md            # Web app-specific rules
+│   │   ├── src/                # Source code
+│   │   ├── package.json        # Node.js dependencies
+│   │   └── vite.config.ts      # Vite configuration
+│   ├── electron/               # Electron "universal knowledge hub" (current primary focus)
+│   ├── meeting-recorder/       # Standalone Electron meeting recorder
+│   └── meeting-assistant/      # Phased Electron build (reuses packages/*)
+├── packages/                   # Shared @hidock/* libraries (file:-linked)
+│   ├── ai-providers/
+│   ├── audio-capture/
+│   ├── calendar-sync/
+│   ├── storage-controller/
+│   └── transcription/
+├── legacy/audio-insights/      # Archived prototype (absorbed into apps/electron)
+├── docs/                       # Project documentation
+├── INDEX_AGENTS.md             # Agent files documentation
+├── README.md                   # Main project documentation
+└── CONTRIBUTING.md             # Contribution guidelines
 ```
+
+> **No root npm workspace / no root `package.json`.** Each JS/TS project is `npm install`'d in
+> its own directory; `packages/*` are `file:`-linked, so install/build a package before any app
+> that depends on it.
 
 ## 3. Technology Stack Coordination
 
@@ -78,16 +87,16 @@ Before making any changes, identify which component(s) you're working with:
 
 ```bash
 # Desktop application (Python)
-cd hidock-desktop-app/
-# Follow rules in hidock-desktop-app/AGENT.md
+cd apps/desktop/
+# Follow rules in apps/desktop/AGENT.md
 
 # Web application (React/TypeScript)
-cd hidock-web-app/
-# Follow rules in hidock-web-app/AGENT.md
+cd apps/web/
+# Follow rules in apps/web/AGENT.md
 
-# Audio insights (React/TypeScript)
-cd audio-insights-extractor/
-# Follow rules in audio-insights-extractor/AGENT.md
+# Electron knowledge hub (React/TypeScript) — current primary focus
+cd apps/electron/
+# Follow rules in apps/electron/AGENT.md
 ```
 
 ### Step 2: Apply Component-Specific Rules
@@ -96,7 +105,7 @@ Each component has mandatory operational procedures defined in its `AGENT.md` fi
 
 - **Desktop App:** Python TDD, CustomTkinter patterns, USB threading, audio processing
 - **Web App:** React 18 + Zustand, WebUSB API, multi-provider AI, TypeScript strict mode
-- **Audio Insights:** React 19 + Vite, Google Gemini only, browser-based audio processing
+- **Electron App:** React 18 + TypeScript, Electron main/renderer, sql.js, multi-provider AI (knowledge hub)
 
 ### Step 3: Cross-Component Validation
 
@@ -104,19 +113,19 @@ When changes affect multiple components, validate across the entire project:
 
 ```bash
 # Python components
-cd hidock-desktop-app/
+cd apps/desktop/
 python -m pytest
 python -m black . --check
 python -m flake8 .
 mypy .
 
 # React components
-cd hidock-web-app/
+cd apps/web/
 npm run test
 npm run build
 npx tsc --noEmit
 
-cd audio-insights-extractor/
+cd apps/electron/
 npm run test
 npm run build
 npx tsc --noEmit
@@ -217,15 +226,15 @@ When developing features that span multiple components:
 
 ```bash
 # Test desktop-web integration
-cd hidock-desktop-app/
+cd apps/desktop/
 python -m pytest tests/test_integration/ -v
 
 # Test shared AI provider configurations
-cd hidock-web-app/
+cd apps/web/
 npm run test:integration
 
 # Test audio format compatibility
-cd audio-insights-extractor/
+cd apps/electron/
 npm run test:formats
 ```
 
@@ -235,7 +244,7 @@ All components must meet these requirements:
 
 - **Desktop App:** Startup < 3 seconds, USB operations < 5 seconds
 - **Web App:** Initial load < 2 seconds, WebUSB operations < 3 seconds
-- **Audio Insights:** Bundle < 1MB, processing start < 500ms
+- **Electron App:** Bundle < 1MB, processing start < 500ms
 
 ## 8. Documentation Maintenance Requirements
 
@@ -266,9 +275,9 @@ Before committing changes that affect multiple components:
 
 ```bash
 # 1. Component-specific validation
-cd hidock-desktop-app/ && python -m pytest && python -m black . --check
-cd hidock-web-app/ && npm test && npm run build
-cd audio-insights-extractor/ && npm test && npm run build
+cd apps/desktop/ && python -m pytest && python -m black . --check
+cd apps/web/ && npm test && npm run build
+cd apps/electron/ && npm test && npm run build
 
 # 2. Documentation validation
 markdownlint **/*.md
@@ -324,9 +333,9 @@ pip install black flake8 mypy pytest
 brew install markdownlint-cli  # or equivalent
 
 # Component-specific setup
-cd hidock-desktop-app/ && pip install -e ".[dev]"
-cd hidock-web-app/ && npm install
-cd audio-insights-extractor/ && npm install
+cd apps/desktop/ && pip install -e ".[dev]"
+cd apps/web/ && npm install
+cd apps/electron/ && npm install
 ```
 
 ### Environment Variables

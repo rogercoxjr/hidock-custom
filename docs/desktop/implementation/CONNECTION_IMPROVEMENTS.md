@@ -166,7 +166,7 @@ Operations that are expected during normal use are logged at appropriate levels:
 The application has been reorganized for better maintainability:
 
 ```
-hidock-desktop-app/
+apps/desktop/
 ├── src/                    # All Python source files
 │   ├── gui_*.py           # GUI-related modules
 │   ├── device_*.py        # Device communication
@@ -330,4 +330,4 @@ for i in range(10):
 ## Related Documentation
 - [Logging Configuration Guide](LOGGING_CONFIGURATION.md)
 - [Toast Notification System](TOAST_NOTIFICATIONS.md)
-- [Troubleshooting Guide](TROUBLESHOOTING_GUIDE.md)
+- [Troubleshooting Guide](TROUBLESHOOTING_GUIDE.md)

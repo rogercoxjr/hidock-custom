@@ -22,7 +22,7 @@ The HiDock H1E implements a **custom storage solution** that is NOT a standard U
 - **Security**: Encrypted file system with secure storage capabilities
 
 #### **USB Protocol Implementation** 
-From `hidock-desktop-app` Python analysis:
+From `apps/desktop` Python analysis:
 
 ```python
 # Storage-related USB Commands (from constants.py)
@@ -62,7 +62,7 @@ EP_IN_ADDR = 0x82   # Data input
 
 #### **A. Native Desktop Applications**
 ```python
-# Using Python with PyUSB (like hidock-desktop-app)
+# Using Python with PyUSB (like apps/desktop)
 import usb.core
 import usb.util
 
@@ -311,7 +311,7 @@ async fn get_hidock_files() -> Result<Vec<File>, String> {
 
 ### **Priority 1: Native Desktop Application**
 **Best approach** for full functionality:
-- Use existing Python `hidock-desktop-app` as reference
+- Use existing Python `apps/desktop` app as reference
 - Implement in Rust/C++ for performance
 - Direct USB access via libusb
 - Full Jensen protocol support
@@ -455,4 +455,4 @@ The device architecture is sophisticated but well-documented through the existin
 ---
 *Storage Analysis Completed: 2025-08-31*  
 *Key Finding: Jensen Protocol > Mass Storage for direct access*  
-*Recommended Approach: Native implementation with protocol bridge server*
+*Recommended Approach: Native implementation with protocol bridge server*

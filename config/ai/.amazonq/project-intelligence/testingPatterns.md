@@ -21,7 +21,7 @@ HiDock Next follows a strict test integration approach where all tests are organ
 ### Test File Organization (Per INDEX.md)
 
 ```text
-hidock-desktop-app/tests/
+apps/desktop/tests/
 ├── conftest.py                    # Pytest configuration and shared fixtures
 ├── test_*.py                      # Unit and integration tests for all modules
 ├── test_utils.py                  # Testing utilities and mock objects
@@ -172,4 +172,4 @@ The current integration approach addresses these issues by:
 - **Consolidating Related Tests**: Single comprehensive test files per module
 - **Following INDEX.md Structure**: Consistent organization
 - **Reducing Duplication**: Shared fixtures and utilities
-- **Improving Maintainability**: Clear test organization and ownership
+- **Improving Maintainability**: Clear test organization and ownership

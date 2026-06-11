@@ -6,12 +6,14 @@ The HiDock Web Application is a **transcription-focused** React TypeScript web a
 
 ## Part of the HiDock Next Ecosystem
 
-This is the **second iteration** in the evolution toward a universal knowledge hub:
+This is the **second iteration** in the evolution toward a universal knowledge hub. The repository is a monorepo of multiple apps plus shared `@hidock/*` packages under `packages/` (each JS project is installed in its own directory — there is no root npm workspace):
 
-1. **Desktop App** - Device management focused (USB, file sync, settings)
-2. **Web App** (this app) - **Transcription focused** (browser access, AI transcription)
-3. **Audio Insights** - Insights prototype (AI-powered analysis)
-4. **Electron App** - Universal knowledge hub (integrates all capabilities, processes ANY knowledge source)
+1. **Desktop App** (`apps/desktop/`) - Device management focused (USB, file sync, settings)
+2. **Web App** (`apps/web/`, this app) - **Transcription focused** (browser access, AI transcription)
+3. **Electron App** (`apps/electron/`) - Universal knowledge hub (integrates all capabilities, processes ANY knowledge source) — current primary focus
+4. **Meeting Recorder** (`apps/meeting-recorder/`) and **Meeting Assistant** (`apps/meeting-assistant/`) - Electron apps for real-time meeting capture and transcription
+
+The original Audio Insights prototype (AI-powered analysis) has been archived to `legacy/audio-insights/`; its Gemini transcription and insight-extraction capabilities are now absorbed into the Electron app.
 
 For the fully integrated experience with recordings, PDFs, documents, calendar, email, and more, see the [Electron app](../electron/).
 
@@ -71,7 +73,7 @@ This app solves a specific problem: **access your HiDock recordings and transcri
 python setup.py  # Choose option 1
 
 # Option 2: Manual setup
-cd hidock-web-app
+cd apps/web
 npm install
 npm run dev
 # Open: http://localhost:5173
@@ -84,7 +86,7 @@ python setup.py  # Choose option 2
 
 **Running the Application:**
 ```bash
-cd hidock-web-app
+cd apps/web
 npm run dev
 # Open: http://localhost:5173
 ```
@@ -114,7 +116,7 @@ npm run dev
 1. **Navigate to Web App Directory**
 
    ```bash
-   cd hidock-web-app
+   cd apps/web
    ```
 
 2. **Install Dependencies**
@@ -149,7 +151,7 @@ npx serve -s dist --ssl-cert cert.pem --ssl-key key.pem
 ## 📁 Project Structure
 
 ```
-hidock-web-app/
+apps/web/
 ├── src/
 │   ├── components/                   # React components
 │   │   ├── AudioPlayer/              # Audio playback component
@@ -306,17 +308,17 @@ MIT License - see [LICENSE](../LICENSE) file for details.
 
 ### How This Fits in the Ecosystem
 
-- **Desktop App** → **Web App** → **Audio Insights** → **Electron App**
+- **Desktop App** → **Web App** → **Audio Insights** (now archived) → **Electron App**
 - Each iteration built on the previous, solving more problems
 - This app (Web) focuses specifically on browser-based transcription access
 - The Electron App represents the full vision: a universal knowledge hub
 
 ### When to Use Each App
 
-- **Desktop App**: First-time device setup, advanced USB management, offline operation
-- **Web App (this)**: Quick transcription access, no installation, sharing with team
-- **Audio Insights**: Prototype for testing advanced insights features
-- **Electron App**: Full integrated experience with all knowledge sources (recordings, PDFs, documents, calendar, email, etc.)
+- **Desktop App** (`apps/desktop/`): First-time device setup, advanced USB management, offline operation
+- **Web App** (`apps/web/`, this): Quick transcription access, no installation, sharing with team
+- **Electron App** (`apps/electron/`): Full integrated experience with all knowledge sources (recordings, PDFs, documents, calendar, email, etc.)
+- **Audio Insights** (`legacy/audio-insights/`): Archived prototype; its insights features are now part of the Electron app
 
 ## Acknowledgments
 

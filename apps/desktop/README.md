@@ -22,12 +22,14 @@ HiDock Desktop is the **first iteration** of the HiDock Next suite - a **free, o
 
 ### Part of the HiDock Next Ecosystem
 
-HiDock Desktop is one component in a larger suite of applications:
+HiDock Desktop is one component in a larger monorepo of applications:
 
 - **Desktop App** (this app) - Device management focused, first iteration
 - **Web App** - Browser-based interface using WebUSB for device access
-- **Audio Insights** - AI-powered audio analysis and transcription
-- **Electron App** - Integrated knowledge hub combining all functionality
+- **Electron App** - Integrated **universal knowledge hub** combining all functionality (current primary focus)
+- **Meeting Recorder** - Standalone Electron meeting recorder with real-time AI transcription
+- **Meeting Assistant** - Phased Electron build that reuses the shared `packages/*` libraries
+- **Audio Insights** - Archived prototype (`legacy/audio-insights/`); its Gemini transcription and insight-extraction capabilities are absorbed into the Electron app
 
 See the [main README](../../README.md) for the complete ecosystem overview and how these apps evolved into a unified knowledge management platform.
 
@@ -143,7 +145,7 @@ See the [main README](../../README.md) for the complete ecosystem overview and h
 3. **Launch the application:**
 
    ```bash
-   cd hidock-desktop-app
+   cd apps/desktop
    python main.py
    ```
 
@@ -151,7 +153,7 @@ See the [main README](../../README.md) for the complete ecosystem overview and h
 
 ```bash
 # Navigate to the desktop app directory
-cd hidock-desktop-app
+cd apps/desktop
 
 # Create a virtual environment (recommended)
 python -m venv .venv
@@ -295,7 +297,7 @@ This project is licensed under the MIT License - free for personal and commercia
 HiDock Desktop is the **first iteration** and typical **entry point** for users discovering HiDock Next. It focuses on reliable USB device management and local file operations.
 
 **Looking for more?**
-- **AI transcription?** Check out the [Audio Insights app](../audio-insights/)
+- **AI transcription & insights?** These live in the [Electron app](../electron/) - our integrated knowledge hub (the archived [Audio Insights prototype](../../legacy/audio-insights/) has been absorbed into it)
 - **Web-based access?** Try the [Web App](../web/) with WebUSB
 - **Unified platform?** Explore the [Electron app](../electron/) - our integrated knowledge hub
 

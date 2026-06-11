@@ -11,7 +11,7 @@ This document provides an overview of all AI agent operational rule files in the
 **Format:** Operational procedures for managing the entire HiDock Next ecosystem
 **Key Requirements:**
 - Component-specific rules precedence over general rules
-- Multi-platform consistency enforcement (Desktop, Web, Audio Insights)
+- Multi-platform consistency enforcement (Desktop, Web, Electron, Meeting Recorder, Meeting Assistant)
 - Conventional commit workflow and proper testing procedures
 - 11 AI provider coordination across all components
 - Cross-component validation and integration requirements
@@ -19,7 +19,7 @@ This document provides an overview of all AI agent operational rule files in the
 ---
 
 ### **Desktop Application Agent**
-**File:** [`hidock-desktop-app/AGENT.md`](./hidock-desktop-app/AGENT.md)
+**File:** [`apps/desktop/AGENT.md`](../../apps/desktop/AGENT.md)
 **Purpose:** Python GUI development operational procedures
 **Scope:** CustomTkinter desktop application with USB device communication
 **Format:** Mandatory workflows for Python development with strict quality gates
@@ -33,7 +33,7 @@ This document provides an overview of all AI agent operational rule files in the
 ---
 
 ### **Web Application Agent**
-**File:** [`hidock-web-app/AGENT.md`](./hidock-web-app/AGENT.md)
+**File:** [`apps/web/AGENT.md`](../../apps/web/AGENT.md)
 **Purpose:** React TypeScript web development operational procedures
 **Scope:** React 18 + Zustand web application with WebUSB device communication
 **Format:** Mandatory patterns for modern web development with strict testing
@@ -46,10 +46,10 @@ This document provides an overview of all AI agent operational rule files in the
 
 ---
 
-### **Audio Insights Extractor Agent**
-**File:** [`audio-insights-extractor/AGENT.md`](./audio-insights-extractor/AGENT.md)
+### **Audio Insights Extractor Agent (Archived)**
+**File:** [`legacy/audio-insights/AGENT.md`](../../legacy/audio-insights/AGENT.md)
 **Purpose:** React 19 audio analysis development operational procedures
-**Scope:** Standalone browser-based audio transcription and analysis prototype
+**Scope:** Archived standalone browser-based audio transcription and analysis prototype (capabilities absorbed into apps/electron)
 **Format:** Modern React development with Google Gemini AI integration
 **Key Requirements:**
 - React 19 with concurrent features and automatic batching
@@ -61,7 +61,7 @@ This document provides an overview of all AI agent operational rule files in the
 ---
 
 ### **Documentation Agent Template**
-**File:** [`docs/AGENT_DEFAULT.md`](./docs/AGENT_DEFAULT.md)
+**File:** [`docs/development/AGENT_DEFAULT.md`](./AGENT_DEFAULT.md)
 **Purpose:** Comprehensive template for creating AI agent operational procedures
 **Scope:** Meta-documentation for building effective agent instruction systems
 **Format:** Template showing best practices for AI agent guidance documents
@@ -76,10 +76,10 @@ This document provides an overview of all AI agent operational rule files in the
 | Component          | Agent File                             | Format                       | Primary Technology   | Operational Focus                          |
 | ------------------ | -------------------------------------- | ---------------------------- | -------------------- | ------------------------------------------ |
 | **Root Project**   | ✅ `AGENT.md`                          | Cross-component coordination | Multi-platform       | Project workflow, AI provider coordination |
-| **Web App**        | ✅ `hidock-web-app/AGENT.md`           | Mandatory procedures         | React 18/TypeScript  | WebUSB, Zustand, 11 AI providers           |
-| **Desktop App**    | ✅ `hidock-desktop-app/AGENT.md`       | Operational rules            | Python/CustomTkinter | USB threading, GUI patterns, TDD           |
-| **Audio Insights** | ✅ `audio-insights-extractor/AGENT.md` | Development procedures       | React 19/TypeScript  | Gemini AI, browser audio processing        |
-| **Template**       | ✅ `docs/AGENT_DEFAULT.md`             | Meta-template                | Documentation        | Agent creation methodology                 |
+| **Web App**        | ✅ `apps/web/AGENT.md`                 | Mandatory procedures         | React 18/TypeScript  | WebUSB, Zustand, 11 AI providers           |
+| **Desktop App**    | ✅ `apps/desktop/AGENT.md`             | Operational rules            | Python/CustomTkinter | USB threading, GUI patterns, TDD           |
+| **Audio Insights** | ✅ `legacy/audio-insights/AGENT.md`    | Development procedures (archived) | React 19/TypeScript  | Gemini AI, browser audio processing        |
+| **Template**       | ✅ `docs/development/AGENT_DEFAULT.md` | Meta-template                | Documentation        | Agent creation methodology                 |
 
 ## Key Differences from Generic Documentation
 

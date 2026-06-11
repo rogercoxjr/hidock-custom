@@ -115,9 +115,9 @@ When adding a new configuration option:
 1. Add the new key and a default value to `hidock_config.json`.
 2. Update any related documentation to explain the new setting.
 3. Ensure the application handles the absence of the new key gracefully.
-   --- End of Context from: hidock-desktop-app\AGENT.md ---
+   --- End of Context from: apps/desktop\AGENT.md ---
 
---- Context from: hidock-web-app\AGENT.md ---
+--- Context from: apps/web\AGENT.md ---
 
 # HiDock Web App
 
@@ -218,7 +218,7 @@ When adding a new configuration option:
 2. Update any configuration schemas (e.g., in `src/config/`).
 3. Update any related documentation to explain the new setting.
 4. Ensure the application handles the absence of the new key gracefully.
-   --- End of Context from: hidock-web-app\AGENT.md ---
+   --- End of Context from: apps/web\AGENT.md ---
 
 # My Unmodified System Prompt
 

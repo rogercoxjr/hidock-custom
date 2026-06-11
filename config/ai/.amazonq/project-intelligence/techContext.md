@@ -17,10 +17,22 @@
 - **Build System**: Vite with hot module replacement
 - **Styling**: Modern CSS with component-based architecture
 
-### Audio Insights Extractor (React)
-- **Framework**: React 19 + TypeScript
+### Electron Application (Universal Knowledge Hub) — current primary focus
+- **Framework**: Electron 39 + React 18 + TypeScript + Tailwind CSS
+- **State Management**: Zustand
+- **Database**: SQLite via sql.js (WASM) for local knowledge storage
+- **AI Integration**: Google Gemini (transcription/chat), Ollama (local RAG)
+- **Device Communication**: node-usb (npm `usb`) + Jensen protocol
+- **Purpose**: Integrated hub spanning device management, transcription, and AI insights across any knowledge source
+
+### Meeting Recorder / Meeting Assistant (Electron)
+- **apps/meeting-recorder/**: standalone Electron meeting recorder with real-time AI transcription
+- **apps/meeting-assistant/**: phased Electron build that reuses the shared `packages/*` libraries
+
+### Archived: Audio Insights (React)
+- **Status**: Archived prototype under `legacy/audio-insights/`
 - **AI Integration**: Google GenAI for audio analysis
-- **Purpose**: Standalone tool for audio insights extraction
+- **Note**: Its Gemini transcription + insight-extraction capabilities are absorbed into `apps/electron/`
 
 ## Development Environment
 
@@ -34,9 +46,19 @@
 ### Project Structure
 ```
 hidock-next/
-├── hidock-desktop-app/     # Python desktop application
-├── hidock-web-app/         # React web application  
-├── hidock-audio-insights/  # React audio analysis tool
+├── apps/
+│   ├── desktop/            # Python desktop application
+│   ├── web/                # React web application
+│   ├── electron/           # Electron universal knowledge hub (primary focus)
+│   ├── meeting-recorder/   # Standalone Electron meeting recorder
+│   └── meeting-assistant/  # Phased Electron build (reuses packages/*)
+├── packages/               # Shared @hidock/* libraries (file:-linked)
+│   ├── ai-providers/
+│   ├── audio-capture/
+│   ├── calendar-sync/
+│   ├── storage-controller/
+│   └── transcription/
+├── legacy/audio-insights/  # Archived React audio analysis prototype
 ├── .amazonq/              # AI assistant configuration
 │   ├── rules/             # Development rules and standards
 │   └── project-intelligence/ # Project documentation
@@ -45,7 +67,7 @@ hidock-next/
 
 ### Dependencies Management
 - **Python**: pyproject.toml with editable installation (`pip install -e ".[dev]"`)
-- **Node.js**: package.json with npm/yarn for React applications
+- **Node.js**: no root npm workspace — each JS app is npm-installed in its own directory; `packages/*` are file:-linked, so install/build a package before any app that depends on it
 - **System**: libusb for USB communication across platforms
 
 ## Platform Support
@@ -108,4 +130,4 @@ hidock-next/
 - **Secret Management**: No hardcoded credentials in source code
 - **Input Validation**: Comprehensive validation for all user inputs
 - **Error Handling**: Secure error messages without sensitive data exposure
-- **Dependency Scanning**: Regular security updates for all dependencies
+- **Dependency Scanning**: Regular security updates for all dependencies

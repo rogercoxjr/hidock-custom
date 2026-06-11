@@ -36,7 +36,7 @@ python3 -c "import O365; print('O365 library available')"
 
 ### **Step 3: Run the Test Script**
 ```bash
-cd hidock-desktop-app
+cd apps/desktop
 python3 test_outlook_calendar.py
 ```
 

@@ -131,7 +131,7 @@ python main.py
 1. **Install dependencies:**
 
    ```bash
-   cd hidock-web-app
+   cd apps/web
    npm install
    ```
 
@@ -256,7 +256,7 @@ python main.py
        ssl_certificate /path/to/certificate.crt;
        ssl_certificate_key /path/to/private.key;
 
-       root /path/to/hidock-web-app/dist;
+       root /path/to/apps/web/dist;
        index index.html;
 
        # Handle client-side routing

@@ -61,7 +61,7 @@ git commit --no-verify -m "Emergency fix"
 
 ### Python Issues
 ```bash
-cd hidock-desktop-app
+cd apps/desktop
 # Auto-format
 black .
 isort .
@@ -71,7 +71,7 @@ flake8 .
 
 ### JavaScript Issues
 ```bash
-cd hidock-web-app
+cd apps/web
 # Some issues can be auto-fixed
 npx eslint . --fix
 # Check remaining issues
@@ -93,6 +93,6 @@ npm run lint
 ## Configuration Files
 
 - **`.pre-commit-config.yaml`**: Main pre-commit configuration
-- **`hidock-desktop-app/pyproject.toml`**: Python tool configuration (Black, isort, flake8)
-- **`hidock-desktop-app/.flake8`**: Flake8 configuration with test file ignores
-- **`hidock-web-app/.eslintrc.cjs`**: ESLint configuration with test overrides
+- **`apps/desktop/pyproject.toml`**: Python tool configuration (Black, isort, flake8)
+- **`apps/desktop/config/.flake8`**: Flake8 configuration with test file ignores
+- **`apps/web/.eslintrc.cjs`**: ESLint configuration with test overrides

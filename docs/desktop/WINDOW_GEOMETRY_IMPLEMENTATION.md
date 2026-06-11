@@ -8,7 +8,7 @@
 ## 🔧 Implementation Details
 
 ### 1. Automatic Geometry Saving
-- **File**: `hidock-desktop-app/gui_main_window.py`
+- **File**: `apps/desktop/src/gui_main_window.py`
 - **Method**: `_save_window_geometry()`
 - **Trigger**: Window resize/move events via `_on_window_configure()`
 - **Debouncing**: 500ms timer prevents excessive file writes during window dragging
@@ -29,7 +29,7 @@
 ## 🧪 Test Coverage
 
 ### Comprehensive Test Suite
-All tests located in `hidock-desktop-app/tests/test_gui_main_window.py`:
+All tests located in `apps/desktop/tests/test_gui_main_window.py`:
 
 1. **`test_validate_window_geometry_valid`** - Valid geometry handling
 2. **`test_validate_window_geometry_invalid`** - Invalid geometry fallback

@@ -523,7 +523,7 @@ npm run dev
 All code must follow this exact structure:
 
 ```text
-hidock-web-app/
+apps/web/
 ├── src/
 │   ├── main.tsx             # React 18 app entry point
 │   ├── App.tsx              # Main application component

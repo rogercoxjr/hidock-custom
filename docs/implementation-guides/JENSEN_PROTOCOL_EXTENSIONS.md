@@ -10,7 +10,7 @@ This document provides complete implementation details for extending the Jensen 
 
 ### **Current Commands (Existing)**
 ```python
-# Documented in hidock-desktop-app/constants.py
+# Documented in apps/desktop/constants.py
 EXISTING_COMMANDS = {
     1:  CMD_GET_DEVICE_INFO = 1          # Device version/serial
     2:  CMD_GET_DEVICE_TIME = 2          # Device clock
@@ -821,7 +821,7 @@ if __name__ == "__main__":
 
 ### **Desktop Application Integration**
 ```python
-# hidock-desktop-app/enhanced_device_interface.py
+# apps/desktop/enhanced_device_interface.py
 """
 Enhanced device interface with extended Jensen protocol support
 """
@@ -882,7 +882,7 @@ class EnhancedHiDockDevice:
 
 ### **Web Application Integration**
 ```javascript
-// hidock-web-app/src/services/extendedJensenService.js
+// apps/web/src/services/extendedJensenService.js
 /**
  * Extended Jensen Protocol Service for Web Application
  */
@@ -1099,4 +1099,4 @@ export default ExtendedJensenService;
 **🚀 Extended Jensen Protocol implementation ready for Phase 1 development!**
 
 *Implementation Status: Framework Complete - Ready for Testing*  
-*Next Steps: Device testing, command validation, integration*
+*Next Steps: Device testing, command validation, integration*

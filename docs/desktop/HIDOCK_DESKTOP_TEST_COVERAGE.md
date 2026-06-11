@@ -1,8 +1,8 @@
-# Test Coverage Improvement Plan for hidock-desktop-app
+# Test Coverage Improvement Plan for apps/desktop
 
 ## 1. Introduction
 
-This document outlines a plan to increase the test coverage of the `hidock-desktop-app` to at least 80%. The focus will be on testing the most critical features of the application to ensure its stability and reliability.
+This document outlines a plan to increase the test coverage of the `apps/desktop` app to at least 80%. The focus will be on testing the most critical features of the application to ensure its stability and reliability.
 
 ## 2. Current State
 
@@ -246,6 +246,6 @@ The following tools will be used to improve test coverage:
 
 The success of this plan will be measured by the following criteria:
 
-- The test coverage of the `hidock-desktop-app` is at least 80%.
+- The test coverage of the `apps/desktop` app is at least 80%.
 - The number of bugs found in the application is reduced.
 - The stability and reliability of the application are improved.

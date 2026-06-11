@@ -1093,7 +1093,7 @@ class NativeHiDockManager:
             'storage_throughput_mbps': (4096 / storage_time) / (1024 * 1024)
         }
 
-# Integration with existing hidock-desktop-app
+# Integration with existing apps/desktop
 def integrate_with_existing_app():
     """Integration function for existing desktop app"""
     
@@ -1365,4 +1365,4 @@ if __name__ == "__main__":
 
 **🚀 Native USB Access Framework - Ready for implementation!**
 
-*Breaking free from all software limitations with direct hardware communication*
+*Breaking free from all software limitations with direct hardware communication*

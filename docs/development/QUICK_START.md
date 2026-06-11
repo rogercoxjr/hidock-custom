@@ -76,14 +76,14 @@ python setup.py
 ### Manual Setup
 ```bash
 # Desktop app
-cd hidock-desktop-app
+cd apps/desktop
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Web app
-cd hidock-web-app
+cd apps/web
 npm install
 ```
 
@@ -106,7 +106,7 @@ After setup, you can run:
 ./run-desktop.sh     # Linux/Mac (if available)
 
 # Option 2: Manual launch
-cd hidock-desktop-app
+cd apps/desktop
 # Windows:
 .venv\Scripts\activate
 # Linux/Mac:
@@ -122,7 +122,7 @@ python main.py
 ./run-web.sh         # Linux/Mac (if available)
 
 # Option 2: Manual launch
-cd hidock-web-app
+cd apps/web
 npm run dev
 # Open: http://localhost:5173
 ```
@@ -149,7 +149,7 @@ After developer setup:
 
 ```bash
 # Activate environment first
-cd hidock-desktop-app
+cd apps/desktop
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
 
@@ -163,7 +163,7 @@ pre-commit run --all-files
 black . && isort .
 
 # Web app testing
-cd ../hidock-web-app
+cd ../web
 npm test
 npm run lint
 ```

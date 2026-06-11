@@ -4,11 +4,15 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Architecture
 
-HiDock Next is a multi-platform application suite for HiDock device management with AI transcription capabilities:
+HiDock Next is a multi-platform application suite for HiDock device management with AI transcription capabilities. It is a monorepo of 5 apps plus 5 shared `@hidock/*` packages and 1 archived prototype. There is **no root npm workspace / no root `package.json`** — each JS/TS project is `npm install`'d in its own directory, and `packages/*` are `file:`-linked (install/build a package before any app that depends on it):
 
-- **Desktop App** (`hidock-desktop-app/`): Python 3.12+ GUI using CustomTkinter, handles USB device communication via PyUSB, audio processing with pygame/pydub, and comprehensive AI provider integration
-- **Web App** (`hidock-web-app/`): React 18 + TypeScript + Vite SPA with WebUSB device access, Zustand state management, and Tailwind CSS
-- **Audio Insights Extractor** (`audio-insights-extractor/`): Standalone React 19 + TypeScript tool for batch audio analysis with Google GenAI
+- **Desktop App** (`apps/desktop/`): Python 3.12+ GUI using CustomTkinter, handles USB device communication via PyUSB, audio processing with pygame/pydub, and comprehensive AI provider integration
+- **Web App** (`apps/web/`): React 18 + TypeScript + Vite SPA with WebUSB device access, Zustand state management, and Tailwind CSS
+- **Electron App** (`apps/electron/`): Universal knowledge hub (current primary focus) — integrates device management, transcription, and AI analysis across many knowledge sources
+- **Meeting Recorder** (`apps/meeting-recorder/`): Standalone Electron meeting recorder with real-time AI transcription
+- **Meeting Assistant** (`apps/meeting-assistant/`): Phased Electron build that reuses the shared `packages/*` libraries
+
+Shared libraries live in `packages/{ai-providers,audio-capture,calendar-sync,storage-controller,transcription}`. The former Audio Insights Extractor (standalone React + TypeScript batch audio analysis with Google GenAI) is archived at `legacy/audio-insights/`; its Gemini transcription + insight-extraction capabilities are absorbed into `apps/electron/`.
 
 ### Key Architectural Patterns
 
@@ -57,7 +61,7 @@ chmod +x setup-unix.sh && ./setup-unix.sh
 
 **Desktop App:**
 ```bash
-cd hidock-desktop-app
+cd apps/desktop
 
 # Activate environment
 source .venv/bin/activate  # Linux/Mac
@@ -89,7 +93,7 @@ pytest --cov=. --cov-report=html --cov-report=term-missing
 
 **Web App:**
 ```bash
-cd hidock-web-app
+cd apps/web
 
 # Install dependencies
 npm install
@@ -110,9 +114,9 @@ npm run test:coverage # Coverage report
 npm run lint
 ```
 
-**Audio Insights Extractor:**
+**Audio Insights (archived prototype):**
 ```bash
-cd audio-insights-extractor
+cd legacy/audio-insights
 
 # Development
 npm run dev  # Vite dev server
@@ -144,16 +148,16 @@ Key test files to understand patterns:
 
 ```bash
 # Desktop app packaging (if configured)
-cd hidock-desktop-app
+cd apps/desktop
 python -m build
 
 # Web app deployment build
-cd hidock-web-app
+cd apps/web
 npm run build
 # Outputs to dist/ directory
 
-# Audio insights build
-cd audio-insights-extractor
+# Audio insights build (archived prototype)
+cd legacy/audio-insights
 npm run build
 ```
 
@@ -273,7 +277,7 @@ The project includes comprehensive VS Code setup:
 
 **Device Communication:**
 - Linux: Check USB permissions (`dialout` group membership)
-- Windows: Ensure `libusb-1.0.dll` in `hidock-desktop-app/`
+- Windows: Ensure `libusb-1.0.dll` in `apps/desktop/`
 - Mac: Usually works out-of-box, check USB port connection
 
 **Dependencies:**

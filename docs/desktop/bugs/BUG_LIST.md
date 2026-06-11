@@ -232,7 +232,7 @@ _All low-priority issues have been resolved and moved to the Fixed Issues sectio
 
   - **Status:** FIXED
   - **Problem:** The theme toggle button in the audio visualization widget used emoji characters (🌙 and ☀️) instead of the proper icons available in the project's icon set.
-  - **Evidence:** User feedback indicating proper icons are available at hidock-desktop-app\icons\white\16 (moon-o.png and sun-o.png)
+  - **Evidence:** User feedback indicating proper icons are available at apps/desktop\icons\white\16 (moon-o.png and sun-o.png)
   - **Files to Blame:** @audio_visualization.py
   - **Resolution:**
     - Added `_load_theme_icons()` method to load proper moon-o.png and sun-o.png icons from the icons/white/16 directory

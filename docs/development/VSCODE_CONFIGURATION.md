@@ -26,7 +26,7 @@ The project includes comprehensive workspace settings in `.vscode/settings.json`
 ```jsonc
 {
   // Python interpreter and formatting
-  "python.defaultInterpreterPath": "${workspaceFolder}/hidock-desktop-app/.venv/Scripts/python.exe",
+  "python.defaultInterpreterPath": "${workspaceFolder}/apps/desktop/.venv/Scripts/python.exe",
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.formatOnSave": true,
@@ -37,13 +37,13 @@ The project includes comprehensive workspace settings in `.vscode/settings.json`
 
   // Flake8 configuration
   "flake8.args": ["--max-line-length=120", "--extend-ignore=E203,W503"],
-  "flake8.path": ["${workspaceFolder}/hidock-desktop-app/.venv/Scripts/flake8.exe"],
-  "flake8.cwd": "${workspaceFolder}/hidock-desktop-app",
+  "flake8.path": ["${workspaceFolder}/apps/desktop/.venv/Scripts/flake8.exe"],
+  "flake8.cwd": "${workspaceFolder}/apps/desktop",
 
   // Pylint configuration
   "pylint.args": ["--rcfile=${workspaceFolder}/.pylintrc"],
-  "pylint.path": ["${workspaceFolder}/hidock-desktop-app/.venv/Scripts/pylint.exe"],
-  "pylint.cwd": "${workspaceFolder}/hidock-desktop-app",
+  "pylint.path": ["${workspaceFolder}/apps/desktop/.venv/Scripts/pylint.exe"],
+  "pylint.cwd": "${workspaceFolder}/apps/desktop",
 
   // Pylance settings
   "python.analysis.typeCheckingMode": "basic",

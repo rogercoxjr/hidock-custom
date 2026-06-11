@@ -83,7 +83,7 @@ git checkout -b bugfix/issue-description
 
 ```bash
 # Test desktop app (581 comprehensive tests)
-cd hidock-desktop-app && python -m pytest  # Runs all tests with coverage
+cd apps/desktop && python -m pytest  # Runs all tests with coverage
 
 # Run specific test categories
 pytest -m unit          # Unit tests only (~400 tests)
@@ -91,7 +91,7 @@ pytest -m integration   # Integration tests (~150 tests)
 pytest -m device        # Device tests (~30 tests, requires hardware)
 
 # Test web app
-cd hidock-web-app && npm test
+cd apps/web && npm test
 
 # Test pre-commit hooks (code quality)
 pre-commit run --all-files
@@ -163,13 +163,24 @@ git push origin feature/your-feature-name
 
 ```folder
 hidock-next/
-├── hidock-desktop-app/     # Python desktop application
-├── hidock-web-app/         # React web application
-├── audio-insights-extractor/  # Standalone audio analysis tool
+├── apps/
+│   ├── desktop/            # Python/CustomTkinter device-management app
+│   ├── web/                # React/TypeScript/WebUSB transcription app
+│   ├── electron/           # Electron "universal knowledge hub" (current primary focus)
+│   ├── meeting-recorder/   # Standalone Electron meeting recorder (real-time AI transcription)
+│   └── meeting-assistant/  # Phased Electron build that reuses packages/*
+├── packages/               # Shared @hidock/* libraries (ai-providers, audio-capture,
+│   │                       #   calendar-sync, storage-controller, transcription) — file:-linked
+├── legacy/
+│   └── audio-insights/     # Archived prototype (capabilities absorbed into apps/electron)
 ├── docs/                   # Project documentation
 ├── .pre-commit-config.yaml # Code quality hooks
 └── setup.py               # Automated setup script
 ```
+
+> No root npm workspace / no root `package.json`. Each JS/TS app is `npm install`'d in its own
+> directory; `packages/*` are `file:`-linked, so install/build a package before any app that
+> depends on it.
 
 ## 👥 Types of Contributions
 
@@ -207,7 +218,7 @@ hidock-next/
 
 ### Steps to Add a Provider
 
-1. **Study existing providers** in `hidock-desktop-app/ai_service.py`
+1. **Study existing providers** in `apps/desktop/src/ai_service.py`
 2. **Implement the provider class** following the `AIProvider` interface
 3. **Add configuration** to settings and UI
 4. **Write tests** with mock responses

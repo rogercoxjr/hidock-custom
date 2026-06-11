@@ -7,7 +7,7 @@ This guide helps resolve common issues when working with the HiDock Next project
 - [General Issues](#general-issues)
 - [Desktop Application Issues](#desktop-application-issues)
 - [Web Application Issues](#web-application-issues)
-- [Audio Insights Extractor Issues](#audio-insights-extractor-issues)
+- [Electron App (Universal Knowledge Hub) Issues](#electron-app-universal-knowledge-hub-issues)
 - [Device Connection Issues](#device-connection-issues)
 - [AI Integration Issues](#ai-integration-issues)
 - [Linux System Dependency Issues](#linux-system-dependency-issues)
@@ -150,7 +150,7 @@ conda install pygame -c conda-forge
 ### Problem: libusb-1.0.dll not found (Windows)
 
 1. Download from [libusb.info](https://libusb.info/)
-2. Extract `libusb-1.0.dll` to `hidock-desktop-app/` directory
+2. Extract `libusb-1.0.dll` to `apps/desktop/` directory
 3. Ensure it's the correct architecture (32-bit vs 64-bit)
 
 ### Problem: Audio playback issues
@@ -201,7 +201,10 @@ rm -rf node_modules/.cache
 npm run build
 ```
 
-## Audio Insights Extractor Issues
+## Electron App (Universal Knowledge Hub) Issues
+
+> The standalone Audio Insights Extractor prototype is archived under `legacy/audio-insights/`;
+> its Gemini transcription and insight-extraction capabilities are now part of `apps/electron/`.
 
 ### Problem: Google Gemini API errors
 

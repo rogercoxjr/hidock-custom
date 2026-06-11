@@ -1,6 +1,6 @@
 # Code Review
 
-This document provides a comprehensive review of the `hidock-desktop-app` codebase following the major architectural improvements and feature integrations completed in 2025.
+This document provides a comprehensive review of the `apps/desktop` codebase following the major architectural improvements and feature integrations completed in 2025.
 
 ## Successfully Integrated Features
 

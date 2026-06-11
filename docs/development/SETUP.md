@@ -207,13 +207,13 @@ pip install -r requirements.txt
 
 ```bash
 # Navigate to web app directory
-cd hidock-web-app
+cd apps/web
 
 # Install dependencies
 npm install
 
 # Return to project root
-cd ..
+cd ../..
 ```
 
 ### 4. Configure VS Code (Recommended)
@@ -243,8 +243,8 @@ VS Code will prompt you to install recommended extensions, or you can install th
 
 ```bash
 # Ensure virtual environment is activated
-# Run the desktop application
-python main.py
+# Run the desktop application (entry point is apps/desktop/main.py)
+cd apps/desktop && python main.py
 ```
 
 The GUI should open. You don't need a HiDock device connected for the application to start.
@@ -253,22 +253,22 @@ The GUI should open. You don't need a HiDock device connected for the applicatio
 
 ```bash
 # Navigate to web app directory
-cd hidock-web-app
+cd apps/web
 
 # Start development server
 npm run dev
 ```
 
-Open your browser to `http://localhost:3000`. The web application should load.
+Open your browser to `http://localhost:5173` (Vite dev server). The web application should load.
 
 #### Run Tests
 
 ```bash
-# Test Python code
-pytest tests/ -v
+# Test Python (desktop) code — desktop tests live under apps/desktop/tests/
+cd apps/desktop && pytest
 
 # Test web application
-cd hidock-web-app
+cd apps/web
 npm run test
 ```
 
@@ -287,10 +287,10 @@ npm run test
 
    ```bash
    # Desktop app
-   python main.py
+   cd apps/desktop && python main.py
 
    # Web app (in separate terminal)
-   cd hidock-web-app
+   cd apps/web
    npm run dev
    ```
 
@@ -301,7 +301,7 @@ npm run test
    pytest tests/
 
    # Web tests
-   cd hidock-web-app
+   cd apps/web
    npm run test
    ```
 
@@ -322,7 +322,7 @@ black --check .
 #### TypeScript/JavaScript (Prettier via ESLint)
 
 ```bash
-cd hidock-web-app
+cd apps/web
 
 # Lint and fix
 npm run lint
@@ -370,14 +370,14 @@ npm run lint -- --fix-dry-run
 
 #### Desktop Application
 
-1. Run the application: `python main.py`
+1. Run the application: `cd apps/desktop && python main.py`
 2. Click "Connect" button
 3. Device information should appear in status bar
 
 #### Web Application
 
 1. Start dev server: `npm run dev`
-2. Open browser to `http://localhost:3000`
+2. Open browser to `http://localhost:5173`
 3. Click "Connect Device"
 4. Select your HiDock device from browser dialog
 5. **Note:** WebUSB requires HTTPS in production
