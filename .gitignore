@@ -8,7 +8,7 @@ venv/
 ENV/
 apps/desktop/.venv/
 apps/web/node_modules/
-apps/audio-insights/node_modules/
+legacy/audio-insights/node_modules/
 
 # Python cache files
 __pycache__/

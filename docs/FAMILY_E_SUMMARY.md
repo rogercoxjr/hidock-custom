@@ -104,7 +104,7 @@ All 9 projects have `package-lock.json` but **no `node_modules`** (never `npm in
 - `apps/meeting-assistant` — Phased build (Phase 7 spec missing)
 - `apps/meeting-recorder` — Standalone meeting recorder
 - `apps/web` — Transcription-focused web app
-- `apps/audio-insights` — Audio analysis prototype
+- `legacy/audio-insights` — Audio analysis prototype (archived; absorbed into the Electron app)
 - `packages/ai-providers` — Shared AI provider abstraction
 - `packages/audio-capture` — Shared audio capture
 - `packages/calendar-sync` — Shared calendar sync

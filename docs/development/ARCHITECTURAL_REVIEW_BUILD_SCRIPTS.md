@@ -306,7 +306,7 @@ fi
 apps/electron/   → build-electron.{sh,bat} ✅
 apps/web/        → build-web.{sh,bat} ❌
 apps/desktop/    → N/A (Python, no build step)
-apps/audio-insights/ → No build scripts ❌
+legacy/audio-insights/ → No build scripts (archived prototype) ❌
 ```
 
 **Impact:**
