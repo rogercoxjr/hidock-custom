@@ -14,7 +14,7 @@
  */
 // @vitest-environment node
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import os from 'os'
 import path from 'path'
 import fs from 'fs'
@@ -91,7 +91,9 @@ vi.mock('../file-storage', () => ({
 }))
 
 vi.mock('../vector-store', () => ({
-  getVectorStore: vi.fn(() => null)
+  // Quiet stub: the worker's indexing tail runs for real and "indexes" 0 chunks,
+  // keeping the test output free of a noisy null-deref warning.
+  getVectorStore: vi.fn(() => ({ indexTranscript: async () => 0 }))
 }))
 
 vi.mock('@google/generative-ai', () => {
@@ -101,9 +103,12 @@ vi.mock('@google/generative-ai', () => {
       shared.audioCalls += 1
       return { response: { text: () => shared.audioResponse } }
     }
-    // Text call — analysis prompt first, then the actionables prompt.
+    // Text call — analysis prompt first; an actionables prompt follows ONLY
+    // when the transcript passes detectActionables' 100-word guard.
+    // The '__LLM_THROW__' sentinel makes this call reject (transient LLM failure).
     shared.textCalls += 1
     const next = shared.textResponses.shift() ?? '[]'
+    if (next === '__LLM_THROW__') throw new Error('LLM transient failure')
     return { response: { text: () => next } }
   })
   class GoogleGenerativeAI {
@@ -228,7 +233,9 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
   it('full run writes both stages and the marker', async () => {
     insertRecordingWithFile('rec1')
     shared.audioResponse = 'FULL TEXT'
-    shared.textResponses = [validAnalysisJson('My Title'), '[]'] // analysis, then actionables
+    // Analysis only: 'FULL TEXT' is 2 words, so detectActionables' <100-word
+    // guard skips the second text call.
+    shared.textResponses = [validAnalysisJson('My Title')]
 
     await transcribeManually('rec1')
 
@@ -238,6 +245,7 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     expect(row.transcription_provider).toBe('gemini')
     expect(row.summarization_provider).toBe('gemini')
     expect(row.language).toBe('en') // COALESCE path (Stage-1 wrote NULL)
+    expect(shared.textCalls).toBe(1) // analysis ran; actionables skipped (<100 words)
     expect(getRecordingById('rec1')!.transcription_status).toBe('complete')
   })
 
@@ -265,11 +273,13 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
       transcription_provider: 'gemini',
       transcription_model: 'gemini-2.0-flash'
     })
-    shared.textResponses = [validAnalysisJson('Resumed'), '[]']
+    // Analysis only: the 3-word transcript skips actionable detection.
+    shared.textResponses = [validAnalysisJson('Resumed')]
 
     await transcribeManually('rec3')
 
     expect(shared.audioCalls).toBe(0) // ASR skipped
+    expect(shared.textCalls).toBe(1) // analysis only
     const row = getTranscriptByRecordingId('rec3')!
     expect(row.full_text).toBe('PRE-EXISTING TRANSCRIPT')
     expect(row.summarization_provider).toBe('gemini')
@@ -301,10 +311,12 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     insertCapture('cap5', 'rec5', 'rec5.hda')
 
     // First run: title_suggestion is NULL -> rename happens.
+    // (Analysis only per run — 2-word transcript skips actionable detection.)
     shared.audioResponse = 'FULL TEXT'
-    shared.textResponses = [validAnalysisJson('First Title'), '[]']
+    shared.textResponses = [validAnalysisJson('First Title')]
     await transcribeManually('rec5')
 
+    expect(shared.textCalls).toBe(1)
     expect(queryOne<{ title: string }>("SELECT title FROM knowledge_captures WHERE id='cap5'")?.title).toBe(
       'First Title'
     )
@@ -313,7 +325,7 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     run("UPDATE transcripts SET summarization_provider=NULL WHERE recording_id='rec5'")
 
     // Second run with a NEW title -> rename must NOT happen (title_suggestion was non-NULL).
-    shared.textResponses = [validAnalysisJson('Second Title'), '[]']
+    shared.textResponses = [validAnalysisJson('Second Title')]
     await transcribeManually('rec5')
 
     expect(queryOne<{ title: string }>("SELECT title FROM knowledge_captures WHERE id='cap5'")?.title).toBe(
@@ -345,4 +357,37 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
       queryAll("SELECT id FROM actionables WHERE source_knowledge_id='cap6' AND status='pending'").length
     ).toBe(1)
   })
+
+  it('detection failure (LLM throws) does NOT wipe pre-existing pending actionables', async () => {
+    insertRecordingWithFile('rec7', { captureId: 'cap7' })
+    insertCapture('cap7', 'rec7', 'Existing Title')
+    // Pending actionable left over from an earlier successful run.
+    run(
+      `INSERT INTO actionables (id, source_knowledge_id, type, title, status, confidence, created_at)
+       VALUES ('act_pre', 'cap7', 'meeting_minutes', 'Pre-existing card', 'pending', 0.9, ?)`,
+      [new Date().toISOString()]
+    )
+
+    // Long transcript so detection actually RUNS — and its LLM call fails.
+    shared.audioResponse = LONG_TEXT
+    shared.textResponses = [validAnalysisJson('A'), '__LLM_THROW__']
+
+    // Actionable-detection failure is graceful: the job still completes.
+    await transcribeManually('rec7')
+    expect(getRecordingById('rec7')!.transcription_status).toBe('complete')
+
+    // detectActionables returned null (failed run) -> the delete-and-replace
+    // block is skipped entirely -> the pre-existing pending card SURVIVES.
+    expect(
+      queryAll("SELECT id FROM actionables WHERE source_knowledge_id='cap7' AND status='pending'").length
+    ).toBe(1)
+  })
+})
+
+afterAll(() => {
+  try {
+    fs.rmSync(shared.tmpDir, { recursive: true, force: true })
+  } catch {
+    /* ignore — Windows can hold handles briefly */
+  }
 })

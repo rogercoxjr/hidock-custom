@@ -264,12 +264,20 @@ interface ActionableDetection {
   suggestedRecipients?: string[]
 }
 
+/**
+ * Returns the detections, or `null` when the detection LLM call FAILED —
+ * distinct from `[]`, which means detection ran (or deliberately skipped a
+ * <100-word transcript) and there is nothing to create. The caller gates the
+ * pending-actionables delete-and-replace on a non-null return: a transient LLM
+ * failure must never wipe previously-created pending cards with nothing to
+ * replace them.
+ */
 async function detectActionables(
   llm: LlmProvider,
   transcriptText: string,
   knowledgeCaptureId: string,
   metadata: { title?: string; questions?: string[] }
-): Promise<ActionableDetection[]> {
+): Promise<ActionableDetection[] | null> {
   // Auto-pipeline P1 (spec §5.3): the LLM provider is constructed once in
   // Stage 2 and passed in here — its key check already happened at the factory.
   // The own GoogleGenerativeAI construction + key early-return are gone; a
@@ -332,7 +340,9 @@ Only include detections with confidence >= 0.6.`
     return filtered
   } catch (error) {
     console.error('[Actionable Detection] Failed:', error)
-    return [] // Fail gracefully
+    // Fail gracefully — null tells the caller the run FAILED (do not clear
+    // existing pending actionables), as opposed to [] = ran and found none.
+    return null
   }
 }
 
@@ -342,7 +352,8 @@ async function transcribeRecording(
 ): Promise<void> {
   const recording = getRecordingById(recordingId)
   if (!recording) {
-    throw new Error(`Recording not found or no local file: ${recordingId}`)
+    // 'Recording not found' must stay a substring — it is in NON_RETRYABLE_ERRORS.
+    throw new Error(`Recording not found: ${recordingId}`)
   }
 
   const config = getConfig()
@@ -375,7 +386,8 @@ async function transcribeRecording(
     // ===== Stage 1: ASR =====
     // File-existence checks are Stage-1-only (spec §5.3).
     if (!recording.file_path) {
-      throw new Error(`Recording not found or no local file: ${recordingId}`)
+      // 'no local file' must stay a substring — it is in NON_RETRYABLE_ERRORS.
+      throw new Error(`Recording has no local file: ${recordingId}`)
     }
     if (!existsSync(recording.file_path)) {
       throw new Error(`Recording file not found: ${recording.file_path}`)
@@ -411,7 +423,7 @@ Meeting ${i + 1}: "${m.subject}"
       language: asrResult.language,
       word_count: stage1WordCount,
       transcription_provider: config.transcription.provider,
-      transcription_model: config.transcription.geminiModel
+      transcription_model: config.transcription.geminiModel // P2 will derive this per ASR provider
     })
 
     progressCallback?.('analyzing', 50) // spec-014: progress reporting
@@ -589,46 +601,51 @@ Respond in JSON format:
       questions: analysis.question_suggestions
     })
 
-    // Delete-and-replace for PENDING rows only (spec §5.3, refined): clearing
-    // duplicates prevents the historical re-run append-duplication while leaving
-    // user-actioned (in_progress/generated/shared/dismissed) actionables intact.
-    run(
-      "DELETE FROM actionables WHERE source_knowledge_id = ? AND status = 'pending'",
-      [sourceKnowledgeId]
-    )
-
-    // Create actionable entries with TEXT IDs
-    const VALID_TEMPLATE_IDS = ['meeting_minutes', 'interview_feedback', 'project_status', 'action_items']
-
-    for (const detection of detections) {
-      const actionableId = `act_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-      // Sanitize template ID: fall back to 'meeting_minutes' if AI suggests an invalid one
-      const sanitizedTemplate = detection.suggestedTemplate && VALID_TEMPLATE_IDS.includes(detection.suggestedTemplate)
-        ? detection.suggestedTemplate
-        : 'meeting_minutes'
-
+    // Delete-and-replace for PENDING rows only (spec §5.3, refined), gated on a
+    // COMPLETED detection run (non-null): clearing duplicates prevents the
+    // historical re-run append-duplication while leaving user-actioned
+    // (in_progress/generated/shared/dismissed) actionables intact. A null
+    // return = the detection LLM call FAILED — skip the whole block so a
+    // transient failure never wipes pending cards with nothing to replace them.
+    if (detections !== null) {
       run(
-        `INSERT INTO actionables (
-          id, source_knowledge_id, type, title, description, status,
-          confidence, suggested_template, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          actionableId,
-          sourceKnowledgeId, // source_knowledge_id references knowledge_captures.id
-          detection.type,
-          detection.suggestedTitle,
-          detection.reason,
-          'pending',
-          detection.confidence,
-          sanitizedTemplate,
-          new Date().toISOString()
-        ]
+        "DELETE FROM actionables WHERE source_knowledge_id = ? AND status = 'pending'",
+        [sourceKnowledgeId]
       )
-    }
 
-    if (detections.length > 0) {
-      console.log(`[Actionable Detection] Created ${detections.length} actionables for ${recordingId}`)
+      // Create actionable entries with TEXT IDs
+      const VALID_TEMPLATE_IDS = ['meeting_minutes', 'interview_feedback', 'project_status', 'action_items']
+
+      for (const detection of detections) {
+        const actionableId = `act_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+        // Sanitize template ID: fall back to 'meeting_minutes' if AI suggests an invalid one
+        const sanitizedTemplate = detection.suggestedTemplate && VALID_TEMPLATE_IDS.includes(detection.suggestedTemplate)
+          ? detection.suggestedTemplate
+          : 'meeting_minutes'
+
+        run(
+          `INSERT INTO actionables (
+            id, source_knowledge_id, type, title, description, status,
+            confidence, suggested_template, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            actionableId,
+            sourceKnowledgeId, // source_knowledge_id references knowledge_captures.id
+            detection.type,
+            detection.suggestedTitle,
+            detection.reason,
+            'pending',
+            detection.confidence,
+            sanitizedTemplate,
+            new Date().toISOString()
+          ]
+        )
+      }
+
+      if (detections.length > 0) {
+        console.log(`[Actionable Detection] Created ${detections.length} actionables for ${recordingId}`)
+      }
     }
   } catch (error) {
     console.error('[Actionable Detection] Failed to create actionables:', error)

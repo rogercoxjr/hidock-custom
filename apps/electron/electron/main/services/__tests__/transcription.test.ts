@@ -24,7 +24,6 @@ vi.mock('../database', () => ({
   getRecordingById: (...args: any[]) => mockGetRecordingById(...args),
   updateRecordingStatus: (...args: any[]) => mockUpdateRecordingStatus(...args),
   updateRecordingTranscriptionStatus: (...args: any[]) => mockUpdateRecordingStatus(...args),
-  insertTranscript: vi.fn(),
   // Auto-pipeline P1 (spec §5.3): the two-stage worker now imports the stage-write
   // helpers. They are no-ops here — this test drives the *failure* path (Gemini
   // generateContent rejects at the Stage-1 ASR call), asserting only that the
