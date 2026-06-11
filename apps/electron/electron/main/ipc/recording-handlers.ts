@@ -238,7 +238,9 @@ export function registerRecordingHandlers(): void {
 
   // Transcribe a recording manually — routed through the queue (spec §5.7):
   // the direct transcribeManually call bypassed the mutex/retry machinery and
-  // could double-bill metered ASR by racing the queue processor.
+  // could double-bill metered ASR by racing the queue processor. Per-item
+  // transcription failures surface via transcription:failed events, not this
+  // promise — only infrastructure errors (lock/queue reads) reject it.
   ipcMain.handle('recordings:transcribe', async (_, recordingId: unknown): Promise<void> => {
     try {
       const result = TranscribeRecordingSchema.safeParse({ recordingId })

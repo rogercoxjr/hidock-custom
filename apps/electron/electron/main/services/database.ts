@@ -2451,8 +2451,12 @@ export interface QueueItem {
  *  items keep status='pending' (§7.2), so the dedupe covers them automatically.
  *  Terminal items (completed/failed/cancelled) do not block a fresh queue entry. */
 export function addToQueue(recordingId: string): string {
+  // ORDER matches getQueueItems' pick order (retry_count ASC, created_at ASC) so the
+  // returned id is the item the processor will actually run next — matters only for
+  // legacy duplicate rows that predate this dedupe (new duplicates can't form).
   const existing = queryOne<{ id: string }>(
-    "SELECT id FROM transcription_queue WHERE recording_id = ? AND status IN ('pending', 'processing') ORDER BY created_at DESC LIMIT 1",
+    "SELECT id FROM transcription_queue WHERE recording_id = ? AND status IN ('pending', 'processing') " +
+      'ORDER BY retry_count ASC, created_at ASC LIMIT 1',
     [recordingId]
   )
   if (existing) return existing.id

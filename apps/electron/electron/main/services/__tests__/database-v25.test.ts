@@ -279,6 +279,7 @@ describe('addToQueue dedupe (spec §5.7)', () => {
     const first = addToQueue('rec_q2')
     updateQueueItem(first, 'completed')
     const second = addToQueue('rec_q2')
+    expect(second).toBeTruthy()
     expect(second).not.toBe(first)
   })
 })
