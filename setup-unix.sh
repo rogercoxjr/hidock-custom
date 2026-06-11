@@ -176,20 +176,6 @@ if command -v node > /dev/null 2>&1; then
             echo "✅ Web app setup complete!"
             cd ../desktop
         fi
-
-        echo "Setting up Audio Insights Extractor..."
-        cd ../audio-insights || {
-            echo "⚠️  WARNING: Failed to navigate to apps/audio-insights"
-            WEB_APP_READY=false
-        }
-        if [ "$WEB_APP_READY" != false ]; then
-            npm install || {
-                echo "⚠️  WARNING: Audio Insights Extractor setup failed"
-                WEB_APP_READY=false
-            }
-            echo "✅ Audio Insights Extractor setup complete!"
-            cd ../desktop
-        fi
     else
         echo "⚠️  Node.js version $NODE_VERSION found, but 18+ required"
         echo "Update Node.js if you want the web apps"
@@ -228,20 +214,6 @@ else
                         WEB_APP_READY=false
                     }
                     echo "✅ Web app setup complete!"
-                    cd ../desktop
-                fi
-
-                echo "Setting up Audio Insights Extractor..."
-                cd ../audio-insights || {
-                    echo "⚠️  WARNING: Failed to navigate to apps/audio-insights"
-                    WEB_APP_READY=false
-                }
-                if [ "$WEB_APP_READY" != false ]; then
-                    npm install || {
-                        echo "⚠️  WARNING: Audio Insights Extractor setup failed"
-                        WEB_APP_READY=false
-                    }
-                    echo "✅ Audio Insights Extractor setup complete!"
                     cd ../desktop
                 fi
             else

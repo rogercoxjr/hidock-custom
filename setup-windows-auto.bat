@@ -86,15 +86,6 @@ if errorlevel 1 (
     echo Web app setup complete!
 )
 cd ..\..
-echo Setting up Audio Insights Extractor...
-cd apps\audio-insights
-call npm install
-if errorlevel 1 (
-    echo WARNING: Audio Insights Extractor setup failed
-) else (
-    echo Audio Insights Extractor setup complete!
-)
-cd ..\..
 goto afterweb
 
 :njsfail
