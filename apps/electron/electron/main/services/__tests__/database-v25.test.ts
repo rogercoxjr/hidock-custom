@@ -67,7 +67,7 @@ vi.mock('../file-storage', () => ({
   getDatabasePath: vi.fn(() => shared.dbPath),
   getRecordingsPath: vi.fn(() => shared.tmpDir),
   getCachePath: vi.fn(() => os.tmpdir()),
-  saveRecording: vi.fn(async (filename: string, data: Buffer) => {
+  saveRecording: vi.fn(async (filename: string, _data: Buffer) => {
     return path.join(shared.tmpDir, filename)
   })
 }))
