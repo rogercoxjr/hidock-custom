@@ -2327,10 +2327,19 @@ export function upsertTranscriptStage1(t: {
 
 /**
  * Stage 2 write (auto-pipeline spec §5.3): one atomic UPDATE that sets the
- * analysis content AND the stage marker (summarization_provider). The marker
- * is written nowhere else. language uses COALESCE so an ASR-provided value
- * (whisper verbose_json) is never overwritten; Gemini rows (Stage-1 NULL)
- * receive the analysis language — identical to today's behavior.
+ * analysis content AND the stage marker (summarization_provider). No other
+ * runtime path writes the marker (the v25 migration backfill is the one-time
+ * exception). language uses COALESCE so an ASR-provided value (whisper
+ * verbose_json) is never overwritten; Gemini rows (Stage-1 NULL) receive the
+ * analysis language — identical to today's behavior.
+ *
+ * NOTE: this is a full REPLACE of the analysis columns, not a patch — every
+ * omitted optional field is written as NULL. Callers must pass the complete
+ * analysis result; do not use this for partial updates.
+ *
+ * Throws if no transcript row exists for the recording (Stage 2 must always
+ * follow a Stage-1 upsert or a resume pre-read; a 0-row update here would
+ * otherwise let a recording be marked 'complete' with no analysis).
  */
 export function updateTranscriptStage2(recordingId: string, fields: {
   summary?: string
@@ -2343,6 +2352,15 @@ export function updateTranscriptStage2(recordingId: string, fields: {
   summarization_provider: string
   summarization_model?: string
 }): void {
+  // Existence guard (not getRowsModified(): the run() helper auto-persists
+  // after each statement, which resets sql.js's modification counter).
+  const existing = queryOne<{ id: string }>(
+    'SELECT id FROM transcripts WHERE recording_id = ?',
+    [recordingId]
+  )
+  if (!existing) {
+    throw new Error(`updateTranscriptStage2: no transcript row for recording ${recordingId}`)
+  }
   run(
     `UPDATE transcripts SET
        summary = ?, action_items = ?, topics = ?, key_points = ?,
