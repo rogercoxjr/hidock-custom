@@ -84,7 +84,9 @@ import {
   closeDatabase,
   queryAll,
   queryOne,
-  run
+  run,
+  upsertTranscriptStage1,
+  updateTranscriptStage2
 } from '../database'
 
 // ---------------------------------------------------------------------------
@@ -168,5 +170,76 @@ describe('schema v25 (auto-pipeline P1)', () => {
       "SELECT summarization_provider FROM transcripts WHERE recording_id='rec_legacy_null'")
     expect(ok?.summarization_provider).toBe('gemini')
     expect(nul?.summarization_provider).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Task 2: Stage-write functions
+// ---------------------------------------------------------------------------
+
+describe('stage-write functions', () => {
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('upsertTranscriptStage1 inserts and never touches Stage-2 columns on conflict', () => {
+    insertTestRecording('rec_s1')
+    upsertTranscriptStage1({
+      recording_id: 'rec_s1', full_text: 'v1 text', language: undefined,
+      word_count: 2, transcription_provider: 'gemini', transcription_model: 'gemini-2.0-flash-exp'
+    })
+    // Simulate Stage 2 having completed:
+    run(`UPDATE transcripts SET summary='S', summarization_provider='gemini' WHERE recording_id='rec_s1'`)
+    // A re-run of Stage 1 (e.g. explicit re-transcribe) must keep Stage-2 columns intact:
+    upsertTranscriptStage1({
+      recording_id: 'rec_s1', full_text: 'v2 text', language: 'en',
+      word_count: 2, transcription_provider: 'gemini', transcription_model: 'gemini-2.0-flash-exp'
+    })
+    const row = queryOne<{ full_text: string; summary: string; summarization_provider: string; id: string }>(
+      "SELECT id, full_text, summary, summarization_provider FROM transcripts WHERE recording_id='rec_s1'")
+    expect(row?.full_text).toBe('v2 text')
+    expect(row?.summary).toBe('S')                       // untouched
+    expect(row?.summarization_provider).toBe('gemini')   // untouched
+    expect(row?.id).toBe('trans_rec_s1')                 // id rule preserved
+  })
+
+  it('updateTranscriptStage2 writes content + marker atomically and COALESCEs language', () => {
+    insertTestRecording('rec_s2')
+    upsertTranscriptStage1({
+      recording_id: 'rec_s2', full_text: 'hello world', language: undefined,
+      word_count: 2, transcription_provider: 'gemini', transcription_model: 'm'
+    })
+    updateTranscriptStage2('rec_s2', {
+      summary: 'sum', action_items: '["a"]', topics: '["t"]', key_points: '["k"]',
+      title_suggestion: 'Title', question_suggestions: '["q?"]', language: 'en',
+      summarization_provider: 'gemini', summarization_model: 'm'
+    })
+    const row = queryOne<Record<string, string>>("SELECT * FROM transcripts WHERE recording_id='rec_s2'")
+    expect(row?.summary).toBe('sum')
+    expect(row?.summarization_provider).toBe('gemini')
+    expect(row?.language).toBe('en')   // was NULL from Stage 1 -> analysis language wins
+  })
+
+  it('updateTranscriptStage2 does not overwrite an ASR-provided language', () => {
+    insertTestRecording('rec_s3')
+    upsertTranscriptStage1({
+      recording_id: 'rec_s3', full_text: 'hola', language: 'es',
+      word_count: 1, transcription_provider: 'openai-whisper', transcription_model: 'whisper-1'
+    })
+    updateTranscriptStage2('rec_s3', {
+      summary: 's', language: 'en', summarization_provider: 'gemini', summarization_model: 'm'
+    })
+    const row = queryOne<{ language: string }>("SELECT language FROM transcripts WHERE recording_id='rec_s3'")
+    expect(row?.language).toBe('es')   // COALESCE keeps the ASR value
   })
 })

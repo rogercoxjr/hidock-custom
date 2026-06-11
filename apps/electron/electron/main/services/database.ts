@@ -2288,6 +2288,84 @@ export function insertTranscript(transcript: Omit<Transcript, 'created_at'>): vo
 }
 
 /**
+ * Stage 1 write (auto-pipeline spec §5.3): persist ASR output without ever
+ * touching Stage-2 (analysis) columns. The conflict target is the UNIQUE
+ * recording_id; id keeps the existing `trans_${recordingId}` rule.
+ * NOTE: language inserts as NULL when the ASR doesn't supply one (Gemini path) —
+ * Stage 2 fills it via COALESCE. The schema DEFAULT 'es' applies only when the
+ * column is omitted, which this INSERT never does.
+ */
+export function upsertTranscriptStage1(t: {
+  recording_id: string
+  full_text: string
+  language?: string
+  word_count?: number
+  transcription_provider: string
+  transcription_model?: string
+}): void {
+  run(
+    `INSERT INTO transcripts (id, recording_id, full_text, language, word_count,
+       transcription_provider, transcription_model)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(recording_id) DO UPDATE SET
+       full_text = excluded.full_text,
+       language = COALESCE(excluded.language, transcripts.language),
+       word_count = excluded.word_count,
+       transcription_provider = excluded.transcription_provider,
+       transcription_model = excluded.transcription_model`,
+    [
+      `trans_${t.recording_id}`,
+      t.recording_id,
+      t.full_text,
+      t.language ?? null,
+      t.word_count ?? null,
+      t.transcription_provider,
+      t.transcription_model ?? null
+    ]
+  )
+}
+
+/**
+ * Stage 2 write (auto-pipeline spec §5.3): one atomic UPDATE that sets the
+ * analysis content AND the stage marker (summarization_provider). The marker
+ * is written nowhere else. language uses COALESCE so an ASR-provided value
+ * (whisper verbose_json) is never overwritten; Gemini rows (Stage-1 NULL)
+ * receive the analysis language — identical to today's behavior.
+ */
+export function updateTranscriptStage2(recordingId: string, fields: {
+  summary?: string
+  action_items?: string
+  topics?: string
+  key_points?: string
+  title_suggestion?: string
+  question_suggestions?: string
+  language?: string
+  summarization_provider: string
+  summarization_model?: string
+}): void {
+  run(
+    `UPDATE transcripts SET
+       summary = ?, action_items = ?, topics = ?, key_points = ?,
+       title_suggestion = ?, question_suggestions = ?,
+       language = COALESCE(language, ?),
+       summarization_provider = ?, summarization_model = ?
+     WHERE recording_id = ?`,
+    [
+      fields.summary ?? null,
+      fields.action_items ?? null,
+      fields.topics ?? null,
+      fields.key_points ?? null,
+      fields.title_suggestion ?? null,
+      fields.question_suggestions ?? null,
+      fields.language ?? null,
+      fields.summarization_provider,
+      fields.summarization_model ?? null,
+      recordingId
+    ]
+  )
+}
+
+/**
  * Escape special LIKE pattern characters to prevent SQL injection via wildcards.
  * In SQLite LIKE, % matches any sequence and _ matches any single character.
  * We escape them with \ and specify ESCAPE '\' in the query.
