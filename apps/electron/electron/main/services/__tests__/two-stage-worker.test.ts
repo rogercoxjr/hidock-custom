@@ -152,7 +152,8 @@ import {
   run,
   getRecordingById,
   getTranscriptByRecordingId,
-  upsertTranscriptStage1
+  upsertTranscriptStage1,
+  clearTranscriptStage2Marker
 } from '../database'
 import { transcribeManually } from '../transcription'
 
@@ -257,6 +258,19 @@ const analysisWithMeeting = (selectedId: unknown, confidence: unknown) =>
 const validAnalysisJson = (title = 'T') =>
   JSON.stringify({
     summary: 'S',
+    action_items: [],
+    topics: [],
+    key_points: [],
+    title_suggestion: title,
+    question_suggestions: [],
+    language: 'en'
+  })
+
+/** Analysis JSON with caller-chosen summary + title (resummarize tests need a
+ *  DIFFERENT summary on the second run than the first to prove replacement). */
+const analysisJson = (summary: string, title: string) =>
+  JSON.stringify({
+    summary,
     action_items: [],
     topics: [],
     key_points: [],
@@ -570,6 +584,72 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     expect(row.summarization_provider).toBeNull() // Stage 2 never completed -> resumable
     expect(row.summary ?? null).toBeNull()
     expect(shared.audioCalls).toBe(1) // ASR ran exactly once
+  })
+
+  // -------------------------------------------------------------------------
+  // Task 4 (auto-pipeline P3, spec §5.3/§5.6 -> AC6): resummarize via
+  // clearTranscriptStage2Marker — regenerate Stage 2 with the audio file gone,
+  // keep full_text, replace the summary, no duplicate actionables, no re-rename,
+  // and survive an intermediate failed re-run with the OLD summary intact.
+  // -------------------------------------------------------------------------
+
+  it('resummarize: marker-clear re-runs Stage 2 only (audio deleted) — replaces summary, no duplicate actionables, no re-rename, keeps old summary on a failed re-run', async () => {
+    const filePath = insertRecordingWithFile('recRS', { captureId: 'capRS' })
+    insertCapture('capRS', 'recRS', 'recRS.hda') // filename-shaped title -> auto-rename eligible
+
+    // First full run (long transcript so detectActionables RUNS): writes the
+    // original summary + ONE pending actionable, and renames the capture (the
+    // pre-run title_suggestion was NULL).
+    shared.audioResponse = LONG_TEXT
+    shared.textResponses = [analysisJson('ORIGINAL SUMMARY', 'First Title'), oneActionableJson()]
+    await transcribeManually('recRS')
+
+    expect(getTranscriptByRecordingId('recRS')!.summary).toBe('ORIGINAL SUMMARY')
+    expect(getTranscriptByRecordingId('recRS')!.full_text).toBe(LONG_TEXT)
+    expect(getRecordingById('recRS')!.transcription_status).toBe('complete')
+    expect(
+      queryAll("SELECT id FROM actionables WHERE source_knowledge_id='capRS' AND status='pending'").length
+    ).toBe(1)
+    expect(queryOne<{ title: string }>("SELECT title FROM knowledge_captures WHERE id='capRS'")?.title).toBe(
+      'First Title' // renamed on the first run
+    )
+
+    // Delete the audio file — resummarize must work with no local audio (Stage 2
+    // needs only full_text). The Stage-1 file-existence check is Stage-1-only.
+    fs.rmSync(filePath)
+    shared.audioCalls = 0
+    shared.textCalls = 0
+
+    // --- Intermediate FAILED re-run: clear marker, make Stage 2 throw. The old
+    //     summary must survive and the marker must stay NULL (resumable). ---
+    clearTranscriptStage2Marker('recRS')
+    expect(getTranscriptByRecordingId('recRS')!.summarization_provider).toBeNull() // marker cleared
+    expect(getTranscriptByRecordingId('recRS')!.summary).toBe('ORIGINAL SUMMARY') // summary kept across the clear
+    shared.textResponses = ['no json here at all'] // analysis call -> extraction failure
+    await expect(transcribeManually('recRS')).rejects.toThrow(/extraction/i)
+
+    const afterFail = getTranscriptByRecordingId('recRS')!
+    expect(afterFail.summary).toBe('ORIGINAL SUMMARY') // OLD summary survived the failed re-run
+    expect(afterFail.summarization_provider).toBeNull() // still resumable
+    expect(shared.audioCalls).toBe(0) // ASR never ran — Stage-2-only resume
+
+    // --- Successful re-run: NEW summary + NEW title. Summary is replaced; the
+    //     capture is NOT re-renamed (title_suggestion was non-NULL); the single
+    //     actionable is delete-and-replaced (still exactly one). ---
+    shared.textResponses = [analysisJson('NEW SUMMARY', 'Second Title'), oneActionableJson()]
+    await transcribeManually('recRS')
+
+    const afterOk = getTranscriptByRecordingId('recRS')!
+    expect(afterOk.full_text).toBe(LONG_TEXT) // full_text untouched by Stage 2
+    expect(afterOk.summary).toBe('NEW SUMMARY') // summary regenerated with the current provider
+    expect(afterOk.summarization_provider).toBe('gemini') // marker re-set
+    expect(shared.audioCalls).toBe(0) // ASR still never ran (audio gone, not needed)
+    expect(
+      queryAll("SELECT id FROM actionables WHERE source_knowledge_id='capRS' AND status='pending'").length
+    ).toBe(1) // delete-and-replace -> no duplicate
+    expect(queryOne<{ title: string }>("SELECT title FROM knowledge_captures WHERE id='capRS'")?.title).toBe(
+      'First Title' // NOT re-renamed — title_suggestion was non-NULL before this run
+    )
   })
 })
 

@@ -286,79 +286,109 @@ describe('Database Service', () => {
   })
 
   // =========================================================================
-  // 3. insertTranscript
+  // 3. Sanctioned transcript writers (the stage pair)
+  // -------------------------------------------------------------------------
+  // Realigned per auto-pipeline P3 (spec §5.3 single-writer rule / P1 carry-note
+  // #4): the former `insertTranscript` (INSERT OR REPLACE — would clobber the
+  // Stage-2 stage marker) was removed. The only sanctioned writers are now the
+  // stage pair: upsertTranscriptStage1 (Stage 1, never touches Stage-2 columns)
+  // and updateTranscriptStage2 (Stage 2, writes the marker atomically).
   // =========================================================================
-  describe('insertTranscript()', () => {
-    it('should execute INSERT OR REPLACE with all transcript fields', async () => {
+  describe('upsertTranscriptStage1()', () => {
+    it('should INSERT ... ON CONFLICT and never reference Stage-2 columns', async () => {
       const dbModule = await initTestDatabase()
       mockDatabase.run.mockClear()
 
-      const transcript = {
-        id: 'tx-1',
+      dbModule.upsertTranscriptStage1({
         recording_id: 'rec-123',
         full_text: 'Hello world transcript text',
         language: 'en',
-        summary: 'A greeting',
-        action_items: '["say hi"]',
-        topics: '["greetings"]',
-        key_points: '["hello"]',
-        sentiment: 'positive',
-        speakers: '["Alice", "Bob"]',
         word_count: 4,
         transcription_provider: 'gemini',
-        transcription_model: 'gemini-2.0-flash',
-        title_suggestion: 'Greeting Session',
-        question_suggestions: '["How are you?"]'
-      }
-
-      dbModule.insertTranscript(transcript)
+        transcription_model: 'gemini-2.0-flash'
+      })
 
       const runCalls = mockDatabase.run.mock.calls
       const insertCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT OR REPLACE INTO transcripts')
+        (call: any[]) =>
+          typeof call[0] === 'string' &&
+          call[0].includes('INSERT INTO transcripts') &&
+          call[0].includes('ON CONFLICT(recording_id)')
       )
-
       expect(insertCall).toBeDefined()
+      const sql = insertCall![0] as string
+      // Stage 1 must NEVER write the Stage-2 stage marker or summary content.
+      expect(sql).not.toContain('summarization_provider')
+      expect(sql).not.toContain('summary')
+
       const params = insertCall![1] as any[]
-      expect(params[0]).toBe('tx-1')
+      expect(params[0]).toBe('trans_rec-123') // id rule preserved
       expect(params[1]).toBe('rec-123')
       expect(params[2]).toBe('Hello world transcript text')
-      expect(params[3]).toBe('en')
-      expect(params[4]).toBe('A greeting')
     })
 
-    it('should pass null for optional fields when undefined', async () => {
+    it('should pass null for language/word_count/model when omitted', async () => {
       const dbModule = await initTestDatabase()
       mockDatabase.run.mockClear()
 
-      const minimalTranscript = {
-        id: 'tx-2',
+      dbModule.upsertTranscriptStage1({
         recording_id: 'rec-456',
         full_text: 'Some text',
-        language: 'es'
-      }
+        transcription_provider: 'openai-whisper'
+      })
 
-      dbModule.insertTranscript(minimalTranscript)
-
-      const runCalls = mockDatabase.run.mock.calls
-      const insertCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT OR REPLACE INTO transcripts')
+      const insertCall = mockDatabase.run.mock.calls.find(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT INTO transcripts')
       )
       expect(insertCall).toBeDefined()
-
       const params = insertCall![1] as any[]
-      // Optional fields should be null (indices 4-14)
-      expect(params[4]).toBeNull()  // summary
-      expect(params[5]).toBeNull()  // action_items
-      expect(params[6]).toBeNull()  // topics
-      expect(params[7]).toBeNull()  // key_points
-      expect(params[8]).toBeNull()  // sentiment
-      expect(params[9]).toBeNull()  // speakers
-      expect(params[10]).toBeNull() // word_count
-      expect(params[11]).toBeNull() // transcription_provider
-      expect(params[12]).toBeNull() // transcription_model
-      expect(params[13]).toBeNull() // title_suggestion
-      expect(params[14]).toBeNull() // question_suggestions
+      expect(params[3]).toBeNull() // language
+      expect(params[4]).toBeNull() // word_count
+      expect(params[6]).toBeNull() // transcription_model
+    })
+  })
+
+  describe('updateTranscriptStage2()', () => {
+    it('should UPDATE the marker + content atomically when a transcript row exists', async () => {
+      const dbModule = await initTestDatabase()
+      // Existence guard reads a row via queryOne -> make it return one.
+      setQueryResults([{ id: 'trans_rec-123' }])
+      mockDatabase.run.mockClear()
+
+      dbModule.updateTranscriptStage2('rec-123', {
+        summary: 'A greeting',
+        action_items: '["say hi"]',
+        title_suggestion: 'Greeting Session',
+        language: 'en',
+        summarization_provider: 'gemini',
+        summarization_model: 'gemini-2.0-flash'
+      })
+
+      const updateCall = mockDatabase.run.mock.calls.find(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('UPDATE transcripts SET')
+      )
+      expect(updateCall).toBeDefined()
+      const sql = updateCall![0] as string
+      expect(sql).toContain('summarization_provider = ?')
+      expect(sql).toContain('COALESCE(language, ?)') // ASR language ownership
+    })
+
+    it('should throw (no UPDATE) when no transcript row exists', async () => {
+      const dbModule = await initTestDatabase()
+      setQueryResults([]) // existence guard finds nothing
+      mockDatabase.run.mockClear()
+
+      expect(() =>
+        dbModule.updateTranscriptStage2('rec-missing', {
+          summary: 's',
+          summarization_provider: 'gemini'
+        })
+      ).toThrow(/no transcript row for recording rec-missing/)
+
+      const updateCall = mockDatabase.run.mock.calls.find(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('UPDATE transcripts SET')
+      )
+      expect(updateCall).toBeUndefined() // guard fired before any UPDATE
     })
   })
 

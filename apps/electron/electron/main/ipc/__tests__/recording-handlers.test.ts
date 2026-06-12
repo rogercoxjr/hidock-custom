@@ -30,7 +30,8 @@ vi.mock('../../services/database', () => ({
   insertRecording: vi.fn(),
   getQueueItems: vi.fn(),
   addToQueue: vi.fn(),
-  updateQueueItem: vi.fn()
+  updateQueueItem: vi.fn(),
+  clearTranscriptStage2Marker: vi.fn()
 }))
 
 // Mock file-storage service
@@ -200,7 +201,8 @@ describe('Recording IPC Handlers', () => {
       'transcription:retry',
       'recordings:updateStatus',
       'recordings:updateTranscriptionStatus',
-      'transcription:validateConfig'
+      'transcription:validateConfig',
+      'transcription:resummarize'
     ]
 
     for (const channel of expectedChannels) {
@@ -1035,6 +1037,47 @@ describe('Recording IPC Handlers', () => {
         { stage: 'asr', provider: 'gemini', problem: 'missing-key' }
       ])
       expect(result.problems.filter((p) => p.provider === 'gemini')).toHaveLength(1)
+    })
+  })
+
+  describe('transcription:resummarize', () => {
+    // spec §5.3/§5.6: clears the stage marker (keeping the old summary) and
+    // enqueues — the worker's resume rule runs Stage 2 only.
+    it('clears the stage marker, enqueues, and triggers the queue processor', async () => {
+      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+
+      const result = await handlers['transcription:resummarize'](null, recId)
+
+      expect(clearTranscriptStage2Marker).toHaveBeenCalledWith(recId)
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(processQueueManually).toHaveBeenCalled()
+      expect(result).toEqual({ success: true })
+    })
+
+    it('returns an error shape (not a throw) for an invalid recording ID', async () => {
+      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+
+      const result = await handlers['transcription:resummarize'](null, 'bad-id')
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBeTruthy()
+      expect(clearTranscriptStage2Marker).not.toHaveBeenCalled()
+      expect(addToQueue).not.toHaveBeenCalled()
+    })
+
+    it('surfaces a clear-marker failure as an error result', async () => {
+      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+      vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => {
+        throw new Error('no transcript row for recording')
+      })
+
+      const result = await handlers['transcription:resummarize'](null, recId)
+
+      expect(result).toEqual({ success: false, error: 'no transcript row for recording' })
+      expect(addToQueue).not.toHaveBeenCalled()
     })
   })
 })

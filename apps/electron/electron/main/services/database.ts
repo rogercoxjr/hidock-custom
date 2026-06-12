@@ -2261,31 +2261,12 @@ export function getTranscriptsByRecordingIds(recordingIds: string[]): Map<string
   return results
 }
 
-export function insertTranscript(transcript: Omit<Transcript, 'created_at'>): void {
-  run(
-    `INSERT OR REPLACE INTO transcripts (id, recording_id, full_text, language, summary, action_items,
-      topics, key_points, sentiment, speakers, word_count, transcription_provider, transcription_model,
-      title_suggestion, question_suggestions)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      transcript.id,
-      transcript.recording_id,
-      transcript.full_text,
-      transcript.language,
-      transcript.summary ?? null,
-      transcript.action_items ?? null,
-      transcript.topics ?? null,
-      transcript.key_points ?? null,
-      transcript.sentiment ?? null,
-      transcript.speakers ?? null,
-      transcript.word_count ?? null,
-      transcript.transcription_provider ?? null,
-      transcript.transcription_model ?? null,
-      transcript.title_suggestion ?? null,
-      transcript.question_suggestions ?? null
-    ]
-  )
-}
+// NOTE (auto-pipeline P3, spec §5.3 single-writer rule / P1 carry-note #4):
+// the former `insertTranscript` (INSERT OR REPLACE on UNIQUE recording_id) was
+// removed. It silently clobbered the Stage-2 stage marker, so any future caller
+// would have wiped a completed summary. The only sanctioned transcript writers
+// are the stage pair: `upsertTranscriptStage1` (Stage 1, never touches Stage-2
+// columns) and `updateTranscriptStage2` (Stage 2, writes the marker atomically).
 
 /**
  * Stage 1 write (auto-pipeline spec §5.3): persist ASR output without ever
@@ -2381,6 +2362,17 @@ export function updateTranscriptStage2(recordingId: string, fields: {
       recordingId
     ]
   )
+}
+
+/** Resummarize support (spec §5.3): clears ONLY the stage marker so the worker's
+ *  resume rule re-runs Stage 2 with the currently configured LLM. The old summary
+ *  is deliberately KEPT until the new one lands — a failed re-run must not lose data. */
+export function clearTranscriptStage2Marker(recordingId: string): void {
+  const existing = queryOne<{ id: string }>('SELECT id FROM transcripts WHERE recording_id = ?', [recordingId])
+  if (!existing) {
+    throw new Error(`clearTranscriptStage2Marker: no transcript row for recording ${recordingId}`)
+  }
+  run('UPDATE transcripts SET summarization_provider = NULL, summarization_model = NULL WHERE recording_id = ?', [recordingId])
 }
 
 /**

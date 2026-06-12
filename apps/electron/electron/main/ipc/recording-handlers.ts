@@ -30,7 +30,7 @@ import {
   cancelAllTranscriptions,
   processQueueManually
 } from '../services/transcription'
-import { getQueueItems, addToQueue, updateQueueItem } from '../services/database'
+import { getQueueItems, addToQueue, updateQueueItem, clearTranscriptStage2Marker } from '../services/database'
 import { getConfig } from '../services/config'
 import {
   GetRecordingByIdSchema,
@@ -364,6 +364,22 @@ export function registerRecordingHandlers(): void {
     problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }>
   }> => {
     return validateTranscriptionConfig()
+  })
+
+  // Re-summarize (spec §5.3/§5.6): clear the stage marker (keeping the old summary)
+  // and enqueue — the worker's resume rule runs Stage 2 only, no audio file needed.
+  ipcMain.handle('transcription:resummarize', async (_, recordingId: unknown): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const result = TranscribeRecordingSchema.safeParse({ recordingId })
+      if (!result.success) throw new Error(result.error.issues[0]?.message || 'Invalid request')
+      clearTranscriptStage2Marker(result.data.recordingId)
+      addToQueue(result.data.recordingId)
+      void processQueueManually()
+      return { success: true }
+    } catch (error) {
+      console.error('transcription:resummarize error:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
   })
 
   ipcMain.handle('transcription:getQueue', async (): Promise<any[]> => {

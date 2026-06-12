@@ -87,6 +87,7 @@ import {
   run,
   upsertTranscriptStage1,
   updateTranscriptStage2,
+  clearTranscriptStage2Marker,
   addToQueue,
   updateQueueItem
 } from '../database'
@@ -243,6 +244,61 @@ describe('stage-write functions', () => {
     })
     const row = queryOne<{ language: string }>("SELECT language FROM transcripts WHERE recording_id='rec_s3'")
     expect(row?.language).toBe('es')   // COALESCE keeps the ASR value
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Task 4 (auto-pipeline P3, spec §5.3): clearTranscriptStage2Marker
+// ---------------------------------------------------------------------------
+
+describe('clearTranscriptStage2Marker (spec §5.3)', () => {
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('NULLs only the stage marker columns and leaves summary + other analysis columns untouched', () => {
+    insertTestRecording('rec_clr')
+    upsertTranscriptStage1({
+      recording_id: 'rec_clr', full_text: 'kept text', language: 'en',
+      word_count: 2, transcription_provider: 'gemini', transcription_model: 'm'
+    })
+    updateTranscriptStage2('rec_clr', {
+      summary: 'kept summary', action_items: '["a"]', topics: '["t"]', key_points: '["k"]',
+      title_suggestion: 'Kept Title', question_suggestions: '["q?"]', language: 'en',
+      summarization_provider: 'gemini', summarization_model: 'm'
+    })
+
+    clearTranscriptStage2Marker('rec_clr')
+
+    const row = queryOne<Record<string, string | null>>(
+      "SELECT * FROM transcripts WHERE recording_id='rec_clr'")
+    // ONLY the stage marker is cleared:
+    expect(row?.summarization_provider).toBeNull()
+    expect(row?.summarization_model).toBeNull()
+    // Everything else survives (the old summary must NOT be lost):
+    expect(row?.full_text).toBe('kept text')
+    expect(row?.summary).toBe('kept summary')
+    expect(row?.action_items).toBe('["a"]')
+    expect(row?.topics).toBe('["t"]')
+    expect(row?.key_points).toBe('["k"]')
+    expect(row?.title_suggestion).toBe('Kept Title')
+    expect(row?.question_suggestions).toBe('["q?"]')
+  })
+
+  it('throws when no transcript row exists for the recording (consistent with updateTranscriptStage2)', () => {
+    expect(() => clearTranscriptStage2Marker('rec_missing')).toThrow(
+      /no transcript row for recording rec_missing/
+    )
   })
 })
 
