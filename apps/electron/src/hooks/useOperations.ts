@@ -29,21 +29,22 @@ export function useOperations() {
       return false
     }
 
-    // Check if API key is configured before queuing
+    // Provider-aware preflight (spec §5.6) — replaces the hardcoded Gemini gate
+    // so a Whisper+Ollama user can queue/retry without a Gemini key.
     try {
-      const result = await window.electronAPI.config.getValue('transcription.geminiApiKey')
-      const apiKey = result?.success ? result.data : null
-      if (!apiKey || (typeof apiKey === 'string' && apiKey.trim() === '')) {
+      const check = await window.electronAPI.recordings.validateTranscriptionConfig()
+      if (!check.ok) {
+        const p = check.problems[0]
         toast({
           title: 'API key required',
-          description: 'Please configure your Gemini API key in Settings before transcribing.',
+          description: `Configure your ${p.provider} API key in Settings before transcribing.`,
           variant: 'error'
         })
         return false
       }
     } catch (e) {
-      console.error('Failed to check API key:', e)
-      toast({ title: 'Configuration error', description: 'Could not verify API key configuration', variant: 'error' })
+      console.error('Failed to validate transcription config:', e)
+      toast({ title: 'Configuration error', description: 'Could not verify provider configuration', variant: 'error' })
       return false
     }
 
@@ -73,21 +74,22 @@ export function useOperations() {
       return 0
     }
 
-    // Check if API key is configured before queuing
+    // Provider-aware preflight (spec §5.6) — replaces the hardcoded Gemini gate
+    // so a Whisper+Ollama user can queue/retry without a Gemini key.
     try {
-      const result = await window.electronAPI.config.getValue('transcription.geminiApiKey')
-      const apiKey = result?.success ? result.data : null
-      if (!apiKey || (typeof apiKey === 'string' && apiKey.trim() === '')) {
+      const check = await window.electronAPI.recordings.validateTranscriptionConfig()
+      if (!check.ok) {
+        const p = check.problems[0]
         toast({
           title: 'API key required',
-          description: 'Please configure your Gemini API key in Settings before transcribing.',
+          description: `Configure your ${p.provider} API key in Settings before transcribing.`,
           variant: 'error'
         })
         return 0
       }
     } catch (e) {
-      console.error('Failed to check API key:', e)
-      toast({ title: 'Configuration error', description: 'Could not verify API key configuration', variant: 'error' })
+      console.error('Failed to validate transcription config:', e)
+      toast({ title: 'Configuration error', description: 'Could not verify provider configuration', variant: 'error' })
       return 0
     }
 

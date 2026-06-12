@@ -315,6 +315,36 @@ export function registerRecordingHandlers(): void {
     }
   })
 
+  // Provider-aware preflight (spec §5.6): which selected providers lack keys.
+  // Replaces the renderer's hardcoded Gemini-key gates (useOperations).
+  ipcMain.handle('transcription:validateConfig', async (): Promise<{
+    ok: boolean
+    // Union per spec §5.6. Only 'missing-key' is emitted by the preflight in v1 —
+    // 'rejected-key' is detected at call time (§7.1 ProviderAuthError) and via the
+    // Settings Test button; the type carries it so consumers handle both.
+    problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }>
+  }> => {
+    const config = getConfig()
+    const problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }> = []
+    const asrProvider = config.transcription.provider
+    if (asrProvider === 'openai-whisper' && !config.transcription.openaiApiKey.trim()) {
+      problems.push({ stage: 'asr', provider: 'openai-whisper', problem: 'missing-key' })
+    }
+    if (asrProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
+      problems.push({ stage: 'asr', provider: 'gemini', problem: 'missing-key' })
+    }
+    // Summarization stage: P2 ships gemini-only (config.summarization lands in P3 —
+    // mirror llm-provider.ts's structural read until then).
+    const sumProvider =
+      (config as { summarization?: { provider?: string } }).summarization?.provider ?? 'gemini'
+    if (sumProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
+      if (!problems.some((p) => p.provider === 'gemini')) {
+        problems.push({ stage: 'summarization', provider: 'gemini', problem: 'missing-key' })
+      }
+    }
+    return { ok: problems.length === 0, problems }
+  })
+
   ipcMain.handle('transcription:getQueue', async (): Promise<any[]> => {
     try {
       return getQueueItems()

@@ -199,7 +199,8 @@ describe('Recording IPC Handlers', () => {
       'recordings:processQueue',
       'transcription:retry',
       'recordings:updateStatus',
-      'recordings:updateTranscriptionStatus'
+      'recordings:updateTranscriptionStatus',
+      'transcription:validateConfig'
     ]
 
     for (const channel of expectedChannels) {
@@ -879,6 +880,50 @@ describe('Recording IPC Handlers', () => {
       const result = await handlers['recordings:processQueue'](null)
 
       expect(result).toBe(false)
+    })
+  })
+
+  describe('transcription:validateConfig', () => {
+    it('should return not-ok with missing-key problem for openai-whisper with empty key', async () => {
+      const { getConfig } = await import('../../services/config')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'openai-whisper',
+          geminiApiKey: 'some-key',
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: '',
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        }
+      } as any)
+
+      const result = await handlers['transcription:validateConfig'](null)
+
+      expect(result.ok).toBe(false)
+      expect(result.problems).toEqual([
+        { stage: 'asr', provider: 'openai-whisper', problem: 'missing-key' }
+      ])
+    })
+
+    it('should return ok with empty problems for gemini defaults with key set', async () => {
+      const { getConfig } = await import('../../services/config')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'gemini',
+          geminiApiKey: 'test-gemini-key',
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: '',
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        }
+      } as any)
+
+      const result = await handlers['transcription:validateConfig'](null)
+
+      expect(result.ok).toBe(true)
+      expect(result.problems).toEqual([])
     })
   })
 })

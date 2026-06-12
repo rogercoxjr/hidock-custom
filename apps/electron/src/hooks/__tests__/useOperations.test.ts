@@ -45,20 +45,20 @@ const mockQueueDownloads = vi.fn().mockResolvedValue(undefined)
 const mockCancelAllDownloads = vi.fn().mockResolvedValue(undefined)
 
 const mockAddToQueueIPC = vi.fn().mockResolvedValue('queue-item-1')
+// spec §5.6: validateTranscriptionConfig replaces the hardcoded Gemini-key gates
+const mockValidateTranscriptionConfig = vi.fn().mockResolvedValue({ ok: true, problems: [] })
 
 global.window.electronAPI = {
   recordings: {
     updateStatus: mockUpdateStatus,
     addToQueue: mockAddToQueueIPC,
     cancelTranscription: mockCancelTranscription,
-    cancelAllTranscriptions: mockCancelAllTranscriptions
+    cancelAllTranscriptions: mockCancelAllTranscriptions,
+    validateTranscriptionConfig: mockValidateTranscriptionConfig
   },
   downloadService: {
     queueDownloads: mockQueueDownloads,
     cancelAll: mockCancelAllDownloads
-  },
-  config: {
-    getValue: vi.fn().mockResolvedValue({ success: true, data: 'test-api-key' })
   }
 } as any
 
@@ -139,6 +139,68 @@ describe('useOperations', () => {
       expect(mockUpdateStatus).toHaveBeenCalledWith('rec-3', 'pending')
       expect(mockAddToQueueIPC).toHaveBeenCalledWith('rec-3')
       expect(mockAddToQueue).toHaveBeenCalledWith('queue-item-1', 'rec-3', 'eligible.wav')
+    })
+
+    it('returns false and toasts provider name when validateTranscriptionConfig reports missing key (spec §5.6)', async () => {
+      // spec §5.6: preflight is provider-aware — Whisper user gets "openai-whisper" in the toast
+      mockValidateTranscriptionConfig.mockResolvedValueOnce({
+        ok: false,
+        problems: [{ stage: 'asr', provider: 'openai-whisper', problem: 'missing-key' }]
+      })
+      const { toast } = await import('@/components/ui/toaster')
+      const { result } = renderHook(() => useOperations())
+
+      const eligible = {
+        id: 'rec-7',
+        filename: 'test.wav',
+        location: 'local-only' as const,
+        localPath: '/path/test.wav',
+        syncStatus: 'synced' as const,
+        transcriptionStatus: 'none' as const,
+        size: 1024,
+        duration: 60,
+        dateRecorded: new Date()
+      }
+
+      let success: boolean | undefined
+      await act(async () => {
+        success = await result.current.queueTranscription(eligible as any)
+      })
+
+      expect(success).toBe(false)
+      expect(mockUpdateStatus).not.toHaveBeenCalled()
+      expect(vi.mocked(toast)).toHaveBeenCalledWith(expect.objectContaining({
+        description: expect.stringContaining('openai-whisper')
+      }))
+    })
+
+    it('returns false and toasts config error when validateTranscriptionConfig throws (spec §5.6)', async () => {
+      mockValidateTranscriptionConfig.mockRejectedValueOnce(new Error('IPC error'))
+      const { toast } = await import('@/components/ui/toaster')
+      const { result } = renderHook(() => useOperations())
+
+      const eligible = {
+        id: 'rec-8',
+        filename: 'test.wav',
+        location: 'local-only' as const,
+        localPath: '/path/test.wav',
+        syncStatus: 'synced' as const,
+        transcriptionStatus: 'none' as const,
+        size: 1024,
+        duration: 60,
+        dateRecorded: new Date()
+      }
+
+      let success: boolean | undefined
+      await act(async () => {
+        success = await result.current.queueTranscription(eligible as any)
+      })
+
+      expect(success).toBe(false)
+      expect(mockUpdateStatus).not.toHaveBeenCalled()
+      expect(vi.mocked(toast)).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Configuration error'
+      }))
     })
   })
 

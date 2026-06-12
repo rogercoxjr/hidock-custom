@@ -159,6 +159,7 @@ export interface ElectronAPI {
     cancelTranscription: (recordingId: string) => Promise<{ success: boolean }>
     cancelAllTranscriptions: () => Promise<{ success: boolean; count: number }>
     updateQueueItem: (id: string, status: string, errorMessage?: string) => Promise<boolean>
+    validateTranscriptionConfig: () => Promise<{ ok: boolean; problems: Array<{ stage: string; provider: string; problem: string }> }>
   }
 
   // Database - Transcripts
@@ -577,6 +578,7 @@ const electronAPI: ElectronAPI = {
     cancelTranscription: (recordingId: string) => callIPC('transcription:cancel', recordingId),
     cancelAllTranscriptions: () => callIPC('transcription:cancelAll'),
     updateQueueItem: (id: string, status: string, errorMessage?: string) => callIPC('transcription:updateQueueItem', id, status, errorMessage),
+    validateTranscriptionConfig: () => callIPC('transcription:validateConfig'),
   },
 
   transcripts: {
