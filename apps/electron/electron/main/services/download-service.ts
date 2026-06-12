@@ -292,24 +292,80 @@ class DownloadService {
   }
 
   /**
-   * Get files that need to be synced from a list
+   * First-sync baseline (spec §5.5): snapshot a FRESH device's current filenames
+   * so its backlog is never auto-processed. Fresh = no baseline rows for this
+   * serial AND no prior sync history for any of its files — a device the user
+   * has synced before gets NO baseline (auto-sync keeps today's behavior; AC7).
+   * Explicit call — getFilesToSync stays a pure read.
    */
-  getFilesToSync(deviceFiles: Array<{ filename: string; size: number; duration: number; dateCreated: Date }>): Array<{ filename: string; size: number; duration: number; dateCreated: Date; skipReason?: string }> {
+  ensureBaseline(deviceSerial: string, filenames: string[]): { created: boolean } {
+    const existing = queryOne<{ n: number }>(
+      'SELECT 1 AS n FROM sync_baseline_files WHERE device_serial = ? LIMIT 1',
+      [deviceSerial]
+    )
+    if (existing) return { created: false }
+    const hasPriorHistory = filenames.some((f) => this.isFileAlreadySynced(f).synced)
+    if (hasPriorHistory) return { created: false }
+    for (const filename of filenames) {
+      run(
+        'INSERT OR IGNORE INTO sync_baseline_files (device_serial, filename, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+        [deviceSerial, filename]
+      )
+    }
+    console.log(`[DownloadService] Baseline established for ${deviceSerial}: ${filenames.length} files`)
+    return { created: true }
+  }
+
+  /**
+   * Get files that need to be synced from a list.
+   * In auto mode (opts.auto === true && opts.deviceSerial set), files in the
+   * baseline snapshot are skipped, and no more than AUTO_QUEUE_CAP files are
+   * queued (spec §5.5 defense-in-depth). Manual mode (default) is unchanged.
+   */
+  getFilesToSync(
+    deviceFiles: Array<{ filename: string; size: number; duration: number; dateCreated: Date }>,
+    opts?: { auto?: boolean; deviceSerial?: string }
+  ): Array<{ filename: string; size: number; duration: number; dateCreated: Date; skipReason?: string }> {
+    const AUTO_QUEUE_CAP = 100 // spec §5.5 defense-in-depth: no single bug can queue an unbounded metered-ASR bill
+    const autoMode = opts?.auto === true && !!opts?.deviceSerial
+    const baseline = autoMode
+      ? new Set(
+          queryAll<{ filename: string }>(
+            'SELECT filename FROM sync_baseline_files WHERE device_serial = ?',
+            [opts!.deviceSerial!]
+          ).map((r) => r.filename)
+        )
+      : null
+
     const results: Array<{ filename: string; size: number; duration: number; dateCreated: Date; skipReason?: string }> = []
     let skippedCount = 0
+    let baselineCount = 0
+    let capCount = 0
     let queuedCount = 0
 
     for (const file of deviceFiles) {
       const { synced, reason } = this.isFileAlreadySynced(file.filename)
       if (synced) {
+        // 4-layer synced reasons always win first
         skippedCount++
+        results.push({ ...file, skipReason: reason })
+      } else if (baseline?.has(file.filename)) {
+        // Baseline skip (auto mode only)
+        baselineCount++
+        results.push({ ...file, skipReason: 'baseline' })
+      } else if (autoMode && queuedCount >= AUTO_QUEUE_CAP) {
+        // Cap reached in auto mode
+        capCount++
+        results.push({ ...file, skipReason: 'auto-cap' })
       } else {
         queuedCount++
+        results.push({ ...file, skipReason: undefined })
       }
-      results.push({ ...file, skipReason: synced ? reason : undefined })
     }
 
-    console.log(`[DownloadService] Reconciliation: ${skippedCount} files skipped (already synced), ${queuedCount} files queued`)
+    console.log(
+      `[DownloadService] Reconciliation: ${skippedCount} files skipped (already synced), ${baselineCount} baseline, ${capCount} auto-cap, ${queuedCount} files queued`
+    )
     return results
   }
 
@@ -1027,8 +1083,17 @@ export function registerDownloadServiceHandlers(): void {
   })
 
   // Get files to sync from a list
-  ipcMain.handle('download-service:get-files-to-sync', (_, files: Array<{ filename: string; size: number; duration: number; dateCreated: Date }>) => {
-    return service.getFilesToSync(files)
+  ipcMain.handle(
+    'download-service:get-files-to-sync',
+    (_, files: Array<{ filename: string; size: number; duration: number; dateCreated: Date }>,
+        opts?: { auto?: boolean; deviceSerial?: string }) => {
+      return service.getFilesToSync(files, opts)
+    }
+  )
+
+  // First-sync baseline (spec §5.5) — explicit, called by the renderer auto-sync paths only.
+  ipcMain.handle('download-service:ensure-baseline', (_, deviceSerial: string, filenames: string[]) => {
+    return service.ensureBaseline(deviceSerial, filenames)
   })
 
   // Queue downloads (with optional dateCreated for preserving original recording dates)
