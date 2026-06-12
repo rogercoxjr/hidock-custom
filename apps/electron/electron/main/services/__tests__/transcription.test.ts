@@ -32,6 +32,13 @@ vi.mock('../database', () => ({
   upsertTranscriptStage1: vi.fn(),
   updateTranscriptStage2: vi.fn(),
   getQueueItems: (...args: any[]) => mockGetQueueItems(...args),
+  // Auto-pipeline P4 (spec §7.2): the worker now selects pending items via the
+  // runnable filter (parked items excluded). The mock routes it to the same
+  // queue stub so this failure-path test still drives its single pending item.
+  getRunnableQueueItems: (...args: any[]) => mockGetQueueItems(...args),
+  parkQueueItem: vi.fn(),
+  clearParking: vi.fn(),
+  getQueueItemParkedHours: vi.fn(() => null),
   updateQueueItem: (...args: any[]) => mockUpdateQueueItem(...args),
   updateQueueProgress: vi.fn(),
   getMeetingById: vi.fn(),

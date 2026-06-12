@@ -7,6 +7,10 @@ import {
   updateTranscriptStage2,
   updateRecordingTranscriptionStatus,
   getQueueItems,
+  getRunnableQueueItems,
+  parkQueueItem,
+  clearParking,
+  getQueueItemParkedHours,
   updateQueueItem,
   updateQueueProgress,
   getMeetingById,
@@ -25,6 +29,7 @@ import {
 } from './database'
 import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
+import { ProviderRateLimitError } from './provider-errors'
 import { BrowserWindow } from 'electron'
 import { getVectorStore } from './vector-store'
 
@@ -120,6 +125,7 @@ async function processQueue(): Promise<void> {
       'Not enough disk space',
       'API key was rejected',
       'quota exhausted',
+      'quota still exhausted after 24h',
       'ffmpeg failed',
       'no local file',
       'not found — choose a new model'
@@ -157,7 +163,11 @@ async function processQueue(): Promise<void> {
       }
     }
 
-    const pendingItems = getQueueItems('pending')
+    // Auto-pipeline P4 (spec §7.2): the poller selects RUNNABLE pending items —
+    // those not parked into the future. Parked items keep status='pending' so
+    // dedupe/startup-recovery/re-pend stay correct, but the runnable filter hides
+    // them until parked_until passes. Everything else still uses getQueueItems.
+    const pendingItems = getRunnableQueueItems()
     if (pendingItems.length === 0) {
       return
     }
@@ -199,6 +209,14 @@ async function processQueue(): Promise<void> {
         // spec-014: Progress callback for transcription stages
         const progressCallback = (stage: string, progress: number) => {
           tickerProgress = progress // Sync ticker with actual progress
+          // Auto-pipeline P4 (spec §7.2): parking clears on ANY successful STAGE
+          // completion, not just job completion. The 'analyzing' transition fires
+          // exactly once Stage 1 has completed (or a resume starts), so clearing
+          // here means a Stage-1 (e.g. Whisper) park history can never poison the
+          // 24h clock of a later Stage-2 (e.g. Ollama) 429.
+          if (stage === 'analyzing') {
+            clearParking(item.id)
+          }
           updateQueueProgress(item.id, progress)
           notifyRenderer('transcription:progress', {
             queueItemId: item.id,
@@ -216,11 +234,45 @@ async function processQueue(): Promise<void> {
 
         updateQueueProgress(item.id, 100) // spec-014: mark complete
         updateQueueItem(item.id, 'completed')
+        clearParking(item.id) // Auto-pipeline P4 (spec §7.2): clear parking on success
         notifyRenderer('transcription:completed', { queueItemId: item.id, recordingId: item.recording_id })
         const { emitActivityLog: emitDone } = await import('./activity-log')
         const recDone = getRecordingById(item.recording_id)
         emitDone('success', 'Transcription complete', recDone?.filename ?? item.recording_id)
       } catch (error) {
+        // Auto-pipeline P4 (spec §7.1/§7.2): failure taxonomy BEFORE the generic
+        // failure path. A typed 429 (ProviderRateLimitError) is "parked" — quota
+        // windows are hours-long while the retry budget burns in ~4 minutes — so
+        // we park without burning retry_count, UNLESS the item has already been
+        // parked for over 24h, in which case it terminal-fails (§7.1). Auth (401)
+        // and quota-exhausted errors are plain Errors whose messages are in
+        // NON_RETRYABLE_ERRORS, so they fall through to the generic terminal path.
+        if (error instanceof ProviderRateLimitError) {
+          // 24h age is computed in SQL (getQueueItemParkedHours) — never Date-parse
+          // the space-format first_parked_at column (V8 reads it as LOCAL time).
+          const parkedHours = getQueueItemParkedHours(item.id)
+          if (parkedHours !== null && parkedHours > 24) {
+            const msg = `${error.provider} quota still exhausted after 24h — check your plan, then Retry all` // §7.1
+            updateQueueItem(item.id, 'failed', msg)
+            updateRecordingTranscriptionStatus(item.recording_id, 'error')
+            notifyRenderer('transcription:failed', {
+              queueItemId: item.id,
+              recordingId: item.recording_id,
+              error: msg
+            })
+          } else {
+            const delayMs = error.retryAfterMs ?? 30 * 60 * 1000 // Retry-After else 30 min (spec §7.2)
+            parkQueueItem(item.id, delayMs)
+            // Parking is SILENT — reset the recording to 'pending' (not 'error') and
+            // do NOT emit transcription:failed (the chip counts FAILED rows only).
+            updateRecordingTranscriptionStatus(item.recording_id, 'pending')
+            console.log(
+              `[Transcription] Parked ${item.id} for ${Math.round(delayMs / 1000)}s (${error.provider} 429)`
+            )
+          }
+          continue
+        }
+
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         console.error('Transcription failed:', errorMessage)
 
