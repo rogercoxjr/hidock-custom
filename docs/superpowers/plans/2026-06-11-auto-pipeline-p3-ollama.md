@@ -153,11 +153,13 @@ export function createOllamaCloudLlm(config: AppConfig): LlmProvider {
 
 **Files:** `transcription.ts`; extend `two-stage-worker.test.ts`
 
+- [ ] **Step 1a: Fix the config mocks FIRST (load-bearing).** Every existing main-process fixture mocks `'../config'` directly (bypassing config.ts's deep-merge defaults), so the moment the worker reads `config.summarization.provider` they all TypeError. Add a `summarization: { provider: 'gemini', ollamaCloudApiKey: '', ollamaCloudModel: '' }` section to the config mocks in `two-stage-worker.test.ts` (~:68-80), `transcription.test.ts`, and `e2e-smoke.test.ts` BEFORE touching the worker. Run those three suites to confirm still-green with the enriched mocks.
 - [ ] **Step 1: Failing tests** (extend `two-stage-worker.test.ts`, reusing its array→audio/string→text mock routing):
   1. Analysis returns `selected_meeting_id: 'none'` with one candidate → NO `linkRecordingToMeeting`, and the vector-store indexing metadata receives the recording's ORIGINAL `meeting_id` fallback, NOT the literal `'none'` (assert via the vector-store stub's call arg).
   2. Analysis returns a hallucinated id not in the candidate set → treated as undefined (no link; candidates written with `isSelected=false`).
   3. Analysis returns `meeting_confidence: '0.9'` (string) → coerced via Number() and clamped; link proceeds (≥0.4).
-  4. With `config.summarization.provider='ollama-cloud'` (+ key/model in the config mock): the transcript row gets `summarization_provider='ollama-cloud'` and `summarization_model=<ollamaCloudModel>`.
+  4. With `config.summarization.provider='ollama-cloud'` (+ key/model in the config mock): the transcript row gets `summarization_provider='ollama-cloud'` and `summarization_model=<ollamaCloudModel>`. **The Gemini mock cannot intercept this path** — Stage 2 now goes through `createOllamaCloudLlm` → global `fetch`. `vi.stubGlobal('fetch', ...)` returning ollama-shaped responses (`{ ok: true, json: async () => ({ message: { content: <analysis JSON string> } }) }`) for BOTH Stage-2 calls (analysis, then actionables — route on call order or prompt content). Without the stub this test hits the real network.
+  5. **AC5 seam (Stage 1 persists before Stage-2 key failure):** config = gemini ASR + `summarization.provider='ollama-cloud'` with EMPTY `ollamaCloudApiKey` → run the worker → it rejects with the `Ollama Cloud API key not configured` message, AND the transcript row has `full_text` persisted with `summarization_provider` NULL (Stage-2-resumable). This is the test P4's AC5 evidence cites for "completes Stage 1 and persists full_text before terminal-failing at Stage 2".
 - [ ] **Step 2: Implement the validator.** In `transcribeRecording`, immediately after the JSON extraction succeeds (after the parse at ~:515-527) and BEFORE the candidates block (:529), insert:
 ```ts
   // Meeting-selection validator (spec §5.2): provider-agnostic guard — smaller
@@ -172,7 +174,7 @@ export function createOllamaCloudLlm(config: AppConfig): LlmProvider {
     analysis.meeting_confidence = Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0
   }
 ```
-  This also fixes the raw-value indexing fallback (the fact: `:660-661` uses `analysis.selected_meeting_id || recording.meeting_id` unvalidated — after the validator, `'none'`/hallucinated can no longer leak into chunk metadata). The existing `!== 'none'` check inside the link block (:538) becomes redundant but harmless — leave it.
+  This also fixes the raw-value indexing fallback (the fact: `:660-661` uses `analysis.selected_meeting_id || recording.meeting_id` unvalidated — after the validator, `'none'`/hallucinated can no longer leak into chunk metadata). The existing `!== 'none'` check inside the link block (:542) becomes redundant but harmless — leave it.
 - [ ] **Step 3: Derive Stage-2 provider/model.** The Stage-2 write block is verbatim (:566-582) ending:
 ```ts
     summarization_provider: 'gemini', // P3 will derive this from config.summarization
@@ -208,7 +210,7 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
   run('UPDATE transcripts SET summarization_provider = NULL, summarization_model = NULL WHERE recording_id = ?', [recordingId])
 }
 ```
-- [ ] **Step 3: Failing worker test** (`two-stage-worker.test.ts`): full run on a recording → clear marker via the new fn → delete the audio file → run worker again with the text mock returning a NEW summary → assert: `full_text` unchanged, `summary` replaced, no duplicate pending actionables, **and the old summary survived an intermediate failed re-run** (clear marker → make the text mock throw → worker rejects → `summary` still the OLD value, marker still NULL).
+- [ ] **Step 3: Failing worker test** (`two-stage-worker.test.ts`): full run on a recording → clear marker via the new fn → delete the audio file → run worker again with the text mock returning a NEW summary AND a NEW title_suggestion → assert: `full_text` unchanged, `summary` replaced, no duplicate pending actionables, **the knowledge-capture title was NOT re-renamed** (the auto-rename predicate: `title_suggestion` was non-NULL pre-update — AC6's "does not re-rename" clause), **and the old summary survived an intermediate failed re-run** (clear marker → make the text mock throw → worker rejects → `summary` still the OLD value, marker still NULL).
 - [ ] **Step 4: IPC handler** in `recording-handlers.ts` (after `transcription:validateConfig`):
 ```ts
   // Re-summarize (spec §5.3/§5.6): clear the stage marker (keeping the old summary)
@@ -257,7 +259,7 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
           </Button>
         )}
 ```
-  - Failure state (the status fallbacks at :530-547): in the `'error'` branch, when `transcript?.full_text` exists render the TranscriptViewer (same call as the happy path at :521-529) preceded by an inline notice:
+  - Failure state — **read the real control flow first**: the render chain at :519-547 is `{transcript ? <TranscriptViewer/> : status==='complete' ? ... : pending/processing ? ... : <generic else>}`. There is NO `'error'` branch in the fallback chain, and the fallbacks are unreachable whenever `transcript` is truthy — so error-with-transcript ALREADY renders the TranscriptViewer with no notice. The change goes **inside the truthy `transcript ?` branch**: when `recording.transcriptionStatus === 'error'`, render this inline notice ABOVE the TranscriptViewer:
 ```tsx
             <div className="mb-3 flex items-center gap-2 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/30 px-3 py-2 text-sm">
               <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -287,10 +289,10 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
 
 ### Task 6: Summarization Settings card + model picker IPC
 
-**Files:** create `electron/main/ipc/summarization-handlers.ts` (+ register in `electron/main/index.ts` next to the other `register*Handlers` calls); modify `preload/index.ts`, `src/pages/Settings.tsx`, `recording-handlers.ts` (extend validateConfig); tests: new handler test + `Settings.test.tsx`
+**Files:** create `electron/main/ipc/summarization-handlers.ts` (+ register in **`electron/main/ipc/handlers.ts`** — `registerIpcHandlers()` is where the per-domain `register*Handlers` calls live, imports at :1-20, calls at :24+; `electron/main/index.ts` only calls `registerIpcHandlers()` once at :164); modify `preload/index.ts`, `src/pages/Settings.tsx`, `recording-handlers.ts` (extend validateConfig); tests: new handler test + `Settings.test.tsx`
 
 - [ ] **Step 1: Failing handler tests** (`summarization-handlers.test.ts`): `summarization:listModels` GETs `https://ollama.com/api/tags` with `Authorization: Bearer <key from config>` and maps `{ models: [{ name }] }` → `{ success: true, models: ['gpt-oss:120b', ...] }`; non-OK → `{ success: false, error }`. `summarization:testConnection` POSTs a 1-token chat (`messages:[{role:'user',content:'ping'}]`, the configured model) and classifies: ok → `{ success: true }`; 401 → key-rejected message; 404 → model-not-found message (§7.1 wording); 429 → quota message.
-- [ ] **Step 2: Implement `summarization-handlers.ts`** (complete file: `registerSummarizationHandlers()` with the two `ipcMain.handle` calls, fetch with 30 s AbortController each, reading `getConfig().summarization`). Register in `electron/main/index.ts` beside the existing handler registrations (find the `register...Handlers()` block).
+- [ ] **Step 2: Implement `summarization-handlers.ts`** (complete file: `registerSummarizationHandlers()` with the two `ipcMain.handle` calls, fetch with 30 s AbortController each, reading `getConfig().summarization`). Register inside `registerIpcHandlers()` in `electron/main/ipc/handlers.ts` (import at the top with the other per-domain imports, call beside the other `register*Handlers()` calls at :24+). Do NOT touch `electron/main/index.ts` — it calls `registerIpcHandlers()` once at :164.
 - [ ] **Step 3: Preload bindings** — new `summarization` block in both the type decl (near the `config` block at :92-98) and impl (near :519-524):
 ```ts
   summarization: {
@@ -308,7 +310,7 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
 ### Task 7: Full gates + AC6 evidence
 
 - [ ] **Step 1:** typecheck / lint / `npm run test:run` — RCs 0 (re-run once on the known WASM flake).
-- [ ] **Step 2: AC6 evidence** — name the tests proving: resummarize regenerates with the CURRENT provider without touching full_text; works with audio deleted; keeps old summary on failure; no duplicate actionables; reachable from BOTH healthy and failed UI states.
+- [ ] **Step 2: AC6 evidence** — name the tests proving: resummarize regenerates with the CURRENT provider without touching full_text; works with audio deleted; keeps old summary on failure; no duplicate actionables; **does not re-rename the title** (Task 4 Step 3's no-re-rename assertion); reachable from BOTH healthy and failed UI states.
 - [ ] **Step 3: Report** with realignment citations (insertTranscript removal → P1 carry-note/spec §5.3 single-writer rule).
 
 ## Done criteria (spec §12 P3 → AC6)

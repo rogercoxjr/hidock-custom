@@ -158,6 +158,8 @@ export class ProviderAuthError extends Error {
   4. When the transcoded file is > 24 MB → a second ffmpeg invocation with `-f segment -segment_time 600` and the return lists the segment files (mock `readdirSync`).
   5. Disk guard: when free space < 2× input size → throws `Not enough disk space to process <basename>` and ffmpeg is NEVER spawned.
   6. `cleanAsrTempDir()` removes the `hidock-asr` dir contents.
+  7. ffmpeg failure: `execFileAsync` rejection (mock a rejection carrying `stderr: '...long stderr...'`) → throws a message starting `ffmpeg failed for <basename>:` and including the LAST ~200 chars of stderr (spec §7.1's "clear error incl. ffmpeg stderr tail"; the `'ffmpeg failed'` prefix is the NON_RETRYABLE substring added in Task 3).
+  8. `mkdirSync(ASR_TMP, { recursive: true })` is called BEFORE the first ffmpeg invocation (assert the mock call order) — all fs is mocked in these tests, so without this assertion an implementation that skips the mkdir passes tests but fails on first real run.
 - [ ] **Step 5: Implement `audio-normalize.ts`.** Shape (complete the bodies — every behavior is pinned by the tests):
 ```ts
 import { execFile } from 'child_process'
@@ -195,7 +197,7 @@ export async function normalizeForWhisper(inputPath: string): Promise<{ files: s
 /** Wiped at app startup (index.ts) and after each job (worker). */
 export function cleanAsrTempDir(): void { /* rmSync(ASR_TMP, { recursive: true, force: true }) */ }
 ```
-  Transcode args: `['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-b:a', '32k', outPath]` with `outPath = join(ASR_TMP, `${basename(inputPath)}.norm.mp3`)`. Segment args: `['-y', '-i', outPath, '-f', 'segment', '-segment_time', String(SEGMENT_SECONDS), '-c', 'copy', join(ASR_TMP, `${basename(inputPath)}.part%03d.mp3`)]`. Disk check via `statfsSync(tmpdir())` (`bavail * bsize`); wrap in try/catch and skip the guard (not the transcode) on platforms where statfs is unavailable.
+  Transcode args: `['-y', '-i', inputPath, '-ar', '16000', '-ac', '1', '-b:a', '32k', outPath]` with `outPath = join(ASR_TMP, `${basename(inputPath)}.norm.mp3`)`. Segment args: `['-y', '-i', outPath, '-f', 'segment', '-segment_time', String(SEGMENT_SECONDS), '-c', 'copy', join(ASR_TMP, `${basename(inputPath)}.part%03d.mp3`)]`. Disk check via `statfsSync(tmpdir())` (`bavail * bsize`); wrap in try/catch and skip the guard (not the transcode) on platforms where statfs is unavailable. **`mkdirSync(ASR_TMP, { recursive: true })` before invoking ffmpeg** (test 8). **Wrap every `execFileAsync` rejection:** catch it and `throw new Error(\`ffmpeg failed for ${basename(inputPath)}: ${String(e.stderr ?? e.message).slice(-200)}\`)` — the `'ffmpeg failed'` prefix is load-bearing (NON_RETRYABLE substring, Task 3 Step 5) and the stderr tail satisfies §7.1's "clear error" row (test 7).
 - [ ] **Step 6: Wire startup wipe.** In `electron/main/index.ts`, alongside the other service initializations (near `startTranscriptionProcessor()`), add `cleanAsrTempDir()` with import. (One line + import; find the exact anchor by reading the init block.)
 - [ ] **Step 7: Tests PASS, RCs 0, commit.** `feat(electron): ffmpeg audio-normalize (always-transcode + chunking + asar rewrite + disk guard) + typed provider errors (auto-pipeline P2)`
 
@@ -212,7 +214,8 @@ export function cleanAsrTempDir(): void { /* rmSync(ASR_TMP, { recursive: true, 
   1. Factory key check: `getAsrProvider({...provider:'openai-whisper', openaiApiKey: ''})` throws EXACTLY `OpenAI API key not configured — add it in Settings → Transcription` (spec §7.1 verbatim).
   2. Single-chunk happy path: `normalizeForWhisper` mocked → `{files:['/t/a.norm.mp3']}`; fetch → `{ ok: true, json: async () => ({ text: 'HELLO', language: 'english' }) }`; assert: POST to `https://api.openai.com/v1/audio/transcriptions`, `Authorization: Bearer sk-x` header, FormData body whose `model` field is `'whisper-1'` and `response_format` is `'verbose_json'`; result `{ text: 'HELLO', language: 'english' }`.
   3. Multi-chunk: normalize → 3 files; 3 fetch calls; texts joined with `'\n'`; `language` from the FIRST chunk's response.
-  4. 429 → throws `ProviderRateLimitError` with `provider='OpenAI'` and `retryAfterMs` parsed from a `Retry-After: 120` header (=120000).
+  4. 429 (rate limit) → response body WITHOUT `insufficient_quota` → throws `ProviderRateLimitError` with `provider='OpenAI'` and `retryAfterMs` parsed from a `Retry-After: 120` header (=120000).
+  4b. 429 (quota) → response body CONTAINING `insufficient_quota` → throws plain `Error` with message EXACTLY `OpenAI quota exhausted — check billing, then Retry all` (spec §7.1 — OpenAI delivers exhausted credit as HTTP 429 with `insufficient_quota` in the body, so the distinction MUST happen inside the 429 branch; a non-OK fallback would never see it).
   5. 401 → throws `ProviderAuthError('OpenAI')` (message contains `OpenAI API key was rejected`).
   6. Timeout: fetch that never resolves + `vi.useFakeTimers` → advancing 10 min aborts (assert the AbortSignal fired / rejection message mentions timeout).
   7. `opts.meetingContext` is ignored (no prompt field in the FormData — spec §5.1).
@@ -269,6 +272,12 @@ async function transcribeChunk(path: string, apiKey: string, model: string): Pro
       signal: controller.signal
     })
     if (res.status === 429) {
+      // OpenAI signals exhausted credit as HTTP 429 + insufficient_quota in the
+      // body — that is terminal (no quota window resets it), NOT parkable (§7.1).
+      const body = await res.text()
+      if (body.includes('insufficient_quota')) {
+        throw new Error('OpenAI quota exhausted — check billing, then Retry all') // §7.1 verbatim
+      }
       const retryAfter = res.headers.get('Retry-After')
       throw new ProviderRateLimitError('OpenAI', retryAfter ? Number(retryAfter) * 1000 : undefined)
     }
@@ -314,7 +323,7 @@ async function transcribeChunk(path: string, apiKey: string, model: string): Pro
       'no local file'
     ]
 ```
-  Add `'OpenAI API key not configured',` and `'Not enough disk space',` and `'API key was rejected',` (the ProviderAuthError message — P4's taxonomy table also lists it; adding here prevents 3 pointless retries now). Do NOT add rate-limit strings (parking is P4; until then 429 retries via normal backoff, acceptable interim).
+  Add `'OpenAI API key not configured',`, `'Not enough disk space',`, `'API key was rejected',` (ProviderAuthError), `'quota exhausted',` (the insufficient_quota mapping above), and `'ffmpeg failed',` (audio-normalize's pinned failure prefix — spec §7.1's "ffmpeg failure / unsupported input → non-retryable" row). Do NOT add rate-limit strings (parking is P4; until then a plain 429 retries via normal backoff, acceptable interim).
 - [ ] **Step 6: Extend `providers-p1.test.ts`** with one factory-dispatch test: provider `'openai-whisper'` + key set → returns a provider (mock `./whisper-asr`'s createWhisperAsr OR just assert no-throw and instance shape).
 - [ ] **Step 7: All ASR tests + neighbors PASS** (`whisper-asr`, `audio-normalize`, `providers-p1`, `two-stage-worker`, `transcription`); typecheck RC 0. Commit: `feat(electron): openai-whisper ASR provider — multipart verbose_json, chunk loop, typed 429/401, 10-min timeout (auto-pipeline P2)`
 
@@ -333,10 +342,13 @@ async function transcribeChunk(path: string, apiKey: string, model: string): Pro
   // Replaces the renderer's hardcoded Gemini-key gates (useOperations).
   ipcMain.handle('transcription:validateConfig', async (): Promise<{
     ok: boolean
-    problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' }>
+    // Union per spec §5.6. Only 'missing-key' is emitted by the preflight in v1 —
+    // 'rejected-key' is detected at call time (§7.1 ProviderAuthError) and via the
+    // Settings Test button; the type carries it so consumers handle both.
+    problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }>
   }> => {
     const config = getConfig()
-    const problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' }> = []
+    const problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }> = []
     const asrProvider = config.transcription.provider
     if (asrProvider === 'openai-whisper' && !config.transcription.openaiApiKey.trim()) {
       problems.push({ stage: 'asr', provider: 'openai-whisper', problem: 'missing-key' })
