@@ -115,6 +115,11 @@ async function processQueue(): Promise<void> {
       'Recording not found',
       'Recording file not found',
       'Gemini API key not configured',
+      'OpenAI API key not configured',
+      'Not enough disk space',
+      'API key was rejected',
+      'quota exhausted',
+      'ffmpeg failed',
       'no local file'
     ]
     const failedItems = getQueueItems('failed')
@@ -423,7 +428,10 @@ Meeting ${i + 1}: "${m.subject}"
       language: asrResult.language,
       word_count: stage1WordCount,
       transcription_provider: config.transcription.provider,
-      transcription_model: config.transcription.geminiModel // P2 will derive this per ASR provider
+      transcription_model:
+        config.transcription.provider === 'openai-whisper'
+          ? config.transcription.whisperModel
+          : config.transcription.geminiModel
     })
 
     progressCallback?.('analyzing', 50) // spec-014: progress reporting

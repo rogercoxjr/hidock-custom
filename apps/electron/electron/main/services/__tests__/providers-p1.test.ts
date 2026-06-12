@@ -29,6 +29,17 @@ vi.mock('@google/generative-ai', () => {
   return { GoogleGenerativeAI }
 })
 
+// P2 factory dispatch: getAsrProvider('openai-whisper') must route to
+// createWhisperAsr. Mock it so this file stays free of the ffmpeg/electron
+// imports that whisper-asr pulls in transitively (audio-normalize). The full
+// Whisper behavior is covered in whisper-asr.test.ts.
+const { mockCreateWhisperAsr } = vi.hoisted(() => ({
+  mockCreateWhisperAsr: vi.fn((_config: unknown) => ({ transcribe: vi.fn() }))
+}))
+vi.mock('../asr/whisper-asr', () => ({
+  createWhisperAsr: (config: unknown) => mockCreateWhisperAsr(config)
+}))
+
 import { getAsrProvider } from '../asr/asr-provider'
 import { getLlmProvider } from '../llm/llm-provider'
 
@@ -76,6 +87,16 @@ describe('getAsrProvider (P1: gemini only)', () => {
     const callArg = mockGenerateContent.mock.calls[0][0] as Array<Record<string, unknown>>
     const inline = callArg[0].inlineData as { mimeType: string }
     expect(inline.mimeType).toBe('audio/mp3') // the one HiDock-specific MIME rule
+  })
+
+  it("dispatches provider 'openai-whisper' to createWhisperAsr (P2 factory case)", () => {
+    const whisperCfg = {
+      transcription: { provider: 'openai-whisper', openaiApiKey: 'sk-x', whisperModel: 'whisper-1' }
+    } as never
+    const asr = getAsrProvider(whisperCfg)
+    expect(mockCreateWhisperAsr).toHaveBeenCalledTimes(1)
+    expect(mockCreateWhisperAsr).toHaveBeenCalledWith(whisperCfg)
+    expect(typeof asr.transcribe).toBe('function')
   })
 })
 
