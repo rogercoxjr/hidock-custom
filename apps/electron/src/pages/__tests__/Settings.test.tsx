@@ -275,4 +275,38 @@ describe('Settings Page', () => {
       })
     )
   })
+
+  // Code-quality finding fix — asymmetric provider gating in validateConfig.
+  // A non-empty invalid Gemini key left in local state must NOT block saving once
+  // the active provider is openai-whisper (spec §5.6: the Whisper user must be able
+  // to queue/retry without a valid Gemini key). The Gemini checks are now gated on
+  // provider !== 'openai-whisper', mirroring the Whisper key gating.
+  it('should save Whisper config even when the (hidden) Gemini key holds an invalid sk- value', async () => {
+    render(<Settings />)
+
+    // Simulate a user who pasted an sk- key into the Gemini field while on Gemini...
+    const geminiKeyInput = screen.getByLabelText('Gemini API Key') as HTMLInputElement
+    fireEvent.change(geminiKeyInput, { target: { value: 'sk-pasted-into-wrong-field-12345' } })
+
+    // ...then switched the active provider to OpenAI Whisper (Gemini field now hidden)
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Use OpenAI Whisper ASR provider'))
+    })
+
+    const openaiKeyInput = screen.getByLabelText('OpenAI API Key') as HTMLInputElement
+    fireEvent.change(openaiKeyInput, { target: { value: 'sk-test-key-1234567890' } })
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Save transcription settings'))
+    })
+
+    // Save must go through — not blocked by the invalid (hidden, inactive) Gemini key
+    expect(mockUpdateConfig).toHaveBeenCalledWith(
+      'transcription',
+      expect.objectContaining({
+        provider: 'openai-whisper',
+        openaiApiKey: 'sk-test-key-1234567890'
+      })
+    )
+  })
 })

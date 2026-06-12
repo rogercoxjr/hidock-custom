@@ -69,7 +69,11 @@ export function Settings() {
   const validateConfig = useCallback((updates: Partial<AppConfig>): string | null => {
     // Transcription settings validation
     if (updates.transcription) {
-      if (updates.transcription.geminiApiKey !== undefined) {
+      // Gemini key validation — only enforced when Gemini is the active provider.
+      // Symmetric with the Whisper gating below: a stale/invalid key for the
+      // INACTIVE provider must not block saving (spec §5.6 — the Whisper+Ollama
+      // user must be able to queue/retry without a valid Gemini key).
+      if (updates.transcription.provider !== 'openai-whisper' && updates.transcription.geminiApiKey !== undefined) {
         const apiKey = updates.transcription.geminiApiKey.trim()
         if (apiKey && apiKey.length < 10) {
           return 'API key must be at least 10 characters'
