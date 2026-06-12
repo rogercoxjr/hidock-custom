@@ -401,20 +401,26 @@ describe('parking DB primitives (auto-pipeline P4)', () => {
     insertQueueItem('q-park-2', 'rec-park-2')
     parkQueueItem('q-park-2', 60_000)
 
-    const afterFirst = queryOne<{ first_parked_at: string }>(
-      `SELECT first_parked_at FROM transcription_queue WHERE id = 'q-park-2'`
-    )
-    const firstTs = afterFirst?.first_parked_at
+    // Backdate first_parked_at by 1 hour via raw SQL. CURRENT_TIMESTAMP has only
+    // 1-second resolution, so a same-second re-park would string-equal the original
+    // even if COALESCE were removed — the test could not detect loss of the behavior
+    // it guards (first_parked_at survival anchors the 24h terminal cap, spec §7.2).
+    // Seeding into the past makes a regression observable: without COALESCE the
+    // second park would overwrite first_parked_at with ~now, collapsing the age to 0.
+    run(`UPDATE transcription_queue SET first_parked_at = datetime('now', '-1 hour') WHERE id = 'q-park-2'`)
 
     parkQueueItem('q-park-2', 300_000) // second park — longer delay
 
-    const afterSecond = queryOne<{ first_parked_at: string; parked_until_future: number }>(
-      `SELECT first_parked_at,
+    // All assertions in SQL (julianday) — never parse the space-format timestamp in JS.
+    const afterSecond = queryOne<{ first_parked_at_age_ok: number; parked_until_future: number }>(
+      `SELECT (first_parked_at IS NOT NULL
+               AND (julianday('now') - julianday(first_parked_at)) * 24.0 BETWEEN 0.95 AND 1.05)
+                AS first_parked_at_age_ok,
               (datetime(parked_until) > datetime('now', '+250 seconds')) AS parked_until_future
        FROM transcription_queue WHERE id = 'q-park-2'`
     )
-    // first_parked_at must be the SAME as after the first park
-    expect(afterSecond?.first_parked_at).toBe(firstTs)
+    // first_parked_at must still be ~1h old (COALESCE preserved the backdated value)
+    expect(afterSecond?.first_parked_at_age_ok).toBe(1)
     // parked_until was updated to the longer delay
     expect(afterSecond?.parked_until_future).toBe(1)
   })
