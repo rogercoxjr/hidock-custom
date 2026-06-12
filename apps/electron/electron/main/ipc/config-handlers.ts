@@ -40,7 +40,34 @@ export function registerConfigHandlers(): void {
     'config:update-section',
     async <K extends keyof AppConfig>(_, section: K, values: Partial<AppConfig[K]>) => {
       try {
+        const before = getConfig()
+        const oldKeys = {
+          openai: before.transcription.openaiApiKey,
+          gemini: before.transcription.geminiApiKey,
+          ollama: before.summarization.ollamaCloudApiKey
+        }
         await updateConfig(section, values)
+        // Key-fix re-pend (spec §7.3): a saved provider key re-pends that provider's
+        // terminal failures. Marker map per spec: openaiApiKey→'OpenAI',
+        // ollamaCloudApiKey→'Ollama Cloud', geminiApiKey→'Gemini API key'.
+        try {
+          const after = getConfig()
+          const markers: string[] = []
+          if (after.transcription.openaiApiKey !== oldKeys.openai && after.transcription.openaiApiKey.trim()) markers.push('OpenAI')
+          if (after.transcription.geminiApiKey !== oldKeys.gemini && after.transcription.geminiApiKey.trim()) markers.push('Gemini API key')
+          if (after.summarization.ollamaCloudApiKey !== oldKeys.ollama && after.summarization.ollamaCloudApiKey.trim()) markers.push('Ollama Cloud')
+          if (markers.length > 0) {
+            const { rependFailedItems } = await import('../services/database')
+            const count = rependFailedItems(markers)
+            if (count > 0) {
+              emitActivityLog('info', `Re-queued ${count} failed transcription${count === 1 ? '' : 's'} after key update`)
+              const { processQueueManually } = await import('../services/transcription')
+              void processQueueManually()
+            }
+          }
+        } catch (rependErr) {
+          console.error('[config:update-section] re-pend after key save failed:', rependErr)
+        }
         emitActivityLog('info', `Settings updated: ${String(section)}`)
         return success(getConfig())
       } catch (err) {
