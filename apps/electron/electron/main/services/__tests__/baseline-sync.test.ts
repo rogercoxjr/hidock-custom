@@ -91,7 +91,6 @@ vi.mock('fs', async (importOriginal) => {
 import {
   initializeDatabase,
   closeDatabase,
-  queryAll,
   queryOne,
   addSyncedFile
 } from '../database'
