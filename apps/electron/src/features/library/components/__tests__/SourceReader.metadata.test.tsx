@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { SourceReader } from '../SourceReader'
 import type { UnifiedRecording } from '@/types/unified-recording'
 import type { Meeting, Transcript } from '@/types'
@@ -467,9 +467,21 @@ describe('SourceReader — Re-summarize', () => {
     render(<SourceReader recording={rec} transcript={transcript} onResummarize={onResummarize} />)
 
     // The inline notice must be visible
-    expect(screen.getByText(/summary failed/i)).toBeInTheDocument()
-    // The Re-summarize link/button inside the notice also fires the callback
-    const noticeBtn = screen.getAllByRole('button', { name: /re-summarize/i })[0]
+    const noticeText = screen.getByText(/summary failed/i)
+    expect(noticeText).toBeInTheDocument()
+
+    // There are TWO Re-summarize buttons in this state: the header action-bar
+    // button (SourceReader.tsx:490) and the inline-notice link button
+    // (SourceReader.tsx:544). Assert both render so a regression that removes
+    // either one is caught.
+    expect(screen.getAllByRole('button', { name: /re-summarize/i })).toHaveLength(2)
+
+    // Scope to the notice container so we exercise the notice's onClick wiring
+    // (SourceReader.tsx:544) specifically — NOT the header button (which test
+    // (a) already covers).
+    const noticeContainer = noticeText.closest('div') as HTMLElement
+    expect(noticeContainer).not.toBeNull()
+    const noticeBtn = within(noticeContainer).getByRole('button', { name: /re-summarize/i })
     fireEvent.click(noticeBtn)
     expect(onResummarize).toHaveBeenCalledOnce()
   })
