@@ -89,7 +89,13 @@ import {
   updateTranscriptStage2,
   clearTranscriptStage2Marker,
   addToQueue,
-  updateQueueItem
+  updateQueueItem,
+  parkQueueItem,
+  getRunnableQueueItems,
+  clearParking,
+  getQueueItemParkedHours,
+  rependFailedItems,
+  updateRecordingTranscriptionStatus
 } from '../database'
 
 // ---------------------------------------------------------------------------
@@ -337,5 +343,231 @@ describe('addToQueue dedupe (spec §5.7)', () => {
     const second = addToQueue('rec_q2')
     expect(second).toBeTruthy()
     expect(second).not.toBe(first)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Task 1 (auto-pipeline P4): Parking DB primitives (spec §7.2)
+// ---------------------------------------------------------------------------
+
+describe('parking DB primitives (auto-pipeline P4)', () => {
+  // Shared setup/teardown — fresh DB per test
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  // Helper: insert a queue item with a specific status and retry_count
+  function insertQueueItem(id: string, recId: string, status = 'pending', retryCount = 0): void {
+    insertTestRecording(recId)
+    run(
+      `INSERT INTO transcription_queue (id, recording_id, status, retry_count)
+       VALUES (?, ?, ?, ?)`,
+      [id, recId, status, retryCount]
+    )
+  }
+
+  // -------------------------------------------------------------------------
+  // parkQueueItem
+  // -------------------------------------------------------------------------
+
+  it('parkQueueItem: status stays pending, parked_until is in the future, first_parked_at is set, retry_count unchanged', () => {
+    insertQueueItem('q-park-1', 'rec-park-1', 'pending', 2)
+    parkQueueItem('q-park-1', 120_000) // 120 seconds
+
+    // All timestamp assertions done in SQL — never parse column values in JS
+    const r = queryOne<{ status: string; retry_count: number; parked_until_ok: number; first_parked_at_ok: number }>(
+      `SELECT status, retry_count,
+              (datetime(parked_until) > datetime('now') AND
+               datetime(parked_until) <= datetime('now', '+121 seconds')) AS parked_until_ok,
+              (first_parked_at IS NOT NULL) AS first_parked_at_ok
+       FROM transcription_queue WHERE id = 'q-park-1'`
+    )
+    expect(r?.status).toBe('pending')
+    expect(r?.retry_count).toBe(2)            // UNCHANGED
+    expect(r?.parked_until_ok).toBe(1)        // within next 121 s
+    expect(r?.first_parked_at_ok).toBe(1)     // set to ~now
+  })
+
+  it('parkQueueItem: re-park updates parked_until but keeps original first_parked_at (COALESCE)', () => {
+    insertQueueItem('q-park-2', 'rec-park-2')
+    parkQueueItem('q-park-2', 60_000)
+
+    const afterFirst = queryOne<{ first_parked_at: string }>(
+      `SELECT first_parked_at FROM transcription_queue WHERE id = 'q-park-2'`
+    )
+    const firstTs = afterFirst?.first_parked_at
+
+    parkQueueItem('q-park-2', 300_000) // second park — longer delay
+
+    const afterSecond = queryOne<{ first_parked_at: string; parked_until_future: number }>(
+      `SELECT first_parked_at,
+              (datetime(parked_until) > datetime('now', '+250 seconds')) AS parked_until_future
+       FROM transcription_queue WHERE id = 'q-park-2'`
+    )
+    // first_parked_at must be the SAME as after the first park
+    expect(afterSecond?.first_parked_at).toBe(firstTs)
+    // parked_until was updated to the longer delay
+    expect(afterSecond?.parked_until_future).toBe(1)
+  })
+
+  // -------------------------------------------------------------------------
+  // getRunnableQueueItems
+  // -------------------------------------------------------------------------
+
+  it('getRunnableQueueItems: returns pending rows with NULL parked_until', () => {
+    insertQueueItem('q-run-1', 'rec-run-1', 'pending', 0)
+    const items = getRunnableQueueItems()
+    expect(items.some(i => i.id === 'q-run-1')).toBe(true)
+  })
+
+  it('getRunnableQueueItems: EXCLUDES rows parked into the future (format regression test)', () => {
+    // This is the lexicographic-format regression test:
+    // parkQueueItem uses datetime('now', '+Ns') which produces the space-separated format
+    // e.g. "2026-06-12 18:30:00". The SQL comparison must work correctly on the SAME DAY
+    // it is parked (the bug: JS toISOString() produces "2026-06-12T18:30:00.000Z" which
+    // sorts GREATER than same-day space-format timestamps).
+    insertQueueItem('q-run-2', 'rec-run-2', 'pending', 0)
+    parkQueueItem('q-run-2', 60_000) // parked 60s into future
+
+    const items = getRunnableQueueItems()
+    expect(items.some(i => i.id === 'q-run-2')).toBe(false) // EXCLUDED while parked
+  })
+
+  it('getRunnableQueueItems: INCLUDES rows whose parked_until is in the past (park expiry = runnable)', () => {
+    insertQueueItem('q-run-3', 'rec-run-3', 'pending', 0)
+    // Seed via raw SQL with a past timestamp (space-format, SQLite style)
+    run(`UPDATE transcription_queue SET parked_until = datetime('now', '-10 seconds') WHERE id = 'q-run-3'`)
+
+    const items = getRunnableQueueItems()
+    expect(items.some(i => i.id === 'q-run-3')).toBe(true) // park expired → runnable
+  })
+
+  it('getRunnableQueueItems: does not return non-pending items', () => {
+    insertQueueItem('q-run-4', 'rec-run-4', 'failed', 3)
+    const items = getRunnableQueueItems()
+    expect(items.some(i => i.id === 'q-run-4')).toBe(false)
+  })
+
+  // -------------------------------------------------------------------------
+  // clearParking
+  // -------------------------------------------------------------------------
+
+  it('clearParking: nulls both parked_until and first_parked_at', () => {
+    insertQueueItem('q-clr-1', 'rec-clr-1')
+    parkQueueItem('q-clr-1', 60_000)
+
+    clearParking('q-clr-1')
+
+    const r = queryOne<{ parked_until: string | null; first_parked_at: string | null }>(
+      `SELECT parked_until, first_parked_at FROM transcription_queue WHERE id = 'q-clr-1'`
+    )
+    expect(r?.parked_until).toBeNull()
+    expect(r?.first_parked_at).toBeNull()
+  })
+
+  // -------------------------------------------------------------------------
+  // getQueueItemParkedHours
+  // -------------------------------------------------------------------------
+
+  it('getQueueItemParkedHours: returns null when first_parked_at is NULL', () => {
+    insertQueueItem('q-hrs-1', 'rec-hrs-1')
+    expect(getQueueItemParkedHours('q-hrs-1')).toBeNull()
+  })
+
+  it('getQueueItemParkedHours: returns ~25 hours when first_parked_at is 25h ago (SQL julianday, not JS Date)', () => {
+    insertQueueItem('q-hrs-2', 'rec-hrs-2')
+    // Seed via raw SQL — 25 hours ago in space-separated UTC format
+    run(`UPDATE transcription_queue SET first_parked_at = datetime('now', '-25 hours') WHERE id = 'q-hrs-2'`)
+
+    const hours = getQueueItemParkedHours('q-hrs-2')
+    expect(hours).not.toBeNull()
+    // julianday arithmetic is always UTC, so this must read ≈25 regardless of local TZ
+    expect(hours!).toBeGreaterThan(24.9)
+    expect(hours!).toBeLessThan(25.1)
+  })
+
+  // -------------------------------------------------------------------------
+  // rependFailedItems
+  // -------------------------------------------------------------------------
+
+  it('rependFailedItems: re-pends failed rows matching ANY marker, returns count', () => {
+    insertTestRecording('rec-rpnd-1')
+    insertTestRecording('rec-rpnd-2')
+    insertTestRecording('rec-rpnd-3')
+
+    // Insert failed items
+    run(`INSERT INTO transcription_queue (id, recording_id, status, retry_count, error_message)
+         VALUES ('q-rpnd-1', 'rec-rpnd-1', 'failed', 3, 'OpenAI API key was rejected — re-enter it in Settings')`)
+    run(`INSERT INTO transcription_queue (id, recording_id, status, retry_count, error_message)
+         VALUES ('q-rpnd-2', 'rec-rpnd-2', 'failed', 3, 'Gemini API key not configured. Please add your API key in Settings.')`)
+    run(`INSERT INTO transcription_queue (id, recording_id, status, retry_count, parked_until, first_parked_at, error_message)
+         VALUES ('q-rpnd-3', 'rec-rpnd-3', 'failed', 3, datetime('now', '-1 hour'), datetime('now', '-2 hours'),
+                 'Ollama Cloud quota still exhausted after 24h — check your plan, then Retry all')`)
+
+    const count = rependFailedItems(['OpenAI', 'Gemini API key', 'Ollama Cloud'])
+    expect(count).toBe(3)
+
+    const rows = queryAll<{ id: string; status: string; retry_count: number; parked_until: string | null; first_parked_at: string | null }>(
+      `SELECT id, status, retry_count, parked_until, first_parked_at FROM transcription_queue
+       WHERE id IN ('q-rpnd-1', 'q-rpnd-2', 'q-rpnd-3')`
+    )
+    for (const row of rows) {
+      expect(row.status).toBe('pending')
+      expect(row.retry_count).toBe(0)
+      expect(row.parked_until).toBeNull()
+      expect(row.first_parked_at).toBeNull()
+    }
+  })
+
+  it('rependFailedItems: leaves non-matching failed rows untouched', () => {
+    insertTestRecording('rec-rpnd-4')
+    run(`INSERT INTO transcription_queue (id, recording_id, status, retry_count, error_message)
+         VALUES ('q-rpnd-4', 'rec-rpnd-4', 'failed', 3, 'Recording file not found: /path/to/file.hda')`)
+
+    const count = rependFailedItems(['OpenAI', 'Gemini API key', 'Ollama Cloud'])
+    expect(count).toBe(0)
+
+    const row = queryOne<{ status: string }>(`SELECT status FROM transcription_queue WHERE id = 'q-rpnd-4'`)
+    expect(row?.status).toBe('failed') // untouched
+  })
+
+  it('rependFailedItems: returns 0 for empty marker array', () => {
+    insertTestRecording('rec-rpnd-5')
+    run(`INSERT INTO transcription_queue (id, recording_id, status, error_message)
+         VALUES ('q-rpnd-5', 'rec-rpnd-5', 'failed', 'OpenAI key rejected')`)
+    expect(rependFailedItems([])).toBe(0)
+  })
+
+  it('rependFailedItems: also resets recording transcription_status to pending', () => {
+    insertTestRecording('rec-rpnd-6')
+    run(`UPDATE recordings SET transcription_status = 'error' WHERE id = 'rec-rpnd-6'`)
+    run(`INSERT INTO transcription_queue (id, recording_id, status, retry_count, error_message)
+         VALUES ('q-rpnd-6', 'rec-rpnd-6', 'failed', 3, 'OpenAI API key was rejected')`)
+
+    rependFailedItems(['OpenAI'])
+
+    const rec = queryOne<{ transcription_status: string }>(`SELECT transcription_status FROM recordings WHERE id = 'rec-rpnd-6'`)
+    expect(rec?.transcription_status).toBe('pending')
+  })
+
+  it('rependFailedItems: LIKE-injection safety — percent in marker does not break the query', () => {
+    insertTestRecording('rec-rpnd-7')
+    run(`INSERT INTO transcription_queue (id, recording_id, status, error_message)
+         VALUES ('q-rpnd-7', 'rec-rpnd-7', 'failed', 'some error')`)
+
+    // Passing a marker with SQL LIKE special chars should not error or match unintended rows
+    expect(() => rependFailedItems(['100% quota'])).not.toThrow()
+    const row = queryOne<{ status: string }>(`SELECT status FROM transcription_queue WHERE id = 'q-rpnd-7'`)
+    expect(row?.status).toBe('failed') // unmatched — untouched
   })
 })

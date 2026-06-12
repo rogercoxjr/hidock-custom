@@ -2497,6 +2497,80 @@ export function updateQueueProgress(id: string, progress: number): void {
   run('UPDATE transcription_queue SET progress = ? WHERE id = ?', [clampedProgress, id])
 }
 
+/** Quota parking (spec §7.2): keep status='pending' (no new status — dedupe/startup
+ *  recovery/re-pend stay correct by construction) and deliberately BYPASS the
+ *  generic 'pending' transition, which increments retry_count (see updateQueueItem).
+ *  first_parked_at anchors the 24h terminal cap and survives re-parks via COALESCE.
+ *  delayMs is converted to a timestamp IN SQL so the stored format matches
+ *  CURRENT_TIMESTAMP (space-separated UTC) — see the plan's TIMESTAMP FORMAT note. */
+export function parkQueueItem(id: string, delayMs: number): void {
+  const delaySeconds = Math.max(1, Math.round(delayMs / 1000))
+  run(
+    `UPDATE transcription_queue
+     SET status = 'pending',
+         parked_until = datetime('now', '+' || ? || ' seconds'),
+         first_parked_at = COALESCE(first_parked_at, CURRENT_TIMESTAMP),
+         progress = 0
+     WHERE id = ?`,
+    [String(delaySeconds), id]
+  )
+}
+
+/** Poller selection (spec §7.2): pending items not parked into the future.
+ *  datetime() on both sides normalizes any format drift. Everything else keeps
+ *  using getQueueItems unchanged. */
+export function getRunnableQueueItems(): (QueueItem & { filename?: string })[] {
+  return queryAll<QueueItem & { filename?: string }>(`
+    SELECT tq.*, r.filename
+    FROM transcription_queue tq
+    LEFT JOIN recordings r ON tq.recording_id = r.id
+    WHERE tq.status = 'pending' AND (tq.parked_until IS NULL OR datetime(tq.parked_until) <= datetime('now'))
+    ORDER BY tq.retry_count ASC, tq.created_at ASC`)
+}
+
+/** 24h-cap check (spec §7.2) — computed entirely in SQL (julianday) so the
+ *  space-format first_parked_at is never parsed by V8 (which would read it as
+ *  LOCAL time and skew the age by the UTC offset). */
+export function getQueueItemParkedHours(id: string): number | null {
+  const row = queryOne<{ hours: number | null }>(
+    `SELECT CASE WHEN first_parked_at IS NULL THEN NULL
+                 ELSE (julianday('now') - julianday(first_parked_at)) * 24.0 END AS hours
+     FROM transcription_queue WHERE id = ?`,
+    [id]
+  )
+  return row?.hours ?? null
+}
+
+/** Clear parking columns on any successful stage completion (spec §7.2):
+ *  so a Stage-1 park never poisons Stage-2's 24h clock. */
+export function clearParking(id: string): void {
+  run('UPDATE transcription_queue SET parked_until = NULL, first_parked_at = NULL WHERE id = ?', [id])
+}
+
+/** Key-fix / Retry-all re-pend (spec §7.3). Markers are LIKE-escaped. Returns count.
+ *  NOTE: row count is determined via SELECT first — never via getRowsModified()
+ *  because run() auto-persists and resets sql.js's modification counter (P1 lesson). */
+export function rependFailedItems(markers: string[]): number {
+  if (markers.length === 0) return 0
+  const likeClauses = markers.map(() => `error_message LIKE ? ESCAPE '\\'`).join(' OR ')
+  const params = markers.map((m) => `%${escapeLikePattern(m)}%`)
+  const matching = queryAll<{ id: string; recording_id: string }>(
+    `SELECT id, recording_id FROM transcription_queue WHERE status = 'failed' AND (${likeClauses})`,
+    params
+  )
+  if (matching.length === 0) return 0
+  run(
+    `UPDATE transcription_queue SET status = 'pending', retry_count = 0, parked_until = NULL, first_parked_at = NULL
+     WHERE status = 'failed' AND (${likeClauses})`,
+    params
+  )
+  // Reset linked recordings so the UI shows retrying
+  for (const row of matching) {
+    updateRecordingTranscriptionStatus(row.recording_id, 'pending')
+  }
+  return matching.length
+}
+
 export function removeFromQueue(id: string): void {
   run('DELETE FROM transcription_queue WHERE id = ?', [id])
 }
