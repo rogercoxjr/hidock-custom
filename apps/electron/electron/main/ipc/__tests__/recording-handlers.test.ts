@@ -840,13 +840,15 @@ describe('Recording IPC Handlers', () => {
       expect(result).toBe(false)
     })
 
-    it('should reject when API key is not configured', async () => {
+    it('should reject when the selected ASR provider key is not configured', async () => {
       const { getConfig } = await import('../../services/config')
       vi.mocked(getConfig).mockReturnValue({
         transcription: {
           provider: 'gemini',
           geminiApiKey: '', // Empty API key
           geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: '',
+          whisperModel: 'whisper-1',
           autoTranscribe: true,
           language: 'es'
         }
@@ -858,6 +860,61 @@ describe('Recording IPC Handlers', () => {
         success: false,
         error: 'Transcription API key not configured. Please add your API key in Settings.'
       })
+    })
+
+    // Spec §5.6: addToQueue must reuse the same provider-aware preflight as
+    // transcription:validateConfig — the gate is centralized in
+    // validateTranscriptionConfig(). These two cases pin the P3 resurfacing
+    // blocker: a Whisper+Ollama user must queue WITHOUT a Gemini key, and a
+    // Whisper user with no OpenAI key must be rejected (Gemini-only gate would
+    // have done the opposite and produced a silent false-success toast).
+    it('should reject a whisper provider with no OpenAI key even when a Gemini key is present', async () => {
+      const { getConfig } = await import('../../services/config')
+      const { addToQueue: addToQueueDb } = await import('../../services/database')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'openai-whisper',
+          geminiApiKey: 'gemini-present', // present but irrelevant for whisper ASR
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: '', // missing — should reject
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        }
+      } as any)
+
+      const result = await handlers['recordings:addToQueue'](null, 'rec-1')
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Transcription API key not configured. Please add your API key in Settings.'
+      })
+      expect(addToQueueDb).not.toHaveBeenCalled()
+    })
+
+    it('should queue a whisper+ollama user without requiring a Gemini key', async () => {
+      const { getConfig } = await import('../../services/config')
+      const { addToQueue: addToQueueDb, updateRecordingTranscriptionStatus } = await import('../../services/database')
+      vi.mocked(addToQueueDb).mockReturnValue('queue-item-id')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'openai-whisper',
+          geminiApiKey: '', // no Gemini key — must NOT block (P3 Ollama summarization)
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: 'sk-present',
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        },
+        // P3 summarization provider (structural read until config.summarization lands)
+        summarization: { provider: 'ollama-cloud' }
+      } as any)
+
+      const result = await handlers['recordings:addToQueue'](null, 'rec-1')
+
+      expect(addToQueueDb).toHaveBeenCalledWith('rec-1')
+      expect(updateRecordingTranscriptionStatus).toHaveBeenCalledWith('rec-1', 'queued')
+      expect(result).toBe('queue-item-id')
     })
   })
 

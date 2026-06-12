@@ -47,6 +47,46 @@ export interface RecordingWithTranscript extends Recording {
   transcript?: Transcript
 }
 
+/**
+ * Provider-aware transcription config preflight (spec §5.6). This is the
+ * CANONICAL key gate — both the `transcription:validateConfig` IPC handler and
+ * `recordings:addToQueue` call it so the rules live in one place. (Previously
+ * addToQueue carried its own untrimmed, Gemini-only `geminiApiKey` check, which
+ * would silently false-succeed for a Whisper+Ollama user once P3 lands.)
+ *
+ * Returns which selected providers lack keys. Only 'missing-key' is emitted
+ * here in v1 — 'rejected-key' is detected at call time (§7.1 ProviderAuthError)
+ * and via the Settings Test button; the type carries it so consumers handle both.
+ *
+ * P3 EXTENDS the sumProvider branch for ollama-cloud — the `summarization`
+ * structural cast below is the marker the P3 "remove the cast" sweep must find.
+ */
+export function validateTranscriptionConfig(): {
+  ok: boolean
+  problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }>
+} {
+  const config = getConfig()
+  const problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }> = []
+  const asrProvider = config.transcription.provider
+  if (asrProvider === 'openai-whisper' && !config.transcription.openaiApiKey.trim()) {
+    problems.push({ stage: 'asr', provider: 'openai-whisper', problem: 'missing-key' })
+  }
+  if (asrProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
+    problems.push({ stage: 'asr', provider: 'gemini', problem: 'missing-key' })
+  }
+  // Summarization stage: P2 ships gemini-only (config.summarization lands in P3 —
+  // mirror llm-provider.ts's structural read until then). The cast below is the
+  // P3 "remove the cast" sweep marker.
+  const sumProvider =
+    (config as { summarization?: { provider?: string } }).summarization?.provider ?? 'gemini'
+  if (sumProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
+    if (!problems.some((p) => p.provider === 'gemini')) {
+      problems.push({ stage: 'summarization', provider: 'gemini', problem: 'missing-key' })
+    }
+  }
+  return { ok: problems.length === 0, problems }
+}
+
 export function registerRecordingHandlers(): void {
   // Get all recordings
   ipcMain.handle('recordings:getAll', async (): Promise<Recording[]> => {
@@ -317,6 +357,8 @@ export function registerRecordingHandlers(): void {
 
   // Provider-aware preflight (spec §5.6): which selected providers lack keys.
   // Replaces the renderer's hardcoded Gemini-key gates (useOperations).
+  // Body lives in the shared validateTranscriptionConfig() so addToQueue reuses
+  // the exact same gate (single source of truth).
   ipcMain.handle('transcription:validateConfig', async (): Promise<{
     ok: boolean
     // Union per spec §5.6. Only 'missing-key' is emitted by the preflight in v1 —
@@ -324,25 +366,7 @@ export function registerRecordingHandlers(): void {
     // Settings Test button; the type carries it so consumers handle both.
     problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }>
   }> => {
-    const config = getConfig()
-    const problems: Array<{ stage: 'asr' | 'summarization'; provider: string; problem: 'missing-key' | 'rejected-key' }> = []
-    const asrProvider = config.transcription.provider
-    if (asrProvider === 'openai-whisper' && !config.transcription.openaiApiKey.trim()) {
-      problems.push({ stage: 'asr', provider: 'openai-whisper', problem: 'missing-key' })
-    }
-    if (asrProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
-      problems.push({ stage: 'asr', provider: 'gemini', problem: 'missing-key' })
-    }
-    // Summarization stage: P2 ships gemini-only (config.summarization lands in P3 —
-    // mirror llm-provider.ts's structural read until then).
-    const sumProvider =
-      (config as { summarization?: { provider?: string } }).summarization?.provider ?? 'gemini'
-    if (sumProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
-      if (!problems.some((p) => p.provider === 'gemini')) {
-        problems.push({ stage: 'summarization', provider: 'gemini', problem: 'missing-key' })
-      }
-    }
-    return { ok: problems.length === 0, problems }
+    return validateTranscriptionConfig()
   })
 
   ipcMain.handle('transcription:getQueue', async (): Promise<any[]> => {
@@ -571,9 +595,12 @@ export function registerRecordingHandlers(): void {
   // Add a recording to the transcription queue
   ipcMain.handle('recordings:addToQueue', async (_, recordingId: string) => {
     try {
-      // Validate API key is configured before queueing
-      const config = getConfig()
-      if (!config.transcription.geminiApiKey) {
+      // Validate the SELECTED providers' keys before queueing, via the shared
+      // gate (spec §5.6). This is provider-aware: a Whisper+Ollama user queues
+      // without a Gemini key, and a Whisper user without an OpenAI key is
+      // rejected — the previous untrimmed Gemini-only check did the opposite and
+      // would silently false-succeed once P3 wires Ollama summarization.
+      if (!validateTranscriptionConfig().ok) {
         return {
           success: false,
           error: 'Transcription API key not configured. Please add your API key in Settings.'
