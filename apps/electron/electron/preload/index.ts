@@ -99,8 +99,8 @@ export interface ElectronAPI {
 
   // Summarization provider API (main-process fetch — renderer can't call cross-origin)
   summarization: {
-    listModels: () => Promise<{ success: boolean; models?: string[]; error?: string }>
-    testConnection: () => Promise<{ success: boolean; error?: string }>
+    listModels: (apiKey?: string) => Promise<{ success: boolean; models?: string[]; error?: string }>
+    testConnection: (apiKey?: string, model?: string) => Promise<{ success: boolean; error?: string }>
   }
 
   // Database - Meetings
@@ -532,8 +532,8 @@ const electronAPI: ElectronAPI = {
   },
 
   summarization: {
-    listModels: () => callIPC('summarization:listModels'),
-    testConnection: () => callIPC('summarization:testConnection')
+    listModels: (apiKey) => callIPC('summarization:listModels', apiKey),
+    testConnection: (apiKey, model) => callIPC('summarization:testConnection', apiKey, model)
   },
 
   meetings: {

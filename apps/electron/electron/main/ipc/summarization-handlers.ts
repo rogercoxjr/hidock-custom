@@ -11,9 +11,11 @@ export function registerSummarizationHandlers(): void {
   // requests to ollama.com without a CORS issue.
   ipcMain.handle(
     'summarization:listModels',
-    async (): Promise<{ success: boolean; models?: string[]; error?: string }> => {
-      const config = getConfig()
-      const apiKey = config.summarization?.ollamaCloudApiKey ?? ''
+    async (_event, apiKeyArg?: unknown): Promise<{ success: boolean; models?: string[]; error?: string }> => {
+      // Prefer the key passed from the (possibly unsaved) Settings form so first-run
+      // setup works before Save; fall back to the persisted key for legacy callers.
+      const apiKey =
+        typeof apiKeyArg === 'string' && apiKeyArg.length > 0 ? apiKeyArg : getConfig().summarization?.ollamaCloudApiKey ?? ''
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
       try {
@@ -44,10 +46,15 @@ export function registerSummarizationHandlers(): void {
   // model and classify the result: ok / key-rejected / model-not-found / quota.
   ipcMain.handle(
     'summarization:testConnection',
-    async (): Promise<{ success: boolean; error?: string }> => {
+    async (_event, apiKeyArg?: unknown, modelArg?: unknown): Promise<{ success: boolean; error?: string }> => {
+      // Prefer the key/model passed from the (possibly unsaved) Settings form so the
+      // Test button reflects what the user typed, not stale saved values; fall back to
+      // the persisted config for legacy callers.
       const config = getConfig()
-      const apiKey = config.summarization?.ollamaCloudApiKey ?? ''
-      const model = config.summarization?.ollamaCloudModel ?? ''
+      const apiKey =
+        typeof apiKeyArg === 'string' && apiKeyArg.length > 0 ? apiKeyArg : config.summarization?.ollamaCloudApiKey ?? ''
+      const model =
+        typeof modelArg === 'string' && modelArg.length > 0 ? modelArg : config.summarization?.ollamaCloudModel ?? ''
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
       try {

@@ -349,7 +349,7 @@ describe('Settings Page', () => {
         fireEvent.click(screen.getByLabelText('Use Ollama Cloud summarization provider'))
       })
 
-      // Fill in an API key so the button is enabled
+      // Fill in an API key — fetch must use this (unsaved) form key, not a persisted one
       const keyInput = screen.getByLabelText('Ollama Cloud API Key') as HTMLInputElement
       fireEvent.change(keyInput, { target: { value: 'ok-1234567890' } })
 
@@ -357,8 +357,9 @@ describe('Settings Page', () => {
         fireEvent.click(screen.getByLabelText('Fetch available Ollama Cloud models'))
       })
 
+      // The form key is forwarded to the IPC so first-run fetch works before Save
+      expect(mockListModels).toHaveBeenCalledWith('ok-1234567890')
       // After fetch, a select should appear with the model names
-      expect(mockListModels).toHaveBeenCalled()
       expect(screen.getByText('gpt-oss:120b')).toBeInTheDocument()
     })
 
@@ -369,7 +370,7 @@ describe('Settings Page', () => {
         fireEvent.click(screen.getByLabelText('Use Ollama Cloud summarization provider'))
       })
 
-      // Fill in key and model so the "Test" button is enabled
+      // Fill in key and model — Test must reflect these (unsaved) form values, not stale saved ones
       const keyInput = screen.getByLabelText('Ollama Cloud API Key') as HTMLInputElement
       fireEvent.change(keyInput, { target: { value: 'ok-1234567890' } })
       const modelInput = screen.getByLabelText('Ollama Cloud Model') as HTMLInputElement
@@ -379,7 +380,8 @@ describe('Settings Page', () => {
         fireEvent.click(screen.getByLabelText('Test Ollama Cloud connection'))
       })
 
-      expect(mockTestConnection).toHaveBeenCalled()
+      // The form key + model are forwarded to the IPC so Test checks what the user typed
+      expect(mockTestConnection).toHaveBeenCalledWith('ok-1234567890', 'gpt-oss:120b')
     })
   })
 

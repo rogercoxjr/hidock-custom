@@ -161,7 +161,8 @@ export function Settings() {
 
   const isSummarizationDirty = useMemo(() => {
     if (!config) return false
-    const cfg = (config as any).summarization
+    const cfg = config.summarization
+    // Defensive branch for legacy config files written before the summarization section landed.
     if (!cfg) return sumProvider !== 'gemini' || ollamaCloudApiKey !== '' || ollamaCloudModel !== ''
     return (
       sumProvider !== (cfg.provider || 'gemini') ||
@@ -200,8 +201,8 @@ export function Settings() {
       setOllamaUrl(config.embeddings.ollamaBaseUrl)
       // C-CHAT: Load RAG context window size
       setRagContextSize(config.chat.maxContextChunks)
-      // Summarization (P3)
-      const sumCfg = (config as any).summarization
+      // Summarization (P3) — config.summarization is typed; the guard covers legacy config files.
+      const sumCfg = config.summarization
       if (sumCfg) {
         setSumProvider(sumCfg.provider || 'gemini')
         setOllamaCloudApiKey(sumCfg.ollamaCloudApiKey || '')
@@ -397,9 +398,9 @@ export function Settings() {
       }
     }
 
-    const previousSumProvider = (config as any)?.summarization?.provider ?? 'gemini'
-    const previousOllamaCloudApiKey = (config as any)?.summarization?.ollamaCloudApiKey ?? ''
-    const previousOllamaCloudModel = (config as any)?.summarization?.ollamaCloudModel ?? ''
+    const previousSumProvider = config?.summarization?.provider ?? 'gemini'
+    const previousOllamaCloudApiKey = config?.summarization?.ollamaCloudApiKey ?? ''
+    const previousOllamaCloudModel = config?.summarization?.ollamaCloudModel ?? ''
 
     setSaving(true)
     try {
@@ -426,7 +427,8 @@ export function Settings() {
   const handleFetchModels = async () => {
     setFetchingModels(true)
     try {
-      const result = await window.electronAPI.summarization.listModels()
+      // Pass the form key so first-run fetch works before Save (no saved-vs-unsaved coupling)
+      const result = await window.electronAPI.summarization.listModels(ollamaCloudApiKey)
       if (result.success && result.models) {
         setOllamaModels(result.models)
         if (result.models.length === 0) {
@@ -444,7 +446,8 @@ export function Settings() {
 
   const handleTestConnection = async () => {
     try {
-      const result = await window.electronAPI.summarization.testConnection()
+      // Pass the form key + model so Test reflects what the user typed, not stale saved values
+      const result = await window.electronAPI.summarization.testConnection(ollamaCloudApiKey, ollamaCloudModel)
       if (result.success) {
         toast.success('Connection OK', 'Ollama Cloud connection and model are working')
       } else {

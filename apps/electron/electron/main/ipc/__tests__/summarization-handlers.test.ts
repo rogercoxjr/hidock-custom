@@ -88,6 +88,23 @@ describe('Summarization IPC Handlers', () => {
       expect(result.success).toBe(false)
       expect(result.error).toContain('network failure')
     })
+
+    it('uses the key passed as an arg (unsaved form key) over the persisted config key', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ models: [{ name: 'gpt-oss:120b' }] })
+      })
+
+      // Arg key differs from the persisted 'test-ollama-key-12345' in beforeEach.
+      await handlers['summarization:listModels'](null, 'form-key-unsaved')
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://ollama.com/api/tags',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer form-key-unsaved' })
+        })
+      )
+    })
   })
 
   // --- summarization:testConnection ---
@@ -154,6 +171,22 @@ describe('Summarization IPC Handlers', () => {
 
       expect(result.success).toBe(false)
       expect(result.error).toMatch(/quota|rate.?limit/i)
+    })
+
+    it('uses the key + model passed as args (unsaved form values) over the persisted config', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ message: { content: 'pong' } })
+      })
+
+      // Args differ from the persisted key/model in beforeEach.
+      await handlers['summarization:testConnection'](null, 'form-key-unsaved', 'deepseek-v3.1:671b')
+
+      const callArgs = mockFetch.mock.calls[0]
+      const body = JSON.parse(callArgs[1].body)
+      expect(callArgs[1].headers.Authorization).toBe('Bearer form-key-unsaved')
+      expect(body.model).toBe('deepseek-v3.1:671b')
     })
   })
 })
