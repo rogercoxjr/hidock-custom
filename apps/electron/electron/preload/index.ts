@@ -167,6 +167,8 @@ export interface ElectronAPI {
     updateQueueItem: (id: string, status: string, errorMessage?: string) => Promise<boolean>
     validateTranscriptionConfig: () => Promise<{ ok: boolean; problems: Array<{ stage: string; provider: string; problem: string }> }>
     resummarize: (recordingId: string) => Promise<{ success: boolean; error?: string }>
+    /** P4: Re-pend all provider-terminal failures (spec §7.3). */
+    retryAllFailed: () => Promise<{ success: boolean; count: number }>
   }
 
   // Database - Transcripts
@@ -592,6 +594,7 @@ const electronAPI: ElectronAPI = {
     updateQueueItem: (id: string, status: string, errorMessage?: string) => callIPC('transcription:updateQueueItem', id, status, errorMessage),
     validateTranscriptionConfig: () => callIPC('transcription:validateConfig'),
     resummarize: (recordingId) => callIPC('transcription:resummarize', recordingId),
+    retryAllFailed: () => callIPC('transcription:retryAll'),
   },
 
   transcripts: {

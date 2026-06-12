@@ -34,6 +34,7 @@ import { buildSearchCorpus } from '@/features/library/utils/buildSearchCorpus'
 import { useLibraryStore, useLibrarySorting } from '@/store/useLibraryStore'
 import { useOperations } from '@/hooks/useOperations'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { useFailedTranscriptions } from '@/store/features/useTranscriptionStore'
 
 export function Library() {
   const navigate = useNavigate()
@@ -65,6 +66,29 @@ export function Library() {
   const isDownloading = useCallback((filename: string) => {
     return downloadQueue.has(filename)
   }, [downloadQueue])
+
+  // P4: Failure chip — count failed transcription queue rows (hydrated on mount
+  // + updated by polling, so the chip persists correctly after app restart).
+  const failedTranscriptions = useFailedTranscriptions()
+
+  // P4: Retry-all handler — re-pends provider-terminal failures then refreshes.
+  const handleRetryAllFailed = useCallback(async () => {
+    try {
+      const result = await window.electronAPI?.recordings?.retryAllFailed?.()
+      if (result) {
+        const count = result.count ?? 0
+        if (count > 0) {
+          toast.success('Re-queued Transcriptions', `Re-queued ${count} failed transcription${count === 1 ? '' : 's'}`)
+        } else {
+          toast.info('Nothing to Retry', 'No provider-terminal failures found to retry')
+        }
+        refresh(false)
+      }
+    } catch (err) {
+      console.error('retryAllFailed error:', err)
+      toast.error('Retry Failed', 'Could not retry failed transcriptions')
+    }
+  }, [refresh])
 
   // UI state - expandedTranscripts centralized in useLibraryStore (B-LIB-005)
   const expandedTranscripts = useLibraryStore((state) => state.expandedTranscripts)
@@ -819,12 +843,14 @@ export function Library() {
         bulkCounts={bulkCounts}
         bulkProcessing={bulkProcessing}
         bulkProgress={bulkProgress}
+        failedCount={failedTranscriptions.length}
         onAddRecording={handleAddRecording}
         onOpenFolder={openRecordingsFolder}
         onBulkDownload={handleBulkDownload}
         onBulkProcess={handleBulkProcess}
         onRefresh={() => refresh(true)}
         onSetCompactView={setCompactView}
+        onRetryAllFailed={handleRetryAllFailed}
       />
 
       {/* Device Disconnect Banner */}

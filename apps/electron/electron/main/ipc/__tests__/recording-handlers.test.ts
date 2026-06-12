@@ -31,7 +31,8 @@ vi.mock('../../services/database', () => ({
   getQueueItems: vi.fn(),
   addToQueue: vi.fn(),
   updateQueueItem: vi.fn(),
-  clearTranscriptStage2Marker: vi.fn()
+  clearTranscriptStage2Marker: vi.fn(),
+  rependFailedItems: vi.fn().mockReturnValue(0)
 }))
 
 // Mock file-storage service
@@ -202,7 +203,8 @@ describe('Recording IPC Handlers', () => {
       'recordings:updateStatus',
       'recordings:updateTranscriptionStatus',
       'transcription:validateConfig',
-      'transcription:resummarize'
+      'transcription:resummarize',
+      'transcription:retryAll'
     ]
 
     for (const channel of expectedChannels) {
@@ -1134,6 +1136,40 @@ describe('Recording IPC Handlers', () => {
 
       expect(result).toEqual({ success: false, error: 'no transcript row for recording' })
       expect(addToQueue).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('transcription:retryAll (auto-pipeline P4 Task 4)', () => {
+    it('calls rependFailedItems with all three provider markers and triggers processQueueManually', async () => {
+      const { rependFailedItems } = await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
+      vi.mocked(rependFailedItems).mockReturnValue(3)
+
+      const result = await handlers['transcription:retryAll'](null)
+
+      expect(rependFailedItems).toHaveBeenCalledWith(['OpenAI', 'Ollama Cloud', 'Gemini API key'])
+      expect(processQueueManually).toHaveBeenCalled()
+      expect(result).toEqual({ success: true, count: 3 })
+    })
+
+    it('returns count=0 and success=true when no failed items match', async () => {
+      const { rependFailedItems } = await import('../../services/database')
+      vi.mocked(rependFailedItems).mockReturnValue(0)
+
+      const result = await handlers['transcription:retryAll'](null)
+
+      expect(result).toEqual({ success: true, count: 0 })
+    })
+
+    it('returns failure shape on error', async () => {
+      const { rependFailedItems } = await import('../../services/database')
+      vi.mocked(rependFailedItems).mockImplementation(() => {
+        throw new Error('DB locked')
+      })
+
+      const result = await handlers['transcription:retryAll'](null)
+
+      expect(result).toEqual({ success: false, count: 0 })
     })
   })
 })

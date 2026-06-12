@@ -18,7 +18,8 @@ export function useTranscriptionSync() {
 
     const isElectron = !!window.electronAPI?.recordings?.getTranscriptionQueue
 
-    // Hydrate transcription queue from database on mount
+    // Hydrate transcription queue from database on mount.
+    // P4: also hydrate 'failed' rows so the failure chip shows non-zero after restart.
     if (isElectron) {
       window.electronAPI.recordings.getTranscriptionQueue().then((items: any[]) => {
         const store = useTranscriptionStore.getState()
@@ -29,6 +30,11 @@ export function useTranscriptionSync() {
             if (item.status === 'processing') {
               store.updateProgress(item.id, item.progress ?? 0)
             }
+          } else if (item.status === 'failed') {
+            // P4 hydration fix: failed rows must reach the store so the chip counts
+            // them even after an app restart (they never arrive via live events).
+            store.addToQueue(item.id, item.recording_id, item.filename || 'Unknown')
+            store.markFailed(item.id, item.error_message || 'Unknown error')
           }
         }
       }).catch(e => console.error('Failed to hydrate transcription queue:', e))
@@ -131,9 +137,12 @@ export function useTranscriptionSync() {
                   store.markCompleted(item.id, item.provider || 'gemini')
                 }
               } else if (item.status === 'failed') {
-                if (store.queue.has(item.id)) {
-                  store.markFailed(item.id, item.error_message || 'Unknown error')
+                // P4: drop the has() guard so newly-failed rows appear in the store
+                // (and thus the chip) without waiting for the next live event.
+                if (!store.queue.has(item.id)) {
+                  store.addToQueue(item.id, item.recording_id, item.filename || 'Unknown')
                 }
+                store.markFailed(item.id, item.error_message || 'Unknown error')
               } else if (item.status === 'processing') {
                 if (!store.queue.has(item.id)) {
                   store.addToQueue(item.id, item.recording_id, item.filename || 'Unknown')

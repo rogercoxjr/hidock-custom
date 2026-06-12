@@ -18,12 +18,16 @@ interface LibraryHeaderProps {
   }
   bulkProcessing: boolean
   bulkProgress: { current: number; total: number }
+  /** P4: count of failed transcription queue rows (chip only shows when > 0) */
+  failedCount: number
   onAddRecording: () => void
   onOpenFolder: () => void
   onBulkDownload: () => void
   onBulkProcess: () => void
   onRefresh: () => void
   onSetCompactView: (compact: boolean) => void
+  /** P4: Retry-all failed transcriptions handler */
+  onRetryAllFailed: () => void
 }
 
 export function LibraryHeader({
@@ -35,12 +39,14 @@ export function LibraryHeader({
   bulkCounts,
   bulkProcessing,
   bulkProgress,
+  failedCount,
   onAddRecording,
   onOpenFolder,
   onBulkDownload,
   onBulkProcess,
   onRefresh,
-  onSetCompactView
+  onSetCompactView,
+  onRetryAllFailed
 }: LibraryHeaderProps) {
   return (
     <header className="border-b px-6 py-4">
@@ -56,6 +62,15 @@ export function LibraryHeader({
             )}
             {!deviceConnected && stats.deviceOnly === 0 && (
               <span className="ml-2 text-muted-foreground">(device not connected)</span>
+            )}
+            {failedCount > 0 && (
+              <span className="ml-2 text-red-600 dark:text-red-400">
+                ({failedCount} transcription{failedCount === 1 ? '' : 's'} failed —{' '}
+                <button type="button" onClick={onRetryAllFailed} className="underline underline-offset-2 hover:text-red-700">
+                  Retry all
+                </button>
+                )
+              </span>
             )}
           </p>
         </div>

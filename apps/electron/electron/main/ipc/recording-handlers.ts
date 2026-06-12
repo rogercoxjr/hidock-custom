@@ -30,7 +30,7 @@ import {
   cancelAllTranscriptions,
   processQueueManually
 } from '../services/transcription'
-import { getQueueItems, addToQueue, updateQueueItem, clearTranscriptStage2Marker } from '../services/database'
+import { getQueueItems, addToQueue, updateQueueItem, clearTranscriptStage2Marker, rependFailedItems } from '../services/database'
 import { getConfig } from '../services/config'
 import {
   GetRecordingByIdSchema,
@@ -351,6 +351,23 @@ export function registerRecordingHandlers(): void {
       return { success: true, count }
     } catch (error) {
       console.error('transcription:cancelAll error:', error)
+      return { success: false, count: 0 }
+    }
+  })
+
+  // Retry-all failed transcriptions (spec §7.3): re-pend provider-terminal failures
+  // using all three provider markers so the user need not know which provider failed.
+  // Deterministic failures (file not found, disk-space, ffmpeg) are excluded BY
+  // CONSTRUCTION — their error messages match none of the provider markers.
+  ipcMain.handle('transcription:retryAll', async (): Promise<{ success: boolean; count: number }> => {
+    try {
+      const count = rependFailedItems(['OpenAI', 'Ollama Cloud', 'Gemini API key'])
+      if (count > 0) {
+        void processQueueManually()
+      }
+      return { success: true, count }
+    } catch (error) {
+      console.error('transcription:retryAll error:', error)
       return { success: false, count: 0 }
     }
   })
