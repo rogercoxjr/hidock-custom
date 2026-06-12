@@ -102,11 +102,9 @@ vi.mock('fs', async (importOriginal) => {
       return { size: shared.inputSize }
     }),
     readdirSync: vi.fn((_dir: string) => {
-      // Return segment filenames as objects with a .name property (Dirent-like)
-      return shared.segmentFiles.map((name) => ({
-        name,
-        isFile: () => true
-      }))
+      // readdirSync(dir) with no options returns string[] (filenames only),
+      // matching production usage in audio-normalize.ts.
+      return [...shared.segmentFiles]
     }),
     statfsSync: vi.fn((_path: string) => {
       const blockSize = 4096
@@ -152,6 +150,30 @@ describe('resolveFfmpegPath()', () => {
   it('1b. packaged: replaces app.asar with app.asar.unpacked', () => {
     shared.isPackaged = true
     expect(resolveFfmpegPath()).toBe(FAKE_FFMPEG_UNPACKED)
+  })
+
+  it('2. throws a clear error when ffmpeg-static resolves null (plan Step 4 test 2)', async () => {
+    // The `ffmpegStaticPath` import binding is captured at module load, so the
+    // null case requires re-mocking ffmpeg-static + resetting modules and a
+    // dynamic re-import to exercise the throw branch (audio-normalize.ts:18-20).
+    vi.resetModules()
+    vi.doMock('ffmpeg-static', () => ({ default: null }))
+    // Re-stub electron (the only boundary resolveFfmpegPath touches) so the
+    // fresh module graph reads app.isPackaged without pulling real electron.
+    vi.doMock('electron', () => ({
+      app: new Proxy({}, {
+        get: (_t: Record<string, unknown>, prop: string | symbol) =>
+          prop === 'isPackaged' ? shared.isPackaged : undefined
+      })
+    }))
+    try {
+      const { resolveFfmpegPath: resolveNull } = await import('../asr/audio-normalize')
+      expect(() => resolveNull()).toThrow(/ffmpeg binary not found .*ffmpeg-static resolved to null/)
+    } finally {
+      vi.doUnmock('ffmpeg-static')
+      vi.doUnmock('electron')
+      vi.resetModules()
+    }
   })
 })
 

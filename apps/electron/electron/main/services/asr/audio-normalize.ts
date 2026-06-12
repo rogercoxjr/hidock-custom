@@ -85,16 +85,11 @@ export async function normalizeForWhisper(inputPath: string): Promise<{ files: s
     throw new Error(`ffmpeg failed for ${inputBase}: ${String((e as { stderr?: string }).stderr ?? (e as Error).message).slice(-200)}`)
   }
 
-  // Collect segment files from the temp directory
+  // Collect segment files from the temp directory. readdirSync(dir) with no
+  // options returns string[] (filenames only).
   const segFiles = readdirSync(ASR_TMP)
-    .filter((entry) => {
-      const name = typeof entry === 'string' ? entry : (entry as { name: string }).name
-      return name.startsWith(inputBase + '.part') && name.endsWith('.mp3')
-    })
-    .map((entry) => {
-      const name = typeof entry === 'string' ? entry : (entry as { name: string }).name
-      return join(ASR_TMP, name)
-    })
+    .filter((name) => name.startsWith(inputBase + '.part') && name.endsWith('.mp3'))
+    .map((name) => join(ASR_TMP, name))
     .sort()
 
   return { files: segFiles }
