@@ -12,6 +12,7 @@ files:
 asarUnpack:
   - '**/*.node'
   - '**/usb/**'
+  - '**/ffmpeg-static/**'
 win:
   target:
     - target: nsis

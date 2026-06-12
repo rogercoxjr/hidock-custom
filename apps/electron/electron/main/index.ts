@@ -32,6 +32,7 @@ import {
   stopTranscriptionProcessor,
   setMainWindowForTranscription
 } from './services/transcription'
+import { cleanAsrTempDir } from './services/asr/audio-normalize'
 import { getVectorStore } from './services/vector-store'
 import { getRAGService } from './services/rag'
 import { setMainWindowForEventBus } from './services/event-bus'
@@ -269,6 +270,7 @@ app.whenReady().then(async () => {
   }
 
   startRecordingWatcher()
+  cleanAsrTempDir() // Wipe any leftover ASR temp files from a previous run (spec §5.1 temp hygiene)
   startTranscriptionProcessor()
   console.log('Background services started')
 
