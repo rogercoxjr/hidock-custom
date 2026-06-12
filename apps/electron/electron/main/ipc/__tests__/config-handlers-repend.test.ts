@@ -87,7 +87,7 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
 // ---------------------------------------------------------------------------
 
 describe('config:update-section — key-fix re-pend (auto-pipeline P4 Task 3)', () => {
-  let handlers: Record<string, (...args: unknown[]) => unknown> = {}
+  let handlers: Record<string, (...args: any[]) => any> = {}
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -105,7 +105,7 @@ describe('config:update-section — key-fix re-pend (auto-pipeline P4 Task 3)', 
     mockRependFailedItems.mockReturnValue(0)
     mockProcessQueueManually.mockResolvedValue(undefined)
 
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: any[]) => any) => {
       handlers[channel] = handler
       return undefined as ReturnType<typeof ipcMain.handle>
     })
