@@ -56,6 +56,11 @@ export interface AppConfig {
     ollamaModel: string
     maxContextChunks: number
   }
+  summarization: {
+    provider: 'gemini' | 'ollama-cloud'  // default 'gemini' = today's fused behavior (spec §5.4)
+    ollamaCloudApiKey: string             // safeStorage-encrypted at rest
+    ollamaCloudModel: string              // e.g. 'gpt-oss:120b', 'deepseek-v3.1:671b'
+  }
   device: {
     autoConnect: boolean
     autoDownload: boolean
@@ -104,6 +109,11 @@ const DEFAULT_CONFIG: AppConfig = {
     ollamaModel: 'llama3.2',
     maxContextChunks: 10
   },
+  summarization: {
+    provider: 'gemini',
+    ollamaCloudApiKey: '',
+    ollamaCloudModel: ''
+  },
   device: {
     autoConnect: true,
     autoDownload: true
@@ -142,6 +152,9 @@ export async function initializeConfig(): Promise<void> {
       if (savedConfig.transcription?.openaiApiKey) {
         savedConfig.transcription.openaiApiKey = decryptSensitive(savedConfig.transcription.openaiApiKey)
       }
+      if (savedConfig.summarization?.ollamaCloudApiKey) {
+        savedConfig.summarization.ollamaCloudApiKey = decryptSensitive(savedConfig.summarization.ollamaCloudApiKey)
+      }
       // Merge with defaults to handle new fields
       config = deepMerge(DEFAULT_CONFIG, savedConfig)
     } else {
@@ -178,6 +191,10 @@ export async function saveConfig(newConfig: Partial<AppConfig>): Promise<void> {
     transcription: {
       ...config.transcription,
       openaiApiKey: encryptSensitive(config.transcription.openaiApiKey)
+    },
+    summarization: {
+      ...config.summarization,
+      ollamaCloudApiKey: encryptSensitive(config.summarization.ollamaCloudApiKey)
     }
   }
   writeFileSync(configPath, JSON.stringify(toWrite, null, 2))

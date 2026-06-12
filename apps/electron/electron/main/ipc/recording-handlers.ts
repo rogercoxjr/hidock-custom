@@ -52,14 +52,14 @@ export interface RecordingWithTranscript extends Recording {
  * CANONICAL key gate — both the `transcription:validateConfig` IPC handler and
  * `recordings:addToQueue` call it so the rules live in one place. (Previously
  * addToQueue carried its own untrimmed, Gemini-only `geminiApiKey` check, which
- * would silently false-succeed for a Whisper+Ollama user once P3 lands.)
+ * would silently false-succeed for a Whisper+Ollama user before P3.)
  *
  * Returns which selected providers lack keys. Only 'missing-key' is emitted
  * here in v1 — 'rejected-key' is detected at call time (§7.1 ProviderAuthError)
  * and via the Settings Test button; the type carries it so consumers handle both.
  *
- * P3 EXTENDS the sumProvider branch for ollama-cloud — the `summarization`
- * structural cast below is the marker the P3 "remove the cast" sweep must find.
+ * P3 extended the sumProvider branch for ollama-cloud — config.summarization
+ * is now part of AppConfig (structural cast removed in P3).
  */
 export function validateTranscriptionConfig(): {
   ok: boolean
@@ -74,11 +74,8 @@ export function validateTranscriptionConfig(): {
   if (asrProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
     problems.push({ stage: 'asr', provider: 'gemini', problem: 'missing-key' })
   }
-  // Summarization stage: P2 ships gemini-only (config.summarization lands in P3 —
-  // mirror llm-provider.ts's structural read until then). The cast below is the
-  // P3 "remove the cast" sweep marker.
-  const sumProvider =
-    (config as { summarization?: { provider?: string } }).summarization?.provider ?? 'gemini'
+  // Summarization stage: reads config.summarization.provider (added in P3).
+  const sumProvider = config.summarization?.provider ?? 'gemini'
   if (sumProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
     if (!problems.some((p) => p.provider === 'gemini')) {
       problems.push({ stage: 'summarization', provider: 'gemini', problem: 'missing-key' })

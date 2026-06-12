@@ -42,6 +42,60 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
+describe('config — summarization section (auto-pipeline P3)', () => {
+  it('1. defaults: fresh initializeConfig → summarization has correct defaults', async () => {
+    const { initializeConfig, getConfig } = await import('../config')
+    await initializeConfig()
+    const cfg = getConfig()
+    expect(cfg.summarization).toEqual({
+      provider: 'gemini',
+      ollamaCloudApiKey: '',
+      ollamaCloudModel: ''
+    })
+  })
+
+  it('2. cold-start round-trip for ollamaCloudApiKey: save → disk has __enc__ → reload decrypts', async () => {
+    const { initializeConfig, saveConfig, getConfig } = await import('../config')
+
+    await initializeConfig()
+
+    // Save a config with an ollamaCloudApiKey
+    const base = getConfig()
+    await saveConfig({
+      summarization: {
+        ...base.summarization,
+        ollamaCloudApiKey: 'ollama-secret-key'
+      }
+    })
+
+    // Read the raw JSON from disk — the stored value must be encrypted
+    const configPath = join(currentTmpDir, 'config.json')
+    const raw = JSON.parse(readFileSync(configPath, 'utf-8'))
+    expect(raw.summarization.ollamaCloudApiKey).toMatch(/^__enc__/)
+    expect(raw.summarization.ollamaCloudApiKey).not.toContain('ollama-secret-key')
+
+    // Re-import fresh module state and reload from disk
+    vi.resetModules()
+    vi.mock('electron', () => ({
+      app: {
+        getPath: (name: string) => {
+          if (name === 'userData') return currentTmpDir
+          if (name === 'home') return currentTmpDir
+          return currentTmpDir
+        }
+      },
+      safeStorage: {
+        isEncryptionAvailable: () => true,
+        encryptString: (s: string) => Buffer.from('ENC:' + s),
+        decryptString: (b: Buffer) => b.toString().replace(/^ENC:/, '')
+      }
+    }))
+    const mod2 = await import('../config')
+    await mod2.initializeConfig()
+    expect(mod2.getConfig().summarization.ollamaCloudApiKey).toBe('ollama-secret-key')
+  })
+})
+
 describe('config — openaiApiKey crypto (auto-pipeline P2)', () => {
   it('1. cold-start round-trip: save → disk has __enc__ → reload decrypts', async () => {
     const { initializeConfig, saveConfig, getConfig } = await import('../config')
