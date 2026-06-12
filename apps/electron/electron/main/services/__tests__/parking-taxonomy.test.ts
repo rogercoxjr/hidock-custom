@@ -346,12 +346,28 @@ describe('worker taxonomy — parking + 24h cap + auth/quota (auto-pipeline P4, 
     expect(r?.error_message).toContain('API key was rejected')
     expect(getRecordingById('rec-auth-1')!.transcription_status).toBe('error')
 
-    // A subsequent tick must NOT re-pend it (the message is in NON_RETRYABLE).
+    // A subsequent tick must NOT re-pend it BECAUSE the message is in
+    // NON_RETRYABLE — not merely because the backoff window hasn't elapsed.
+    // (finding #2) The terminal-fail just wrote completed_at = CURRENT_TIMESTAMP
+    // (space-format UTC). V8 parses that as LOCAL time, so the retry loop's
+    // `now - new Date(completed_at)` skews by the TZ offset and `timeSinceFailure`
+    // reads ~0/negative — the 30s..120s backoff guard would `continue` ANYWAY,
+    // masking the NON_RETRYABLE classification (removing 'API key was rejected'
+    // from NON_RETRYABLE_ERRORS would NOT fail the test otherwise). Backdate
+    // completed_at well past BOTH the 120s max backoff AND the worst-case ±14h
+    // local-parse skew so the only thing that can keep it failed is the
+    // NON_RETRYABLE check itself.
+    run("UPDATE transcription_queue SET completed_at = datetime('now', '-25 hours') WHERE id = ?", [id])
+
     const callsBefore = shared.asrCalls
     await processQueueManually()
     expect(shared.asrCalls).toBe(callsBefore) // not retried
-    const still = queryOne<{ status: string }>('SELECT status FROM transcription_queue WHERE id = ?', [id])
-    expect(still?.status).toBe('failed')
+    const still = queryOne<{ status: string; retry_count: number }>(
+      'SELECT status, retry_count FROM transcription_queue WHERE id = ?',
+      [id]
+    )
+    expect(still?.status).toBe('failed') // stayed failed: NON_RETRYABLE blocked the re-pend
+    expect(still?.retry_count).toBe(0) // never reset-to-pending (which would bump it)
   })
 
   // -------------------------------------------------------------------------
@@ -367,7 +383,9 @@ describe('worker taxonomy — parking + 24h cap + auth/quota (auto-pipeline P4, 
       "UPDATE transcription_queue SET parked_until = datetime('now', '-1 hour'), first_parked_at = datetime('now', '-25 hours') WHERE id = ?",
       [id]
     )
-    // Stage 1 (ASR) SUCCEEDS — its progressCallback('analyzing') must clear parking.
+    // Stage 1 (ASR) SUCCEEDS — its post-write 'stage1_complete' signal (a genuine
+    // Stage-1-completed-this-run marker, distinct from the resume-start 'analyzing')
+    // must clear parking, giving the Stage-2 429 below a FRESH first_parked_at.
     shared.asrThrow = null
     shared.asrText = 'STAGE ONE OK'
     // Stage 2 (LLM analysis) throws a fresh 429.
@@ -409,6 +427,53 @@ describe('worker taxonomy — parking + 24h cap + auth/quota (auto-pipeline P4, 
     expect(r?.status).toBe('completed')
     expect(r?.parked_until).toBeNull()
     expect(r?.first_parked_at).toBeNull()
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 8 (regression, finding #1): a Stage-2-PARKED item whose park is >24h
+  // old must terminal-fail when its next Stage-2 429 arrives — even though the
+  // resume path fires progressCallback('analyzing') at its START. The stage
+  // clear must key on a genuine Stage-1-completed-this-run signal, NOT the
+  // shared 'analyzing' label (which the Stage-2-only resume emits before the
+  // LLM call). If it keyed on 'analyzing', the resume would wipe first_parked_at
+  // before the 429, resetting the 24h clock and re-parking forever. (spec §7.1
+  // 'a 429 after 24h ... terminal-fails' for the primary 429 source: the LLM /
+  // Stage 2. spec §7.2 'cleared on any successful stage completion' — a resume
+  // START completes nothing this run.)
+  // -------------------------------------------------------------------------
+  it('a Stage-2-only resume whose first_parked_at is >24h old terminal-fails on the next 429 (the resume-start analyzing must NOT clear the 24h clock)', async () => {
+    insertRecordingWithFile('rec-stage2-24h')
+    const id = addToQueue('rec-stage2-24h')
+    // Seed the Stage-2-resumable transcript: full_text set, summarization_provider
+    // NULL -> the worker takes the Stage-2-only path (no ASR, fires 'analyzing' at
+    // resume start). This is exactly the state a Stage-2-parked item is in.
+    run(
+      `INSERT INTO transcripts (id, recording_id, full_text, word_count, summarization_provider, created_at)
+       VALUES (?, ?, 'PRIOR STAGE 1 TEXT', 3, NULL, ?)`,
+      [`trans_rec-stage2-24h`, 'rec-stage2-24h', new Date().toISOString()]
+    )
+    // The item was parked at Stage 2 over 24h ago; the park has since expired
+    // (parked_until in the past -> runnable again).
+    run(
+      "UPDATE transcription_queue SET parked_until = datetime('now', '-1 hour'), first_parked_at = datetime('now', '-25 hours') WHERE id = ?",
+      [id]
+    )
+    // The resume's Stage-2 LLM call hits another 429.
+    shared.asrThrow = null
+    shared.llmThrow = new ProviderRateLimitError('Ollama Cloud', 120_000)
+
+    await processQueueManually()
+
+    // ASR must NOT have run (Stage-2-only resume) — proves we took the resume path.
+    expect(shared.asrCalls).toBe(0)
+    const r = queryOne<{ status: string; error_message: string }>(
+      'SELECT status, error_message FROM transcription_queue WHERE id = ?',
+      [id]
+    )
+    expect(r?.status).toBe('failed') // 24h cap honored — NOT re-parked
+    expect(r?.error_message).toBe('Ollama Cloud quota still exhausted after 24h — check your plan, then Retry all')
+    expect(getRecordingById('rec-stage2-24h')!.transcription_status).toBe('error')
+    expect(shared.sentChannels).toContain('transcription:failed')
   })
 
   // -------------------------------------------------------------------------

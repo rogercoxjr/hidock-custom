@@ -209,19 +209,27 @@ async function processQueue(): Promise<void> {
         // spec-014: Progress callback for transcription stages
         const progressCallback = (stage: string, progress: number) => {
           tickerProgress = progress // Sync ticker with actual progress
-          // Auto-pipeline P4 (spec §7.2): parking clears on ANY successful STAGE
-          // completion, not just job completion. The 'analyzing' transition fires
-          // exactly once Stage 1 has completed (or a resume starts), so clearing
-          // here means a Stage-1 (e.g. Whisper) park history can never poison the
-          // 24h clock of a later Stage-2 (e.g. Ollama) 429.
-          if (stage === 'analyzing') {
+          // Auto-pipeline P4 (spec §7.2): parking clears on any successful STAGE
+          // completion, not just job completion — so a Stage-1 (e.g. Whisper) park
+          // history can never poison the 24h clock of a later Stage-2 (e.g. Ollama)
+          // 429. The clear must key on a GENUINE Stage-1-completed-this-run signal
+          // ('stage1_complete', emitted only AFTER the ASR write), NOT the shared
+          // 'analyzing' label: a Stage-2-only resume fires 'analyzing' at its START
+          // (before the LLM call) and completes nothing this run — clearing there
+          // would reset first_parked_at on every park-expiry, making the 24h
+          // terminal cap unreachable for Stage-2 429s (the spec's primary 429
+          // source). 'stage1_complete' is an internal marker; the renderer still
+          // sees 'analyzing'/50 (its progress contract is unchanged — it never
+          // reads `stage`).
+          const reportedStage = stage === 'stage1_complete' ? 'analyzing' : stage
+          if (stage === 'stage1_complete') {
             clearParking(item.id)
           }
           updateQueueProgress(item.id, progress)
           notifyRenderer('transcription:progress', {
             queueItemId: item.id,
             recordingId: item.recording_id,
-            stage,
+            stage: reportedStage,
             progress
           })
         }
@@ -488,7 +496,12 @@ Meeting ${i + 1}: "${m.subject}"
           : config.transcription.geminiModel
     })
 
-    progressCallback?.('analyzing', 50) // spec-014: progress reporting
+    // Genuine Stage-1-completed-this-run signal (spec §7.2): emitted ONLY after
+    // the Stage-1 ASR write succeeds, so the wrapper clears parking here — never
+    // on the Stage-2-only resume's 'analyzing' (which fires before the LLM call
+    // and completes nothing this run). The wrapper normalizes this internal label
+    // back to 'analyzing'/50 for the renderer (its progress contract is unchanged).
+    progressCallback?.('stage1_complete', 50) // spec-014/P4: Stage-1 done -> clear parking
   }
 
   // ===== Stage 2: Analysis =====
