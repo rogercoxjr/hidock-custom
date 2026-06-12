@@ -14,7 +14,7 @@ import { TranscriptViewer } from './TranscriptViewer'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 import { Transcript, Meeting, parseJsonArray } from '@/types'
-import { Calendar, Download, Trash2, Wand2, RefreshCw, Play, Square, Pencil, Check, Edit2, Link, X, ExternalLink, FolderOpen } from 'lucide-react'
+import { Calendar, Download, Trash2, Wand2, RefreshCw, Play, Square, Pencil, Check, Edit2, Link, X, ExternalLink, FolderOpen, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -46,6 +46,7 @@ interface SourceReaderProps {
   // Action button callbacks
   onDownload?: () => void
   onTranscribe?: () => void
+  onResummarize?: () => void
   onDelete?: () => void
   // State for button enabling/disabling
   deviceConnected?: boolean
@@ -69,6 +70,7 @@ export function SourceReader({
   onSeek,
   onDownload,
   onTranscribe,
+  onResummarize,
   onDelete,
   deviceConnected = false,
   isDownloading = false,
@@ -484,6 +486,21 @@ export function SourceReader({
           </Button>
         )}
 
+        {/* Re-summarize - any recording with a transcript (spec §5.6: healthy + failed) */}
+        {transcript?.full_text && onResummarize && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onResummarize}
+            disabled={recording.transcriptionStatus === 'pending' || recording.transcriptionStatus === 'processing'}
+            className="gap-2"
+            title="Regenerate the summary with the currently selected summarization model"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Re-summarize
+          </Button>
+        )}
+
         {/* Delete Button - always available */}
         {onDelete && (
           <Button
@@ -518,15 +535,28 @@ export function SourceReader({
       {/* Transcript Content */}
       <div className="flex-1 overflow-auto p-4">
         {transcript ? (
-          <TranscriptViewer
-            transcript={transcript.full_text}
-            currentTimeMs={currentTimeMs}
-            onSeek={onSeek || (() => {})}
-            showSummary={true}
-            showActionItems={true}
-            summary={transcript.summary ?? undefined}
-            actionItems={parseJsonArray<string>(transcript.action_items)}
-          />
+          <>
+            {recording.transcriptionStatus === 'error' && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/30 px-3 py-2 text-sm">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <span>Summary failed — the transcript is intact.</span>
+                {onResummarize && (
+                  <Button variant="link" size="sm" className="h-auto p-0" onClick={onResummarize}>
+                    Re-summarize
+                  </Button>
+                )}
+              </div>
+            )}
+            <TranscriptViewer
+              transcript={transcript.full_text}
+              currentTimeMs={currentTimeMs}
+              onSeek={onSeek || (() => {})}
+              showSummary={true}
+              showActionItems={true}
+              summary={transcript.summary ?? undefined}
+              actionItems={parseJsonArray<string>(transcript.action_items)}
+            />
+          </>
         ) : recording.transcriptionStatus === 'complete' ? (
           <div className="text-center text-muted-foreground py-8">
             <p>Transcript not available</p>

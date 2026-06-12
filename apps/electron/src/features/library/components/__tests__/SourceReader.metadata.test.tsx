@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SourceReader } from '../SourceReader'
 import type { UnifiedRecording } from '@/types/unified-recording'
-import type { Meeting } from '@/types'
+import type { Meeting, Transcript } from '@/types'
 
 // ---------------------------------------------------------------------------
 // Mock electronAPI
@@ -129,6 +129,28 @@ function makeMeeting(): Meeting {
     start_time: '2024-01-15T09:00:00Z',
     end_time: '2024-01-15T09:30:00Z',
   } as Meeting
+}
+
+function makeTranscript(overrides: Partial<Transcript> = {}): Transcript {
+  return {
+    id: 'trans-1',
+    recording_id: 'rec-1',
+    full_text: 'This is the transcript text.',
+    language: 'en',
+    summary: 'This is the summary.',
+    action_items: null,
+    topics: null,
+    key_points: null,
+    sentiment: null,
+    speakers: null,
+    word_count: 7,
+    transcription_provider: 'gemini',
+    transcription_model: 'gemini-1.5-pro',
+    title_suggestion: null,
+    question_suggestions: null,
+    created_at: '2024-01-15T10:00:00Z',
+    ...overrides,
+  }
 }
 
 beforeEach(() => {
@@ -418,4 +440,46 @@ describe('SourceReader — metadata editing', () => {
     expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument()
   })
 
+})
+
+// ---------------------------------------------------------------------------
+// Re-summarize action (Task 5 — auto-pipeline P3, spec §5.6 / AC6)
+// ---------------------------------------------------------------------------
+describe('SourceReader — Re-summarize', () => {
+  // (a) Healthy recording: complete status + transcript → Re-summarize button renders and fires onResummarize
+  it('renders Re-summarize button for a complete recording with a transcript', () => {
+    const onResummarize = vi.fn()
+    const rec = makeRecording({ transcriptionStatus: 'complete' })
+    const transcript = makeTranscript()
+    render(<SourceReader recording={rec} transcript={transcript} onResummarize={onResummarize} />)
+
+    const btn = screen.getByRole('button', { name: /re-summarize/i })
+    expect(btn).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(onResummarize).toHaveBeenCalledOnce()
+  })
+
+  // (b) Error state + transcript with full_text → inline notice + Re-summarize fires onResummarize
+  it('shows inline "Summary failed" notice when transcriptionStatus=error and transcript has full_text', () => {
+    const onResummarize = vi.fn()
+    const rec = makeRecording({ transcriptionStatus: 'error' })
+    const transcript = makeTranscript({ full_text: 'Saved transcript text.' })
+    render(<SourceReader recording={rec} transcript={transcript} onResummarize={onResummarize} />)
+
+    // The inline notice must be visible
+    expect(screen.getByText(/summary failed/i)).toBeInTheDocument()
+    // The Re-summarize link/button inside the notice also fires the callback
+    const noticeBtn = screen.getAllByRole('button', { name: /re-summarize/i })[0]
+    fireEvent.click(noticeBtn)
+    expect(onResummarize).toHaveBeenCalledOnce()
+  })
+
+  // (c) No transcript → no Re-summarize affordance
+  it('does not render Re-summarize button when there is no transcript', () => {
+    const onResummarize = vi.fn()
+    const rec = makeRecording({ transcriptionStatus: 'none' })
+    render(<SourceReader recording={rec} onResummarize={onResummarize} />)
+
+    expect(screen.queryByRole('button', { name: /re-summarize/i })).not.toBeInTheDocument()
+  })
 })

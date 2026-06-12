@@ -1083,6 +1083,13 @@ export function Library() {
               onTranscribe={() => {
                 if (selectedRecording) queueTranscription(selectedRecording)
               }}
+              onResummarize={() => {
+                if (selectedRecording) {
+                  window.electronAPI.recordings.resummarize(selectedRecording.id).then((r) => {
+                    if (!r.success) toast.error('Re-summarize failed', r.error)
+                  })
+                }
+              }}
               onDelete={() => {
                 if (selectedRecording) handleDeleteCallback(selectedRecording)
               }}
