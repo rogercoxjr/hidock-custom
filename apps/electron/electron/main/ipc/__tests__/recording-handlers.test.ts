@@ -908,8 +908,8 @@ describe('Recording IPC Handlers', () => {
           autoTranscribe: true,
           language: 'es'
         },
-        // P3 summarization provider (structural read until config.summarization lands)
-        summarization: { provider: 'ollama-cloud' }
+        // P3 summarization provider with a valid key (structural read until config.summarization lands)
+        summarization: { provider: 'ollama-cloud', ollamaCloudApiKey: 'ok-valid-key-12345', ollamaCloudModel: 'gpt-oss:120b' }
       } as any)
 
       const result = await handlers['recordings:addToQueue'](null, 'rec-1')
@@ -1037,6 +1037,62 @@ describe('Recording IPC Handlers', () => {
         { stage: 'asr', provider: 'gemini', problem: 'missing-key' }
       ])
       expect(result.problems.filter((p) => p.provider === 'gemini')).toHaveLength(1)
+    })
+
+    // Pins recording-handlers.ts: the new ollama-cloud branch emits a
+    // summarization problem when the key is empty.
+    it('should report a summarization ollama-cloud problem when ollama-cloud is selected with empty key', async () => {
+      const { getConfig } = await import('../../services/config')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'openai-whisper',
+          geminiApiKey: '',
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: 'sk-present', // ASR satisfied
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        },
+        summarization: {
+          provider: 'ollama-cloud',
+          ollamaCloudApiKey: '', // missing
+          ollamaCloudModel: 'gpt-oss:120b'
+        }
+      } as any)
+
+      const result = await handlers['transcription:validateConfig'](null)
+
+      expect(result.ok).toBe(false)
+      expect(result.problems).toEqual([
+        { stage: 'summarization', provider: 'ollama-cloud', problem: 'missing-key' }
+      ])
+    })
+
+    // Ollama Cloud with a valid key → no summarization problem (ASR from Whisper
+    // is satisfied, summarization key is present).
+    it('should return ok for whisper ASR + ollama-cloud with key and model set', async () => {
+      const { getConfig } = await import('../../services/config')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'openai-whisper',
+          geminiApiKey: '',
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: 'sk-present',
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        },
+        summarization: {
+          provider: 'ollama-cloud',
+          ollamaCloudApiKey: 'ok-valid-key-12345',
+          ollamaCloudModel: 'gpt-oss:120b'
+        }
+      } as any)
+
+      const result = await handlers['transcription:validateConfig'](null)
+
+      expect(result.ok).toBe(true)
+      expect(result.problems).toEqual([])
     })
   })
 

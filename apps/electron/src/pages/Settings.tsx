@@ -42,6 +42,13 @@ export function Settings() {
   const [storageLoading, setStorageLoading] = useState(false)
   // C-CHAT: RAG context window — default matches config.ts (10)
   const [ragContextSize, setRagContextSize] = useState<number>(RAG_DEFAULTS.MAX_CONTEXT_CHUNKS)
+  // Summarization settings (spec §5.6 Summarization card)
+  const [sumProvider, setSumProvider] = useState<'gemini' | 'ollama-cloud'>('gemini')
+  const [ollamaCloudApiKey, setOllamaCloudApiKey] = useState('')
+  const [showOllamaKey, setShowOllamaKey] = useState(false)
+  const [ollamaCloudModel, setOllamaCloudModel] = useState('')
+  const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [fetchingModels, setFetchingModels] = useState(false)
 
   // Available Gemini models for transcription (audio-capable)
   // From: https://ai.google.dev/gemini-api/docs/models
@@ -152,6 +159,17 @@ export function Settings() {
     )
   }, [config, chatProvider, ollamaUrl, ragContextSize])
 
+  const isSummarizationDirty = useMemo(() => {
+    if (!config) return false
+    const cfg = (config as any).summarization
+    if (!cfg) return sumProvider !== 'gemini' || ollamaCloudApiKey !== '' || ollamaCloudModel !== ''
+    return (
+      sumProvider !== (cfg.provider || 'gemini') ||
+      ollamaCloudApiKey !== (cfg.ollamaCloudApiKey || '') ||
+      ollamaCloudModel !== (cfg.ollamaCloudModel || '')
+    )
+  }, [config, sumProvider, ollamaCloudApiKey, ollamaCloudModel])
+
   // Stable loadConfig with useCallback for dependency array
   const loadConfigStable = useCallback(async () => {
     try {
@@ -182,6 +200,13 @@ export function Settings() {
       setOllamaUrl(config.embeddings.ollamaBaseUrl)
       // C-CHAT: Load RAG context window size
       setRagContextSize(config.chat.maxContextChunks)
+      // Summarization (P3)
+      const sumCfg = (config as any).summarization
+      if (sumCfg) {
+        setSumProvider(sumCfg.provider || 'gemini')
+        setOllamaCloudApiKey(sumCfg.ollamaCloudApiKey || '')
+        setOllamaCloudModel(sumCfg.ollamaCloudModel || '')
+      }
     }
   }, [config])
 
@@ -351,6 +376,82 @@ export function Settings() {
       console.error('Failed to save chat settings:', error)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveSummarization = async () => {
+    if (saving) {
+      toast.warning('Please wait', 'Previous save in progress')
+      return
+    }
+
+    // Validation: when ollama-cloud is selected, require a key (≥10 chars) and a model
+    if (sumProvider === 'ollama-cloud') {
+      if (!ollamaCloudApiKey.trim() || ollamaCloudApiKey.trim().length < 10) {
+        toast.error('Validation Error', 'Ollama Cloud API key must be at least 10 characters')
+        return
+      }
+      if (!ollamaCloudModel.trim()) {
+        toast.error('Validation Error', 'Ollama Cloud model is required')
+        return
+      }
+    }
+
+    const previousSumProvider = (config as any)?.summarization?.provider ?? 'gemini'
+    const previousOllamaCloudApiKey = (config as any)?.summarization?.ollamaCloudApiKey ?? ''
+    const previousOllamaCloudModel = (config as any)?.summarization?.ollamaCloudModel ?? ''
+
+    setSaving(true)
+    try {
+      await updateConfig('summarization', {
+        provider: sumProvider,
+        ollamaCloudApiKey,
+        ollamaCloudModel
+      })
+      const label = sumProvider === 'ollama-cloud' ? 'Ollama Cloud' : 'Gemini'
+      toast.success('Settings Saved', `Summarization provider set to ${label}`)
+    } catch (error) {
+      setSumProvider(previousSumProvider)
+      setOllamaCloudApiKey(previousOllamaCloudApiKey)
+      setOllamaCloudModel(previousOllamaCloudModel)
+
+      const message = error instanceof Error ? error.message : 'Failed to save summarization settings'
+      toast.error('Save Failed', message)
+      console.error('Failed to save summarization settings:', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleFetchModels = async () => {
+    setFetchingModels(true)
+    try {
+      const result = await window.electronAPI.summarization.listModels()
+      if (result.success && result.models) {
+        setOllamaModels(result.models)
+        if (result.models.length === 0) {
+          toast.warning('No Models Found', 'No models are available for this API key')
+        }
+      } else {
+        toast.error('Fetch Models Failed', result.error || 'Could not retrieve model list')
+      }
+    } catch (error) {
+      toast.error('Fetch Models Failed', error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setFetchingModels(false)
+    }
+  }
+
+  const handleTestConnection = async () => {
+    try {
+      const result = await window.electronAPI.summarization.testConnection()
+      if (result.success) {
+        toast.success('Connection OK', 'Ollama Cloud connection and model are working')
+      } else {
+        toast.error('Connection Failed', result.error || 'Test connection failed')
+      }
+    } catch (error) {
+      toast.error('Connection Failed', error instanceof Error ? error.message : 'Unknown error')
     }
   }
 
@@ -646,6 +747,151 @@ export function Settings() {
               >
                 <Save className="h-4 w-4 mr-2" aria-hidden="true" />
                 {isTranscriptionDirty ? 'Save' : 'Saved'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Summarization Settings (spec §5.6) */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Summarization</CardTitle>
+              <CardDescription>Configure the LLM used to summarize transcripts</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Provider toggle — Button-group idiom */}
+              <div>
+                <label id="sumProvider-label" className="text-sm font-medium">Summarization Provider</label>
+                <div className="flex gap-2 mt-2" role="group" aria-labelledby="sumProvider-label">
+                  <Button
+                    variant={sumProvider === 'gemini' ? 'default' : 'outline'}
+                    onClick={() => setSumProvider('gemini')}
+                    onKeyDown={(e) => e.key === 'Enter' && setSumProvider('gemini')}
+                    disabled={saving}
+                    aria-label="Use Gemini summarization provider"
+                    aria-pressed={sumProvider === 'gemini'}
+                  >
+                    Gemini
+                  </Button>
+                  <Button
+                    variant={sumProvider === 'ollama-cloud' ? 'default' : 'outline'}
+                    onClick={() => setSumProvider('ollama-cloud')}
+                    onKeyDown={(e) => e.key === 'Enter' && setSumProvider('ollama-cloud')}
+                    disabled={saving}
+                    aria-label="Use Ollama Cloud summarization provider"
+                    aria-pressed={sumProvider === 'ollama-cloud'}
+                  >
+                    Ollama Cloud
+                  </Button>
+                </div>
+              </div>
+
+              {sumProvider === 'ollama-cloud' && (
+                <>
+                  {/* Ollama Cloud API key — Eye/EyeOff idiom */}
+                  <div>
+                    <label htmlFor="ollamaCloudApiKey" className="text-sm font-medium">Ollama Cloud API Key</label>
+                    <div className="relative mt-1">
+                      <Input
+                        id="ollamaCloudApiKey"
+                        type={showOllamaKey ? 'text' : 'password'}
+                        placeholder="Enter your Ollama Cloud API key"
+                        value={ollamaCloudApiKey}
+                        onChange={(e) => setOllamaCloudApiKey(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveSummarization()}
+                        disabled={saving}
+                        aria-label="Ollama Cloud API Key"
+                        aria-describedby="ollamaCloudApiKey-description"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                        onClick={() => setShowOllamaKey(!showOllamaKey)}
+                        aria-label={showOllamaKey ? 'Hide Ollama Cloud API key' : 'Show Ollama Cloud API key'}
+                        tabIndex={-1}
+                      >
+                        {showOllamaKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <p id="ollamaCloudApiKey-description" className="text-xs text-muted-foreground mt-1">
+                      Get your API key from{' '}
+                      <a
+                        href="https://ollama.com/settings/keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        ollama.com/settings/keys
+                      </a>
+                    </p>
+                  </div>
+
+                  {/* Model picker — text input + "Fetch models" button; select renders when models are available */}
+                  <div>
+                    <label htmlFor="ollamaCloudModel" className="text-sm font-medium">Ollama Cloud Model</label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        id="ollamaCloudModel"
+                        type="text"
+                        placeholder="e.g. gpt-oss:120b, deepseek-v3.1:671b"
+                        value={ollamaCloudModel}
+                        onChange={(e) => setOllamaCloudModel(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveSummarization()}
+                        disabled={saving}
+                        aria-label="Ollama Cloud Model"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleFetchModels}
+                        disabled={saving || fetchingModels || !ollamaCloudApiKey.trim()}
+                        aria-label="Fetch available Ollama Cloud models"
+                      >
+                        {fetchingModels ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Fetch models'}
+                      </Button>
+                    </div>
+                    {ollamaModels.length > 0 && (
+                      <select
+                        className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={ollamaCloudModel}
+                        onChange={(e) => setOllamaCloudModel(e.target.value)}
+                        aria-label="Select Ollama Cloud model from list"
+                      >
+                        <option value="">— select a model —</option>
+                        {ollamaModels.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Manual text input works as a fallback even without fetching the list
+                    </p>
+                  </div>
+
+                  {/* Test connection button */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleTestConnection}
+                    disabled={saving || !ollamaCloudApiKey.trim() || !ollamaCloudModel.trim()}
+                    aria-label="Test Ollama Cloud connection"
+                  >
+                    Test
+                  </Button>
+                </>
+              )}
+
+              <Button
+                onClick={handleSaveSummarization}
+                disabled={saving || !isSummarizationDirty}
+                aria-label="Save summarization settings"
+              >
+                <Save className="h-4 w-4 mr-2" aria-hidden="true" />
+                {isSummarizationDirty ? 'Save' : 'Saved'}
               </Button>
             </CardContent>
           </Card>

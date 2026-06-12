@@ -81,6 +81,9 @@ export function validateTranscriptionConfig(): {
       problems.push({ stage: 'summarization', provider: 'gemini', problem: 'missing-key' })
     }
   }
+  if (sumProvider === 'ollama-cloud' && !config.summarization?.ollamaCloudApiKey?.trim()) {
+    problems.push({ stage: 'summarization', provider: 'ollama-cloud', problem: 'missing-key' })
+  }
   return { ok: problems.length === 0, problems }
 }
 

@@ -35,6 +35,11 @@ const mockConfig = {
     openaiApiKey: '',
     whisperModel: 'whisper-1'
   },
+  summarization: {
+    provider: 'gemini' as const,
+    ollamaCloudApiKey: '',
+    ollamaCloudModel: ''
+  },
   chat: { provider: 'gemini' as const, maxContextChunks: 10, geminiModel: 'gemini-3-pro-preview', ollamaModel: 'llama3.2' },
   embeddings: { ollamaBaseUrl: 'http://localhost:11434' }
 }
@@ -57,6 +62,9 @@ vi.mock('@/components/HealthCheck', () => ({
   HealthCheck: () => <div data-testid="health-check">Health Check</div>
 }))
 
+const mockListModels = vi.fn().mockResolvedValue({ success: true, models: ['gpt-oss:120b', 'deepseek-v3.1:671b'] })
+const mockTestConnection = vi.fn().mockResolvedValue({ success: true })
+
 // Mock Electron API
 global.window.electronAPI = {
   config: {
@@ -70,6 +78,10 @@ global.window.electronAPI = {
       }
     }),
     updateSection: vi.fn().mockResolvedValue({ success: true })
+  },
+  summarization: {
+    listModels: mockListModels,
+    testConnection: mockTestConnection
   },
   storage: {
     getInfo: vi.fn().mockResolvedValue({
@@ -128,7 +140,7 @@ describe('Settings Page', () => {
     render(<Settings />)
 
     const saveButtons = screen.getAllByLabelText(/Save.*settings/)
-    expect(saveButtons.length).toBe(3) // Calendar, Transcription, Chat
+    expect(saveButtons.length).toBe(4) // Calendar, Transcription, Summarization, Chat
   })
 
   it('should render storage section', async () => {
@@ -274,6 +286,101 @@ describe('Settings Page', () => {
         whisperModel: 'whisper-1'
       })
     )
+  })
+
+  // Task 6 — Summarization Settings card
+  describe('Summarization card', () => {
+    it('renders the Summarization card with provider toggle (Gemini | Ollama Cloud)', () => {
+      render(<Settings />)
+      expect(screen.getByText('Summarization')).toBeInTheDocument()
+      expect(screen.getByLabelText('Use Gemini summarization provider')).toBeInTheDocument()
+      expect(screen.getByLabelText('Use Ollama Cloud summarization provider')).toBeInTheDocument()
+    })
+
+    it('hides Ollama Cloud fields when provider is Gemini (default)', () => {
+      render(<Settings />)
+      // Key field and model input should NOT be visible in Gemini mode
+      expect(screen.queryByLabelText('Ollama Cloud API Key')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Ollama Cloud Model')).not.toBeInTheDocument()
+    })
+
+    it('reveals key field and model input when Ollama Cloud is chosen', async () => {
+      render(<Settings />)
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Use Ollama Cloud summarization provider'))
+      })
+
+      expect(screen.getByLabelText('Ollama Cloud API Key')).toBeInTheDocument()
+      expect(screen.getByLabelText('Ollama Cloud Model')).toBeInTheDocument()
+    })
+
+    it('calls updateConfig("summarization", ...) with ollama-cloud provider, key, and model on Save', async () => {
+      render(<Settings />)
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Use Ollama Cloud summarization provider'))
+      })
+
+      const keyInput = screen.getByLabelText('Ollama Cloud API Key') as HTMLInputElement
+      fireEvent.change(keyInput, { target: { value: 'ok-1234567890' } })
+
+      const modelInput = screen.getByLabelText('Ollama Cloud Model') as HTMLInputElement
+      fireEvent.change(modelInput, { target: { value: 'gpt-oss:120b' } })
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Save summarization settings'))
+      })
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'summarization',
+        expect.objectContaining({
+          provider: 'ollama-cloud',
+          ollamaCloudApiKey: 'ok-1234567890',
+          ollamaCloudModel: 'gpt-oss:120b'
+        })
+      )
+    })
+
+    it('calls listModels and populates a select when "Fetch models" is clicked', async () => {
+      render(<Settings />)
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Use Ollama Cloud summarization provider'))
+      })
+
+      // Fill in an API key so the button is enabled
+      const keyInput = screen.getByLabelText('Ollama Cloud API Key') as HTMLInputElement
+      fireEvent.change(keyInput, { target: { value: 'ok-1234567890' } })
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Fetch available Ollama Cloud models'))
+      })
+
+      // After fetch, a select should appear with the model names
+      expect(mockListModels).toHaveBeenCalled()
+      expect(screen.getByText('gpt-oss:120b')).toBeInTheDocument()
+    })
+
+    it('calls testConnection and shows result via toast/error when "Test" is clicked', async () => {
+      render(<Settings />)
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Use Ollama Cloud summarization provider'))
+      })
+
+      // Fill in key and model so the "Test" button is enabled
+      const keyInput = screen.getByLabelText('Ollama Cloud API Key') as HTMLInputElement
+      fireEvent.change(keyInput, { target: { value: 'ok-1234567890' } })
+      const modelInput = screen.getByLabelText('Ollama Cloud Model') as HTMLInputElement
+      fireEvent.change(modelInput, { target: { value: 'gpt-oss:120b' } })
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Test Ollama Cloud connection'))
+      })
+
+      expect(mockTestConnection).toHaveBeenCalled()
+    })
   })
 
   // Code-quality finding fix — asymmetric provider gating in validateConfig.
