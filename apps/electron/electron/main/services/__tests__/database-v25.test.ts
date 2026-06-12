@@ -94,8 +94,7 @@ import {
   getRunnableQueueItems,
   clearParking,
   getQueueItemParkedHours,
-  rependFailedItems,
-  updateRecordingTranscriptionStatus
+  rependFailedItems
 } from '../database'
 
 // ---------------------------------------------------------------------------
