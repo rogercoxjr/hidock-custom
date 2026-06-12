@@ -2,9 +2,10 @@ import { app, safeStorage } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 
-// CS-007: Encrypt sensitive config values (ICS URL) at rest using Electron safeStorage
-function encryptSensitive(value: string): string {
+// CS-007: Encrypt sensitive config values (ICS URL, openaiApiKey) at rest using Electron safeStorage
+export function encryptSensitive(value: string): string {
   try {
+    if (value.startsWith('__enc__')) return value // already encrypted — never double-wrap (spec §5.4)
     if (safeStorage.isEncryptionAvailable() && value) {
       return '__enc__' + safeStorage.encryptString(value).toString('base64')
     }
@@ -34,9 +35,11 @@ export interface AppConfig {
     lastSyncAt: string | null
   }
   transcription: {
-    provider: 'gemini'
+    provider: 'gemini' | 'openai-whisper'
     geminiApiKey: string
     geminiModel: string
+    openaiApiKey: string   // safeStorage-encrypted at rest (spec §5.4); decrypted in memory
+    whisperModel: string   // fixed 'whisper-1' in v1 (spec §5.1; 4o-transcribe deferred §10)
     autoTranscribe: boolean
     language: string
   }
@@ -83,6 +86,8 @@ const DEFAULT_CONFIG: AppConfig = {
     provider: 'gemini',
     geminiApiKey: '',
     geminiModel: 'gemini-3-pro-preview', // Best model for audio transcription
+    openaiApiKey: '',
+    whisperModel: 'whisper-1',
     autoTranscribe: true,
     language: 'es'
   },
@@ -134,6 +139,9 @@ export async function initializeConfig(): Promise<void> {
       if (savedConfig.calendar?.icsUrl) {
         savedConfig.calendar.icsUrl = decryptSensitive(savedConfig.calendar.icsUrl)
       }
+      if (savedConfig.transcription?.openaiApiKey) {
+        savedConfig.transcription.openaiApiKey = decryptSensitive(savedConfig.transcription.openaiApiKey)
+      }
       // Merge with defaults to handle new fields
       config = deepMerge(DEFAULT_CONFIG, savedConfig)
     } else {
@@ -166,6 +174,10 @@ export async function saveConfig(newConfig: Partial<AppConfig>): Promise<void> {
     calendar: {
       ...config.calendar,
       icsUrl: encryptSensitive(config.calendar.icsUrl)
+    },
+    transcription: {
+      ...config.transcription,
+      openaiApiKey: encryptSensitive(config.transcription.openaiApiKey)
     }
   }
   writeFileSync(configPath, JSON.stringify(toWrite, null, 2))
