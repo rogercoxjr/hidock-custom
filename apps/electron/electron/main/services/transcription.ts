@@ -536,6 +536,18 @@ Respond in JSON format:
     )
   }
 
+  // Meeting-selection validator (spec §5.2): provider-agnostic guard — smaller
+  // models return 'none', hallucinated ids, or string confidences far more often
+  // than Gemini. Applied BEFORE the candidates loop AND the indexing fallback.
+  const candidateIds = new Set(candidateMeetings.map((m) => m.id))
+  if (analysis.selected_meeting_id === 'none' || (analysis.selected_meeting_id && !candidateIds.has(analysis.selected_meeting_id))) {
+    analysis.selected_meeting_id = undefined
+  }
+  if (analysis.meeting_confidence !== undefined) {
+    const n = Number(analysis.meeting_confidence)
+    analysis.meeting_confidence = Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0
+  }
+
   // Process AI meeting selection
   if (candidateMeetings.length > 0) {
     // Add all candidates to the database
@@ -584,8 +596,11 @@ Respond in JSON format:
       ? JSON.stringify(analysis.question_suggestions)
       : undefined,
     language: analysis.language || 'unknown',
-    summarization_provider: 'gemini', // P3 will derive this from config.summarization
-    summarization_model: config.transcription.geminiModel
+    summarization_provider: config.summarization.provider,
+    summarization_model:
+      config.summarization.provider === 'ollama-cloud'
+        ? config.summarization.ollamaCloudModel
+        : config.transcription.geminiModel // gemini summarization reuses the transcription model (spec §5.2)
   })
   // AI-13: Use standard enum value 'complete' (not 'transcribed').
   // Same point as today (immediately after the Stage-2 UPDATE, before the tail).

@@ -110,6 +110,12 @@ vi.mock('../config', () => ({
       autoTranscribe: false, // we drive transcription manually in the test
       language: 'en'
     },
+    // Auto-pipeline P3 (spec §5.4): drives the Stage-2 LLM factory.
+    summarization: {
+      provider: 'gemini',
+      ollamaCloudApiKey: '',
+      ollamaCloudModel: ''
+    },
     calendar: {
       icsUrl: 'https://example.com/cal.ics',
       syncEnabled: true,

@@ -47,7 +47,18 @@ const shared = vi.hoisted(() => {
     audioResponse: 'FULL TEXT' as string,
     textResponses: [] as string[],
     audioCalls: 0,
-    textCalls: 0
+    textCalls: 0,
+    // Auto-pipeline P3 (spec §5.4): per-test summarization config so a test can
+    // flip the Stage-2 LLM to ollama-cloud. Default = today's gemini behavior.
+    summarization: {
+      provider: 'gemini' as 'gemini' | 'ollama-cloud',
+      ollamaCloudApiKey: '' as string,
+      ollamaCloudModel: '' as string
+    },
+    // Captures the meta arg the worker hands the vector store at indexing time
+    // (spec §5.2: the meeting-selection validator must scrub 'none'/hallucinated
+    // ids out of the indexing fallback before they reach chunk metadata).
+    lastIndexMeta: undefined as { meetingId?: string; recordingId?: string } | undefined
   }
 })
 
@@ -73,7 +84,12 @@ vi.mock('../config', () => ({
       geminiApiKey: 'test-key',
       geminiModel: 'gemini-2.0-flash',
       autoTranscribe: false
-    }
+    },
+    // Auto-pipeline P3 (spec §5.4): config.summarization drives the Stage-2 LLM
+    // factory. The mock bypasses config.ts's deep-merge defaults, so without this
+    // section the worker TypeErrors the moment it reads config.summarization.provider.
+    // Read from shared so a test can flip the provider to ollama-cloud per-case.
+    summarization: { ...shared.summarization }
   })),
   updateConfig: vi.fn(async () => {}),
   getDataPath: vi.fn(() => shared.tmpDir)
@@ -92,8 +108,14 @@ vi.mock('../file-storage', () => ({
 
 vi.mock('../vector-store', () => ({
   // Quiet stub: the worker's indexing tail runs for real and "indexes" 0 chunks,
-  // keeping the test output free of a noisy null-deref warning.
-  getVectorStore: vi.fn(() => ({ indexTranscript: async () => 0 }))
+  // keeping the test output free of a noisy null-deref warning. Captures the meta
+  // arg so the validator tests can assert what reaches chunk metadata (spec §5.2).
+  getVectorStore: vi.fn(() => ({
+    indexTranscript: async (_text: string, meta: { meetingId?: string; recordingId?: string }) => {
+      shared.lastIndexMeta = meta
+      return 0
+    }
+  }))
 }))
 
 vi.mock('@google/generative-ai', () => {
@@ -180,6 +202,58 @@ function insertCapture(id: string, recordingId: string, title: string): void {
   )
 }
 
+/** Insert a meeting that overlaps "now" so findCandidateMeetingsForRecording
+ *  returns it for recordings stamped with new Date() (the helpers above). */
+function insertMeeting(id: string, subject: string): void {
+  const now = Date.now()
+  run(
+    `INSERT OR IGNORE INTO meetings (id, subject, start_time, end_time, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      id,
+      subject,
+      new Date(now - 5 * 60 * 1000).toISOString(),
+      new Date(now + 25 * 60 * 1000).toISOString(),
+      new Date().toISOString()
+    ]
+  )
+}
+
+/** Point a recording's original meeting_id at an existing meeting (the validator
+ *  must use THIS, not 'none'/hallucinated, in the indexing fallback — spec §5.2). */
+function setRecordingMeetingId(recordingId: string, meetingId: string): void {
+  run('UPDATE recordings SET meeting_id = ? WHERE id = ?', [meetingId, recordingId])
+}
+
+/** Build an ollama.com/api/chat-shaped fetch stub: returns the next queued
+ *  body as message.content, in FIFO order (analysis, then actionables). Used by
+ *  the ollama-cloud Stage-2 tests, which BYPASS the Gemini mock. */
+function stubOllamaChatFetch(bodies: string[]): void {
+  const queue = [...bodies]
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ message: { content: queue.shift() ?? '[]' } })
+    }))
+  )
+}
+
+const analysisWithMeeting = (selectedId: unknown, confidence: unknown) =>
+  JSON.stringify({
+    summary: 'S',
+    action_items: [],
+    topics: [],
+    key_points: [],
+    title_suggestion: 'T',
+    question_suggestions: [],
+    language: 'en',
+    selected_meeting_id: selectedId,
+    meeting_confidence: confidence,
+    selection_reason: 'r'
+  })
+
 const validAnalysisJson = (title = 'T') =>
   JSON.stringify({
     summary: 'S',
@@ -218,7 +292,10 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     shared.textResponses = []
     shared.audioCalls = 0
     shared.textCalls = 0
+    shared.summarization = { provider: 'gemini', ollamaCloudApiKey: '', ollamaCloudModel: '' }
+    shared.lastIndexMeta = undefined
     vi.clearAllMocks()
+    vi.unstubAllGlobals() // drop any per-test fetch stub
     await initializeDatabase()
   })
 
@@ -381,6 +458,118 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     expect(
       queryAll("SELECT id FROM actionables WHERE source_knowledge_id='cap7' AND status='pending'").length
     ).toBe(1)
+  })
+
+  // -------------------------------------------------------------------------
+  // Auto-pipeline P3 (spec §5.2): meeting-selection validator
+  // -------------------------------------------------------------------------
+
+  it("validator: selected_meeting_id 'none' -> undefined; indexing falls back to recording.meeting_id (not 'none')", async () => {
+    insertRecordingWithFile('recV1')
+    insertMeeting('mV1', 'Sprint Planning')
+    setRecordingMeetingId('recV1', 'mV1') // the recording's ORIGINAL meeting
+
+    shared.audioResponse = 'FULL TEXT'
+    // One candidate present; the LLM picks 'none'.
+    shared.textResponses = [analysisWithMeeting('none', 0.9)]
+
+    await transcribeManually('recV1')
+
+    // No AI link was made (selection invalidated) — the original link survives.
+    // Critically, the indexing metadata used the ORIGINAL meeting_id, never 'none'.
+    expect(shared.lastIndexMeta?.meetingId).toBe('mV1')
+    expect(shared.lastIndexMeta?.meetingId).not.toBe('none')
+  })
+
+  it('validator: hallucinated id (not in candidate set) -> undefined; no link, candidate isSelected=false, indexing uses original', async () => {
+    insertRecordingWithFile('recV2')
+    insertMeeting('mV2', 'Design Review')
+    setRecordingMeetingId('recV2', 'mV2')
+
+    shared.audioResponse = 'FULL TEXT'
+    // The LLM hallucinates an id that is not among the candidates.
+    shared.textResponses = [analysisWithMeeting('mHALLUCINATED', 0.95)]
+
+    await transcribeManually('recV2')
+
+    // Hallucinated id never reaches chunk metadata — original meeting_id used.
+    expect(shared.lastIndexMeta?.meetingId).toBe('mV2')
+    expect(shared.lastIndexMeta?.meetingId).not.toBe('mHALLUCINATED')
+    // The real candidate was written but NOT selected.
+    const candidate = queryOne<{ is_selected: number }>(
+      "SELECT is_selected FROM recording_meeting_candidates WHERE recording_id='recV2' AND meeting_id='mV2'"
+    )
+    expect(candidate?.is_selected).toBe(0)
+  })
+
+  it('validator: string meeting_confidence is coerced via Number() and clamped to 0..1; link proceeds (>=0.4)', async () => {
+    insertRecordingWithFile('recV3')
+    insertMeeting('mV3', 'Budget Sync')
+
+    shared.audioResponse = 'FULL TEXT'
+    // Valid candidate selected, but the model returned an out-of-range STRING
+    // confidence ('1.5'). The validator must Number()-coerce AND clamp to 1.
+    shared.textResponses = [analysisWithMeeting('mV3', '1.5')]
+
+    await transcribeManually('recV3')
+
+    const rec = getRecordingById('recV3')!
+    // Link proceeded: meeting_id set to the selected candidate.
+    expect(rec.meeting_id).toBe('mV3')
+    // Confidence coerced to a NUMBER and clamped to the 0..1 ceiling (not 1.5).
+    expect(rec.correlation_confidence).toBe(1)
+    expect(typeof rec.correlation_confidence).toBe('number')
+  })
+
+  // -------------------------------------------------------------------------
+  // Auto-pipeline P3 (spec §5.2/§5.4): Stage-2 provider/model derived from config
+  // -------------------------------------------------------------------------
+
+  it('summarization.provider=ollama-cloud -> Stage-2 columns reflect ollama-cloud + its model (via fetch, not the Gemini mock)', async () => {
+    insertRecordingWithFile('recO1')
+    shared.summarization = {
+      provider: 'ollama-cloud',
+      ollamaCloudApiKey: 'ok-key-1234567890',
+      ollamaCloudModel: 'gpt-oss:120b'
+    }
+    shared.audioResponse = 'FULL TEXT' // Stage 1 still goes through the Gemini ASR mock
+    // Stage 2 goes through createOllamaCloudLlm -> global fetch. 'FULL TEXT' is
+    // 2 words so detectActionables is skipped -> exactly one Stage-2 fetch call.
+    stubOllamaChatFetch([validAnalysisJson('Ollama Title')])
+
+    await transcribeManually('recO1')
+
+    const row = getTranscriptByRecordingId('recO1')!
+    expect(row.full_text).toBe('FULL TEXT')
+    expect(row.summary).toBe('S')
+    expect(row.summarization_provider).toBe('ollama-cloud')
+    expect(row.summarization_model).toBe('gpt-oss:120b')
+    // The Gemini text path was NOT used for Stage 2 (only the ASR audio call ran).
+    expect(shared.audioCalls).toBe(1)
+    expect(shared.textCalls).toBe(0)
+  })
+
+  // -------------------------------------------------------------------------
+  // Auto-pipeline P3 -> P4 AC5 seam (spec §5.3): Stage 1 persists before the
+  // Stage-2 key failure, so the item is Stage-2-resumable.
+  // -------------------------------------------------------------------------
+
+  it('AC5 seam: gemini ASR + ollama-cloud summarization w/ EMPTY key -> rejects at Stage 2, full_text persisted, marker NULL', async () => {
+    insertRecordingWithFile('recA5')
+    shared.summarization = {
+      provider: 'ollama-cloud',
+      ollamaCloudApiKey: '', // missing LLM key
+      ollamaCloudModel: 'gpt-oss:120b'
+    }
+    shared.audioResponse = 'STAGE ONE TEXT'
+
+    await expect(transcribeManually('recA5')).rejects.toThrow(/Ollama Cloud API key not configured/)
+
+    const row = getTranscriptByRecordingId('recA5')!
+    expect(row.full_text).toBe('STAGE ONE TEXT') // Stage 1 persisted before the Stage-2 failure
+    expect(row.summarization_provider).toBeNull() // Stage 2 never completed -> resumable
+    expect(row.summary ?? null).toBeNull()
+    expect(shared.audioCalls).toBe(1) // ASR ran exactly once
   })
 })
 

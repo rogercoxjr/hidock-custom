@@ -65,6 +65,12 @@ vi.mock('../config', () => ({
       provider: 'gemini',
       geminiApiKey: 'test-api-key',
       geminiModel: 'gemini-2.0-flash'
+    },
+    // Auto-pipeline P3 (spec §5.4): drives the Stage-2 LLM factory.
+    summarization: {
+      provider: 'gemini',
+      ollamaCloudApiKey: '',
+      ollamaCloudModel: ''
     }
   }))
 }))
