@@ -565,13 +565,18 @@ describe('parking DB primitives (auto-pipeline P4)', () => {
     expect(rec?.transcription_status).toBe('pending')
   })
 
-  it('rependFailedItems: LIKE-injection safety — percent in marker does not break the query', () => {
+  it('rependFailedItems: LIKE-injection safety — percent in marker is treated literally, not as a wildcard', () => {
+    // The seeded error_message matches the UNescaped pattern (%100% quota% → '100' … ' quota')
+    // but NOT the escaped pattern (%100\% quota% → literal '100% quota' substring).
+    // If escapeLikePattern were stripped, the '%' in the marker would act as a wildcard and
+    // re-pend this row; with escaping it must stay 'failed'. This mutation-kills the test.
     insertTestRecording('rec-rpnd-7')
     run(`INSERT INTO transcription_queue (id, recording_id, status, error_message)
-         VALUES ('q-rpnd-7', 'rec-rpnd-7', 'failed', 'some error')`)
+         VALUES ('q-rpnd-7', 'rec-rpnd-7', 'failed', 'Error 100: insufficient quota')`)
 
-    // Passing a marker with SQL LIKE special chars should not error or match unintended rows
-    expect(() => rependFailedItems(['100% quota'])).not.toThrow()
+    // Marker contains a literal percent; the row does NOT contain the literal substring '100% quota'.
+    const count = rependFailedItems(['100% quota'])
+    expect(count).toBe(0) // percent escaped → no wildcard match
     const row = queryOne<{ status: string }>(`SELECT status FROM transcription_queue WHERE id = 'q-rpnd-7'`)
     expect(row?.status).toBe('failed') // unmatched — untouched
   })
