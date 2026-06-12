@@ -116,11 +116,13 @@ async function processQueue(): Promise<void> {
       'Recording file not found',
       'Gemini API key not configured',
       'OpenAI API key not configured',
+      'Ollama Cloud API key not configured',
       'Not enough disk space',
       'API key was rejected',
       'quota exhausted',
       'ffmpeg failed',
-      'no local file'
+      'no local file',
+      'not found — choose a new model'
     ]
     const failedItems = getQueueItems('failed')
     const now = Date.now()
