@@ -982,5 +982,59 @@ describe('Recording IPC Handlers', () => {
       expect(result.ok).toBe(true)
       expect(result.problems).toEqual([])
     })
+
+    // Spec §5.6 / §5.2: P2 summarization is gemini-only. The realistic P2 scenario
+    // is Whisper ASR (OpenAI key set) with an empty Gemini key — Stage 2 still runs
+    // through Gemini, so the preflight MUST block on a summarization-stage problem.
+    // Pins recording-handlers.ts:82-86 (the summarization push), the branch the P3
+    // sweep edits when it wires Ollama summarization.
+    it('should report a summarization gemini problem for whisper ASR (OpenAI key set) with no Gemini key', async () => {
+      const { getConfig } = await import('../../services/config')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'openai-whisper',
+          geminiApiKey: '', // empty — P2 summarization (gemini-only) cannot run
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: 'sk-present', // ASR satisfied
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        }
+        // no summarization override → defaults to gemini
+      } as any)
+
+      const result = await handlers['transcription:validateConfig'](null)
+
+      expect(result.ok).toBe(false)
+      expect(result.problems).toEqual([
+        { stage: 'summarization', provider: 'gemini', problem: 'missing-key' }
+      ])
+    })
+
+    // Pins the dedup guard (recording-handlers.ts:83): gemini ASR with an empty
+    // gemini key yields the asr-stage problem only — the summarization branch must
+    // NOT push a second gemini problem.
+    it('should emit exactly one gemini problem for gemini ASR with empty gemini key (dedup)', async () => {
+      const { getConfig } = await import('../../services/config')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'gemini',
+          geminiApiKey: '', // empty — fails ASR; summarization (also gemini) is deduped
+          geminiModel: 'gemini-3-pro-preview',
+          openaiApiKey: '',
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'es'
+        }
+      } as any)
+
+      const result = await handlers['transcription:validateConfig'](null)
+
+      expect(result.ok).toBe(false)
+      expect(result.problems).toEqual([
+        { stage: 'asr', provider: 'gemini', problem: 'missing-key' }
+      ])
+      expect(result.problems.filter((p) => p.provider === 'gemini')).toHaveLength(1)
+    })
   })
 })
