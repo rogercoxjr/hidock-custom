@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { Settings } from '../Settings'
 
 const mockLoadConfig = vi.fn()
@@ -20,20 +20,29 @@ vi.mock('@/store/useAppStore', () => ({
   useCalendarSyncing: vi.fn(() => false)
 }))
 
+// Stable config reference — prevents the [config] useEffect from re-firing on every re-render
+const mockConfig = {
+  calendar: {
+    icsUrl: 'https://example.com/cal.ics',
+    syncEnabled: true,
+    syncIntervalMinutes: 15,
+    lastSyncAt: '2026-03-01T10:00:00Z'
+  },
+  transcription: {
+    provider: 'gemini' as const,
+    geminiApiKey: 'AIzaTestKey12345',
+    geminiModel: 'gemini-3-pro-preview',
+    openaiApiKey: '',
+    whisperModel: 'whisper-1'
+  },
+  chat: { provider: 'gemini' as const, maxContextChunks: 10, geminiModel: 'gemini-3-pro-preview', ollamaModel: 'llama3.2' },
+  embeddings: { ollamaBaseUrl: 'http://localhost:11434' }
+}
+
 vi.mock('@/store/domain/useConfigStore', () => ({
   useConfigStore: vi.fn((selector?: any) => {
     const state = {
-      config: {
-        calendar: {
-          icsUrl: 'https://example.com/cal.ics',
-          syncEnabled: true,
-          syncIntervalMinutes: 15,
-          lastSyncAt: '2026-03-01T10:00:00Z'
-        },
-        transcription: { geminiApiKey: 'AIzaTestKey12345', geminiModel: 'gemini-3-pro-preview' },
-        chat: { provider: 'gemini' as const },
-        embeddings: { ollamaBaseUrl: 'http://localhost:11434' }
-      },
+      config: mockConfig,
       loadConfig: mockLoadConfig,
       updateConfig: mockUpdateConfig,
       configLoading: false
@@ -197,5 +206,73 @@ describe('Settings Page', () => {
 
     // The mock config has lastSyncAt set to '2026-03-01T10:00:00Z'
     expect(screen.getByText(/Last synced:/)).toBeInTheDocument()
+  })
+
+  // Task 5 — ASR provider picker
+  it('should render the ASR provider toggle buttons (Gemini and OpenAI Whisper)', async () => {
+    render(<Settings />)
+
+    // Both provider buttons should be present
+    expect(screen.getByLabelText('Use Gemini ASR provider')).toBeInTheDocument()
+    expect(screen.getByLabelText('Use OpenAI Whisper ASR provider')).toBeInTheDocument()
+  })
+
+  it('should show Gemini fields by default and hide OpenAI Whisper fields', async () => {
+    render(<Settings />)
+
+    // Gemini key should be visible (default provider is 'gemini')
+    expect(screen.getByLabelText('Gemini API Key')).toBeInTheDocument()
+    // The Gemini model select should be present (by ID)
+    expect(document.getElementById('geminiModel')).toBeInTheDocument()
+
+    // OpenAI key should NOT be present yet
+    expect(screen.queryByLabelText('OpenAI API Key')).not.toBeInTheDocument()
+    // Whisper model select should not be present (by ID)
+    expect(document.getElementById('whisperModel')).not.toBeInTheDocument()
+  })
+
+  it('should reveal OpenAI Whisper fields and hide Gemini fields when OpenAI Whisper is selected', async () => {
+    render(<Settings />)
+
+    // Click the OpenAI Whisper button — wrap in act to flush async state updates
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Use OpenAI Whisper ASR provider'))
+    })
+
+    // Gemini key and Gemini model select (by ID) should be hidden
+    expect(screen.queryByLabelText('Gemini API Key')).not.toBeInTheDocument()
+    expect(document.getElementById('geminiModel')).not.toBeInTheDocument()
+
+    // OpenAI fields should now be visible
+    expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
+    // Whisper model select rendered as disabled (by ID)
+    expect(document.getElementById('whisperModel')).toBeInTheDocument()
+  })
+
+  it('should call updateConfig with openai-whisper provider and openaiApiKey when saving Whisper config', async () => {
+    render(<Settings />)
+
+    // Switch to Whisper — wrap in act to flush async state updates
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Use OpenAI Whisper ASR provider'))
+    })
+
+    // Enter an OpenAI key
+    const openaiKeyInput = screen.getByLabelText('OpenAI API Key') as HTMLInputElement
+    fireEvent.change(openaiKeyInput, { target: { value: 'sk-test-key-1234567890' } })
+
+    // Click save — wrap in act to flush the async updateConfig call
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Save transcription settings'))
+    })
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith(
+      'transcription',
+      expect.objectContaining({
+        provider: 'openai-whisper',
+        openaiApiKey: 'sk-test-key-1234567890',
+        whisperModel: 'whisper-1'
+      })
+    )
   })
 })

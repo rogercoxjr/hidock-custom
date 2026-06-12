@@ -33,6 +33,9 @@ export function Settings() {
   const [syncInterval, setSyncInterval] = useState(15)
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [geminiModel, setGeminiModel] = useState('gemini-3-pro-preview')
+  const [asrProvider, setAsrProvider] = useState<'gemini' | 'openai-whisper'>('gemini')
+  const [openaiApiKey, setOpenaiApiKey] = useState('')
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false)
   const [chatProvider, setChatProvider] = useState<'gemini' | 'ollama'>('gemini')
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
   const [showApiKey, setShowApiKey] = useState(false)
@@ -73,6 +76,16 @@ export function Settings() {
         }
         if (apiKey && !apiKey.startsWith('AIza')) {
           return 'Gemini API keys should start with "AIza". Please verify your key.'
+        }
+      }
+      // OpenAI key validation — only enforced when the whisper provider is selected (spec §5.4)
+      if (updates.transcription.provider === 'openai-whisper' && updates.transcription.openaiApiKey !== undefined) {
+        const apiKey = updates.transcription.openaiApiKey.trim()
+        if (apiKey && apiKey.length < 10) {
+          return 'API key must be at least 10 characters'
+        }
+        if (apiKey && !apiKey.startsWith('sk-')) {
+          return 'OpenAI API keys should start with "sk-". Please verify your key.'
         }
       }
     }
@@ -119,10 +132,12 @@ export function Settings() {
   const isTranscriptionDirty = useMemo(() => {
     if (!config) return false
     return (
+      asrProvider !== (config.transcription.provider || 'gemini') ||
       geminiApiKey !== config.transcription.geminiApiKey ||
-      geminiModel !== (config.transcription.geminiModel || 'gemini-3-pro-preview')
+      geminiModel !== (config.transcription.geminiModel || 'gemini-3-pro-preview') ||
+      openaiApiKey !== (config.transcription.openaiApiKey || '')
     )
-  }, [config, geminiApiKey, geminiModel])
+  }, [config, asrProvider, geminiApiKey, geminiModel, openaiApiKey])
 
   const isChatDirty = useMemo(() => {
     if (!config) return false
@@ -157,6 +172,8 @@ export function Settings() {
       setSyncInterval(config.calendar.syncIntervalMinutes)
       setGeminiApiKey(config.transcription.geminiApiKey)
       setGeminiModel(config.transcription.geminiModel || 'gemini-3-pro-preview')
+      setAsrProvider(config.transcription.provider || 'gemini')
+      setOpenaiApiKey(config.transcription.openaiApiKey || '')
       setChatProvider(config.chat.provider)
       setOllamaUrl(config.embeddings.ollamaBaseUrl)
       // C-CHAT: Load RAG context window size
@@ -237,12 +254,17 @@ export function Settings() {
     }
 
     // Store previous values for rollback
+    const previousAsrProvider = config?.transcription.provider || 'gemini'
     const previousApiKey = config?.transcription.geminiApiKey || ''
     const previousModel = config?.transcription.geminiModel || 'gemini-3-pro-preview'
+    const previousOpenaiApiKey = config?.transcription.openaiApiKey || ''
 
     const updates = {
+      provider: asrProvider,
       geminiApiKey,
-      geminiModel
+      geminiModel,
+      openaiApiKey,
+      whisperModel: 'whisper-1' as const
     }
 
     // Validate before save
@@ -256,11 +278,14 @@ export function Settings() {
     try {
       await updateConfig('transcription', updates)
 
-      toast.success('Settings Saved', `Transcription provider set to ${geminiModel}`)
+      const activeProviderLabel = asrProvider === 'openai-whisper' ? 'OpenAI Whisper' : 'Gemini'
+      toast.success('Settings Saved', `Transcription provider set to ${activeProviderLabel}`)
     } catch (error) {
       // Rollback on error
+      setAsrProvider(previousAsrProvider)
       setGeminiApiKey(previousApiKey)
       setGeminiModel(previousModel)
+      setOpenaiApiKey(previousOpenaiApiKey)
 
       const message = error instanceof Error ? error.message : 'Failed to save transcription settings'
       toast.error('Save Failed', message)
@@ -458,9 +483,38 @@ export function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>Transcription</CardTitle>
-              <CardDescription>Configure Gemini API for transcription</CardDescription>
+              <CardDescription>Configure the transcription (ASR) provider</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* ASR provider picker — Button-group idiom (matches Chat provider toggle) */}
+              <div>
+                <label id="asrProvider-label" className="text-sm font-medium">ASR Provider</label>
+                <div className="flex gap-2 mt-2" role="group" aria-labelledby="asrProvider-label">
+                  <Button
+                    variant={asrProvider === 'gemini' ? 'default' : 'outline'}
+                    onClick={() => setAsrProvider('gemini')}
+                    onKeyDown={(e) => e.key === 'Enter' && setAsrProvider('gemini')}
+                    disabled={saving}
+                    aria-label="Use Gemini ASR provider"
+                    aria-pressed={asrProvider === 'gemini'}
+                  >
+                    Gemini
+                  </Button>
+                  <Button
+                    variant={asrProvider === 'openai-whisper' ? 'default' : 'outline'}
+                    onClick={() => setAsrProvider('openai-whisper')}
+                    onKeyDown={(e) => e.key === 'Enter' && setAsrProvider('openai-whisper')}
+                    disabled={saving}
+                    aria-label="Use OpenAI Whisper ASR provider"
+                    aria-pressed={asrProvider === 'openai-whisper'}
+                  >
+                    OpenAI Whisper
+                  </Button>
+                </div>
+              </div>
+
+              {asrProvider === 'gemini' && (
+                <>
               <div>
                 <label htmlFor="geminiApiKey" className="text-sm font-medium">Gemini API Key</label>
                 <div className="relative mt-1">
@@ -523,6 +577,63 @@ export function Settings() {
                   Gemini 3 Pro provides the best transcription accuracy
                 </p>
               </div>
+                </>
+              )}
+
+              {asrProvider === 'openai-whisper' && (
+                <>
+                  {/* OpenAI API key — Eye/EyeOff idiom copied from the Gemini field */}
+                  <div>
+                    <label htmlFor="openaiApiKey" className="text-sm font-medium">OpenAI API Key</label>
+                    <div className="relative mt-1">
+                      <Input
+                        id="openaiApiKey"
+                        type={showOpenaiKey ? 'text' : 'password'}
+                        placeholder="Enter your OpenAI API key (sk-...)"
+                        value={openaiApiKey}
+                        onChange={(e) => setOpenaiApiKey(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveTranscription()}
+                        disabled={saving}
+                        aria-label="OpenAI API Key"
+                        aria-describedby="openaiApiKey-description"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                        onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                        aria-label={showOpenaiKey ? 'Hide OpenAI API key' : 'Show OpenAI API key'}
+                        tabIndex={-1}
+                      >
+                        {showOpenaiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <p id="openaiApiKey-description" className="text-xs text-muted-foreground mt-1">
+                      Get your API key from{' '}
+                      <a
+                        href="https://platform.openai.com/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        OpenAI Platform
+                      </a>
+                    </p>
+                  </div>
+                  <div>
+                    <label htmlFor="whisperModel" className="text-sm font-medium">Transcription Model</label>
+                    <select id="whisperModel" value="whisper-1" disabled aria-label="Whisper Model"
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm opacity-70">
+                      <option value="whisper-1">whisper-1 (only supported model in v1)</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      gpt-4o-transcribe is not supported yet (25-minute duration cap).
+                    </p>
+                  </div>
+                </>
+              )}
 
               <Button
                 onClick={handleSaveTranscription}
