@@ -34,7 +34,12 @@ import { buildSearchCorpus } from '@/features/library/utils/buildSearchCorpus'
 import { useLibraryStore, useLibrarySorting } from '@/store/useLibraryStore'
 import { useOperations } from '@/hooks/useOperations'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { useFailedTranscriptions } from '@/store/features/useTranscriptionStore'
+import { useFailedTranscriptions, useTranscriptionStore } from '@/store/features/useTranscriptionStore'
+
+// P4: provider markers Retry-all re-pends (mirrors transcription:retryAll handler).
+// Used to optimistically clear matching failed store rows so the failure chip
+// updates immediately instead of waiting for the 5 s poll reconcile.
+const RETRY_ALL_MARKERS = ['OpenAI', 'Ollama Cloud', 'Gemini API key'] as const
 
 export function Library() {
   const navigate = useNavigate()
@@ -75,15 +80,32 @@ export function Library() {
   const handleRetryAllFailed = useCallback(async () => {
     try {
       const result = await window.electronAPI?.recordings?.retryAllFailed?.()
-      if (result) {
-        const count = result.count ?? 0
-        if (count > 0) {
-          toast.success('Re-queued Transcriptions', `Re-queued ${count} failed transcription${count === 1 ? '' : 's'}`)
-        } else {
-          toast.info('Nothing to Retry', 'No provider-terminal failures found to retry')
-        }
-        refresh(false)
+      // The handler returns { success, count }. A DB-error path returns
+      // { success: false, count: 0 } — branch on success so that failure routes
+      // to an error toast instead of the benign 'Nothing to Retry' info toast
+      // (the truthy `if (result)` previously swallowed it).
+      if (!result?.success) {
+        toast.error('Retry Failed', 'Could not retry failed transcriptions')
+        return
       }
+      const count = result.count ?? 0
+      if (count > 0) {
+        toast.success('Re-queued Transcriptions', `Re-queued ${count} failed transcription${count === 1 ? '' : 's'}`)
+        // Optimistically clear matching failed store rows so the failure chip
+        // updates immediately (the 5 s poll reconcile is the durable backstop).
+        // Only rows whose error matches a provider marker are cleared — exactly
+        // the rows the handler re-pended; deterministic failures stay visible.
+        const store = useTranscriptionStore.getState()
+        store.queue.forEach((item) => {
+          if (item.status === 'failed' && RETRY_ALL_MARKERS.some((m) => (item.error ?? '').includes(m))) {
+            store.remove(item.id)
+            store.addToQueue(item.id, item.recordingId, item.filename)
+          }
+        })
+      } else {
+        toast.info('Nothing to Retry', 'No provider-terminal failures found to retry')
+      }
+      refresh(false)
     } catch (err) {
       console.error('retryAllFailed error:', err)
       toast.error('Retry Failed', 'Could not retry failed transcriptions')

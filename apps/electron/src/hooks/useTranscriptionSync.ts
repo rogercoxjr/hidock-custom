@@ -151,7 +151,15 @@ export function useTranscriptionSync() {
                   store.updateProgress(item.id, item.progress)
                 }
               } else if (item.status === 'pending') {
-                if (!store.queue.has(item.id)) {
+                const existing = store.queue.get(item.id)
+                if (!existing) {
+                  store.addToQueue(item.id, item.recording_id, item.filename || 'Unknown')
+                } else if (existing.status !== 'pending') {
+                  // P4 chip fix: Retry-all (rependFailedItems) flips DB rows
+                  // failed→pending, but the store still shows them as 'failed' so the
+                  // failure chip never clears. Reconcile by resetting the store row to
+                  // a fresh pending state (remove + re-add) when the DB status differs.
+                  store.remove(item.id)
                   store.addToQueue(item.id, item.recording_id, item.filename || 'Unknown')
                 }
               }

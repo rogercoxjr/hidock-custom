@@ -1,7 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { Library } from '../Library'
+import { toast } from '@/components/ui/toaster'
+import { useTranscriptionStore } from '@/store/features/useTranscriptionStore'
 
 // Mock hooks
 vi.mock('@/hooks/useUnifiedRecordings', () => ({
@@ -111,6 +113,15 @@ vi.mock('@/store/useLibraryStore', () => ({
   useLibrarySorting: vi.fn(() => ({ sortBy: 'date', sortOrder: 'desc' }))
 }))
 
+vi.mock('@/components/ui/toaster', () => {
+  const toast: any = vi.fn()
+  toast.success = vi.fn()
+  toast.error = vi.fn()
+  toast.warning = vi.fn()
+  toast.info = vi.fn()
+  return { toast }
+})
+
 vi.mock('@/hooks/useOperations', () => ({
   useOperations: vi.fn(() => ({
     queueTranscription: vi.fn().mockResolvedValue(true),
@@ -164,7 +175,8 @@ global.window.electronAPI = {
   recordings: {
     addExternal: vi.fn(),
     delete: vi.fn(),
-    updateStatus: vi.fn()
+    updateStatus: vi.fn(),
+    retryAllFailed: vi.fn().mockResolvedValue({ success: true, count: 0 })
   },
   downloadService: {
     queueDownloads: vi.fn()
@@ -324,6 +336,97 @@ describe('Library', () => {
       // Search input should be present in LibraryFilters
       const searchInput = screen.getByPlaceholderText(/search/i)
       expect(searchInput).toBeInTheDocument()
+    })
+  })
+
+  describe('Retry-all failed transcriptions (auto-pipeline P4 Task 4)', () => {
+    // Seed the real transcription store with a failed item so the chip + Retry
+    // all button render. useFailedTranscriptions() reads the real store here.
+    const seedFailed = (error = 'OpenAI API key was rejected') => {
+      const store = useTranscriptionStore.getState()
+      store.clear()
+      store.addToQueue('q-1', 'rec-1', 'failed.wav')
+      store.markFailed('q-1', error)
+    }
+
+    beforeEach(() => {
+      useTranscriptionStore.getState().clear()
+      vi.mocked(useUnifiedRecordings).mockReturnValue({
+        recordings: [mockRecording],
+        loading: false,
+        error: null,
+        refresh: vi.fn(),
+        deviceConnected: false,
+        stats: { total: 1, deviceOnly: 0, localOnly: 1, both: 0, synced: 1, unsynced: 0, onSource: 0, locallyAvailable: 1 }
+      })
+    })
+
+    it('toasts the returned count on success and clears matching failed store rows', async () => {
+      seedFailed('OpenAI API key was rejected')
+      ;(window.electronAPI.recordings as any).retryAllFailed = vi
+        .fn()
+        .mockResolvedValue({ success: true, count: 2 })
+
+      renderLibrary()
+
+      const btn = await screen.findByRole('button', { name: /retry all/i })
+      fireEvent.click(btn)
+
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith(
+          'Re-queued Transcriptions',
+          'Re-queued 2 failed transcriptions'
+        )
+      })
+      // Optimistic clear: the marker-matching failed row is reset to pending,
+      // so it no longer counts as failed.
+      expect(useTranscriptionStore.getState().queue.get('q-1')?.status).toBe('pending')
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(toast.info).not.toHaveBeenCalled()
+    })
+
+    it('routes a { success: false } DB-error result to toast.error (not the benign info toast)', async () => {
+      seedFailed('OpenAI API key was rejected')
+      ;(window.electronAPI.recordings as any).retryAllFailed = vi
+        .fn()
+        .mockResolvedValue({ success: false, count: 0 })
+
+      renderLibrary()
+
+      const btn = await screen.findByRole('button', { name: /retry all/i })
+      fireEvent.click(btn)
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          'Retry Failed',
+          'Could not retry failed transcriptions'
+        )
+      })
+      expect(toast.info).not.toHaveBeenCalled()
+      expect(toast.success).not.toHaveBeenCalled()
+      // The failed row is NOT optimistically cleared on failure.
+      expect(useTranscriptionStore.getState().queue.get('q-1')?.status).toBe('failed')
+    })
+
+    it('shows the benign info toast when success but count is 0', async () => {
+      seedFailed('Recording file not found: x.wav')
+      ;(window.electronAPI.recordings as any).retryAllFailed = vi
+        .fn()
+        .mockResolvedValue({ success: true, count: 0 })
+
+      renderLibrary()
+
+      const btn = await screen.findByRole('button', { name: /retry all/i })
+      fireEvent.click(btn)
+
+      await waitFor(() => {
+        expect(toast.info).toHaveBeenCalledWith(
+          'Nothing to Retry',
+          'No provider-terminal failures found to retry'
+        )
+      })
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(toast.success).not.toHaveBeenCalled()
     })
   })
 
