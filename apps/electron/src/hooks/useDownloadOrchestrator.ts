@@ -28,6 +28,9 @@ interface DownloadQueueItem {
 // DL-14: Module-level abort controller ref so cancelDownloads can be called from outside the hook
 let _downloadAbortControllerRef: AbortController | null = null
 
+// Module-level ref to processDownloadQueue so processPendingDownloads() can be called from outside the hook
+let _processQueueRef: { current: () => Promise<void> } | null = null
+
 let _cancelInProgress = false
 let _cancelEpoch = 0
 let _lastProcessedEpoch = 0
@@ -57,6 +60,15 @@ export function cancelDownloads(): void {
 
 export function cancelDownloadsComplete(): void {
   _cancelInProgress = false
+}
+
+/**
+ * Imperatively start processing any pending downloads. Mirrors `cancelDownloads`.
+ * Safe: processDownloadQueue self-guards on isProcessing (DL-008 lock set before the
+ * first await) + re-checks deviceService.isConnected().
+ */
+export function processPendingDownloads(): void {
+  _processQueueRef?.current?.()
 }
 
 /**
@@ -335,6 +347,8 @@ export function useDownloadOrchestrator() {
   // re-subscribe all listeners when processDownloadQueue is recreated
   const processDownloadQueueRef = useRef(processDownloadQueue)
   processDownloadQueueRef.current = processDownloadQueue
+  // Sync module-level ref so processPendingDownloads() can start the queue from outside the hook
+  _processQueueRef = processDownloadQueueRef
 
   // SM-002: Initialization guard to prevent double subscription in StrictMode
   const orchestratorInitialized = useRef(false)

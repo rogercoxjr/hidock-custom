@@ -38,7 +38,8 @@ vi.mock('@/services/hidock-device', () => ({
 
 // --- useDownloadOrchestrator mock -----------------------------------------
 vi.mock('@/hooks/useDownloadOrchestrator', () => ({
-  cancelDownloads: vi.fn()
+  cancelDownloads: vi.fn(),
+  processPendingDownloads: vi.fn()
 }))
 
 // --- useUnifiedRecordings mock --------------------------------------------
@@ -109,6 +110,7 @@ vi.mock('@/components/ui/toaster', () => {
 })
 
 import { useUnifiedRecordings } from '@/hooks/useUnifiedRecordings'
+import { processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 
 // --- electronAPI mock ------------------------------------------------------
 const mockGetFilesToSync = vi.fn()
@@ -212,6 +214,52 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     ])
     // No confirmation dialog rendered.
     expect(screen.queryByText(/Download recordings\?/i)).not.toBeInTheDocument()
+  })
+
+  it('explicitly starts pending downloads after a successful queue (no reliance on opportunistic gate)', async () => {
+    const size = 1024
+    vi.mocked(useUnifiedRecordings).mockReturnValue({
+      recordings: makeDeviceRecordings(3, size),
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    } as any)
+    mockGetFilesToSync.mockResolvedValue(filesToSyncResult(3, size))
+
+    renderDevice()
+    await clickSync()
+
+    await waitFor(() => {
+      expect(mockQueueDownloads).toHaveBeenCalledTimes(1)
+    })
+    // FIX: performSync must imperatively kick off processing rather than waiting
+    // for the opportunistic onStateUpdate gate, which can silently never fire.
+    await waitFor(() => {
+      expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('does NOT start pending downloads when there is nothing to queue', async () => {
+    const size = 50 * 1024 * 1024
+    vi.mocked(useUnifiedRecordings).mockReturnValue({
+      recordings: makeDeviceRecordings(58, size),
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    } as any)
+    // Every file skipped → toSync empty → performSync never called.
+    mockGetFilesToSync.mockResolvedValue(
+      filesToSyncResult(58, size).map(f => ({ ...f, skipReason: 'already-synced' }))
+    )
+
+    renderDevice()
+    await clickSync()
+
+    const { toast } = await import('@/components/ui/toaster')
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'All synced' }))
+    })
+    expect(vi.mocked(processPendingDownloads)).not.toHaveBeenCalled()
   })
 
   it('large sync (58 files) confirms first — no queue until confirm clicked', async () => {
