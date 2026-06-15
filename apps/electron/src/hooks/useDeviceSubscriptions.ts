@@ -129,7 +129,7 @@ export function useDeviceSubscriptions() {
               const filesToQueue = toSync.map(rec => ({
                 filename: rec.filename,
                 size: rec.size,
-                dateCreated: rec.dateCreated?.toISOString()
+                dateCreated: typeof rec.dateCreated === 'string' ? rec.dateCreated : rec.dateCreated?.toISOString()
               }))
               await window.electronAPI.downloadService.startSession(filesToQueue)
               setDeviceSyncStateRef.current({
@@ -250,7 +250,7 @@ export function useDeviceSubscriptions() {
           const filesToQueue = toSync.map(rec => ({
             filename: rec.filename,
             size: rec.size,
-            dateCreated: rec.dateCreated?.toISOString()
+            dateCreated: typeof rec.dateCreated === 'string' ? rec.dateCreated : rec.dateCreated?.toISOString()
           }))
           await window.electronAPI.downloadService.startSession(filesToQueue)
           // SM-M02: Use ref to avoid stale closure

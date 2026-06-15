@@ -350,7 +350,8 @@ export interface ElectronAPI {
       isPaused: boolean
     }>
     isFileSynced: (filename: string) => Promise<{ synced: boolean; reason: string }>
-    getFilesToSync: (files: Array<{ filename: string; size: number; duration: number; dateCreated: Date }>) => Promise<Array<{ filename: string; size: number; duration: number; dateCreated: Date; skipReason?: string }>>
+    getFilesToSync: (files: Array<{ filename: string; size: number; duration: number; dateCreated: string | Date }>, opts?: { auto?: boolean; deviceSerial?: string }) => Promise<Array<{ filename: string; size: number; duration: number; dateCreated: string | Date; skipReason?: string }>>
+    ensureBaseline: (deviceSerial: string, filenames: string[]) => Promise<{ created: boolean }>
     queueDownloads: (files: Array<{ filename: string; size: number; dateCreated?: string }>) => Promise<string[]>
     startSession: (files: Array<{ filename: string; size: number; dateCreated?: string }>) => Promise<{
       id: string
@@ -719,7 +720,8 @@ const electronAPI: ElectronAPI = {
   downloadService: {
     getState: () => callIPC('download-service:get-state'),
     isFileSynced: (filename) => callIPC('download-service:is-file-synced', filename),
-    getFilesToSync: (files) => callIPC('download-service:get-files-to-sync', files),
+    getFilesToSync: (files, opts) => callIPC('download-service:get-files-to-sync', files, opts),
+    ensureBaseline: (deviceSerial, filenames) => callIPC('download-service:ensure-baseline', deviceSerial, filenames),
     queueDownloads: (files) => callIPC('download-service:queue-downloads', files),
     startSession: (files) => callIPC('download-service:start-session', files),
     processDownload: (filename, data) => callIPC('download-service:process-download', filename, data),
