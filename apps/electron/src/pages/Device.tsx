@@ -17,9 +17,17 @@ import { cancelDownloads } from '@/hooks/useDownloadOrchestrator'
 
 import { formatEta, formatBytes } from '@/utils/formatters'
 import { DeviceFileList } from '@/components/DeviceFileList'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { useConfigStore } from '@/store/domain/useConfigStore'
 import { shouldLogQa } from '@/services/qa-monitor'
 
 const CONNECTION_TIMEOUT_MS = 10000 // 10 second timeout (BUG-006)
+
+// Auto-pipeline P5 fix (Defect 1): manual Sync stays baseline-bypassing (AC3)
+// but a large batch prompts once before flooding the queue + downstream metered
+// transcription. Thresholds: > 5 files OR > 200 MB total.
+const SYNC_CONFIRM_FILE_THRESHOLD = 5
+const SYNC_CONFIRM_BYTES_THRESHOLD = 200 * 1024 * 1024 // 200 MB
 
 export function Device() {
   // B-DEV-001: Unified syncing state - use only store as single source of truth
@@ -30,6 +38,9 @@ export function Device() {
   const setDeviceSyncState = useAppStore(state => state.setDeviceSyncState)
   const deviceSyncProgress = useAppStore(state => state.deviceSyncProgress)
   const deviceSyncEta = useAppStore(state => state.deviceSyncEta)
+
+  // Config (for the large-Sync confirmation's auto-transcribe cost note)
+  const config = useConfigStore(state => state.config)
 
   // Initialize service
   const deviceService = getHiDockDeviceService()
@@ -77,6 +88,13 @@ export function Device() {
 
   // B-DEV-005: Loading state for device config switches
   const [configLoading, setConfigLoading] = useState<Record<string, boolean>>({})
+
+  // Auto-pipeline P5 fix (Defect 1): pending large-Sync confirmation
+  const [syncConfirm, setSyncConfirm] = useState<{
+    open: boolean
+    files: Array<{ filename: string; size: number; dateCreated?: string }>
+    totalBytes: number
+  }>({ open: false, files: [], totalBytes: 0 })
 
   // B-DEV-010: Debounce ref for refreshSyncedFilenames (500ms window)
   const lastSyncedRefreshRef = useRef<number>(0)
@@ -438,6 +456,50 @@ export function Device() {
     }
   }
 
+  // Auto-pipeline P5 fix (Defect 1): the queue-and-refresh body, extracted so
+  // the large-batch confirmation can defer it until the user confirms. Owns the
+  // deviceSyncing lifecycle (set true here, cleared on the no-op/error paths and
+  // by the download orchestrator once downloads actually run).
+  const performSync = async (
+    files: Array<{ filename: string; size: number; dateCreated?: string }>
+  ) => {
+    // B-DEV-001: Use store syncing state as single source of truth
+    setDeviceSyncState({ deviceSyncing: true })
+    try {
+      // Queue files to download service - useDownloadOrchestrator will handle actual downloads
+      // IMPORTANT: Pass dateCreated to preserve original recording dates from device
+      // Note: dateCreated from getFilesToSync is already serialized to ISO string by IPC
+      const queuedIds = await window.electronAPI.downloadService.queueDownloads(files)
+
+      if (queuedIds.length > 0) {
+        // Refresh synced filenames to update button count
+        await refreshSyncedFilenames()
+
+        toast({
+          title: 'Sync started',
+          description: `Queued ${queuedIds.length} recording${queuedIds.length !== 1 ? 's' : ''} for download`,
+          variant: 'default'
+        })
+      } else {
+        toast({
+          title: 'Nothing to sync',
+          description: 'All files are already queued or downloaded',
+          variant: 'default'
+        })
+        setDeviceSyncState({ deviceSyncing: false })
+      }
+      // Note: deviceSyncing is not cleared here for queued files - the download orchestrator will manage sync state
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sync failed')
+      toast({
+        title: 'Sync failed',
+        description: e instanceof Error ? e.message : 'Unknown error',
+        variant: 'error'
+      })
+      setDeviceSyncState({ deviceSyncing: false })
+    }
+  }
+
   const handleSyncAll = async () => {
     // Validate connection before starting
     if (!deviceService.isConnected()) {
@@ -445,8 +507,6 @@ export function Device() {
       return
     }
 
-    // B-DEV-001: Use store syncing state as single source of truth
-    setDeviceSyncState({ deviceSyncing: true })
     setError(null)
 
     try {
@@ -481,39 +541,27 @@ export function Device() {
           description: 'All recordings are already downloaded',
           variant: 'success'
         })
-        setDeviceSyncState({ deviceSyncing: false })
         return
       }
 
-      // Queue files to download service - useDownloadOrchestrator will handle actual downloads
-      // IMPORTANT: Pass dateCreated to preserve original recording dates from device
-      // Note: dateCreated from getFilesToSync is already serialized to ISO string by IPC
-      const queuedIds = await window.electronAPI.downloadService.queueDownloads(
-        toSync.map(f => ({
-          filename: f.filename,
-          size: f.size,
-          dateCreated: typeof f.dateCreated === 'string' ? f.dateCreated : f.dateCreated?.toISOString()
-        }))
-      )
+      // Build the queue payload (preserves original recording dates from device)
+      const filesToQueue = toSync.map(f => ({
+        filename: f.filename,
+        size: f.size,
+        dateCreated: typeof f.dateCreated === 'string' ? f.dateCreated : f.dateCreated?.toISOString()
+      }))
+      const totalBytes = toSync.reduce((s, f) => s + (f.size || 0), 0)
 
-      if (queuedIds.length > 0) {
-        // Refresh synced filenames to update button count
-        await refreshSyncedFilenames()
-
-        toast({
-          title: 'Sync started',
-          description: `Queued ${queuedIds.length} recording${queuedIds.length !== 1 ? 's' : ''} for download`,
-          variant: 'default'
-        })
-      } else {
-        toast({
-          title: 'Nothing to sync',
-          description: 'All files are already queued or downloaded',
-          variant: 'default'
-        })
-        setDeviceSyncState({ deviceSyncing: false })
+      // Auto-pipeline P5 fix (Defect 1): a large manual Sync would flood the
+      // queue + downstream metered transcription with the whole backlog. Confirm
+      // once before queueing. Manual sync stays baseline-bypassing (AC3) — the
+      // confirmation is the guard, not a baseline filter.
+      if (toSync.length > SYNC_CONFIRM_FILE_THRESHOLD || totalBytes > SYNC_CONFIRM_BYTES_THRESHOLD) {
+        setSyncConfirm({ open: true, files: filesToQueue, totalBytes })
+        return
       }
-      // Note: deviceSyncing is not cleared here for queued files - the download orchestrator will manage sync state
+
+      await performSync(filesToQueue)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sync failed')
       toast({
@@ -521,7 +569,6 @@ export function Device() {
         description: e instanceof Error ? e.message : 'Unknown error',
         variant: 'error'
       })
-      setDeviceSyncState({ deviceSyncing: false })
     }
   }
 
@@ -782,6 +829,15 @@ export function Device() {
   }
 
   // C-004: formatBytes is now imported from @/utils/formatters (deduplicated)
+
+  // Auto-pipeline P5 fix (Defect 1): human-readable confirmation copy. Adds the
+  // auto-transcribe cost note only when auto-transcribe is enabled in config.
+  const gb = (syncConfirm.totalBytes / 1024 / 1024 / 1024)
+  const sizeStr = gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(syncConfirm.totalBytes / 1024 / 1024)} MB`
+  const syncConfirmDescription = `This will download ${syncConfirm.files.length} recordings (~${sizeStr}).` +
+    (config?.transcription?.autoTranscribe
+      ? ' They will also be transcribed and summarized using your configured AI provider, which may incur usage costs.'
+      : '')
 
   return (
     <div className="flex flex-col h-full">
@@ -1495,6 +1551,23 @@ export function Device() {
           )}
         </div>
       </div>
+
+      {/* Auto-pipeline P5 fix (Defect 1): confirm before flooding the queue with
+          a large manual Sync. Confirming preserves AC3 reach (all selected files). */}
+      <ConfirmDialog
+        open={syncConfirm.open}
+        onOpenChange={(open) => setSyncConfirm((prev) => ({ ...prev, open }))}
+        title="Download recordings?"
+        description={syncConfirmDescription}
+        actionLabel="Download"
+        cancelLabel="Cancel"
+        variant="default"
+        onConfirm={() => {
+          const files = syncConfirm.files
+          setSyncConfirm((prev) => ({ ...prev, open: false }))
+          void performSync(files)
+        }}
+      />
     </div>
   )
 }
