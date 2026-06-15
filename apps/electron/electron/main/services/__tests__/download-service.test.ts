@@ -17,6 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import * as databaseModule from '../database'
 
 // Mock electron modules BEFORE importing the service
 vi.mock('electron', () => ({
@@ -298,5 +299,69 @@ describe('DownloadService', () => {
       expect(stateAfter.queue[0].status).toBe('downloading')
       expect(stateAfter.queue[0].startedAt).toBeDefined()
     })
+  })
+})
+
+// ============================================================================
+// Orphaned-pending fix (Task 2): clear abandoned pending/downloading on startup
+//
+// Prior behavior only cleared pending rows that had a started_at AND were >24h old.
+// Never-started pending rows (started_at = NULL) reloaded forever with nothing to
+// start them. On construction there is never a live session, so ALL persisted
+// pending/downloading rows are abandoned and must be cleared from memory + DB.
+// ============================================================================
+
+describe('DownloadService — clear abandoned pending/downloading on startup (Task 2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.resetModules()
+  })
+
+  it('clears abandoned pending (null started_at) and downloading rows from memory + DB', async () => {
+    // Seed the startup SELECT (status IN ('pending','downloading')) with abandoned rows.
+    vi.mocked(databaseModule.queryAll).mockReturnValueOnce([
+      {
+        id: 'orphan1.hda', filename: 'orphan1.hda', file_size: 1024, progress: 0,
+        status: 'pending', error: null, started_at: null, completed_at: null, recording_date: null
+      },
+      {
+        id: 'orphan2.hda', filename: 'orphan2.hda', file_size: 2048, progress: 40,
+        status: 'downloading', error: null, started_at: '2026-06-14T00:00:00.000Z',
+        completed_at: null, recording_date: null
+      }
+    ] as any)
+
+    // Fresh module → fresh singleton → constructor runs loadQueueFromDatabase with the seed.
+    const { getDownloadService } = await import('../download-service')
+    const service = getDownloadService()
+
+    // (a) Neither abandoned item is present in the in-memory queue.
+    const state = service.getState()
+    expect(state.queue).toHaveLength(0)
+
+    // (b) Both were deleted from the DB (removeFromDatabase → run DELETE ... WHERE filename = ?).
+    const runMock = vi.mocked(databaseModule.run)
+    const deletedFilenames = runMock.mock.calls
+      .filter(([sql]) => typeof sql === 'string' && sql.includes('DELETE FROM download_queue'))
+      .map(([, params]) => (params as unknown[])[0])
+    expect(deletedFilenames).toContain('orphan1.hda')
+    expect(deletedFilenames).toContain('orphan2.hda')
+  })
+
+  it('does not touch completed/failed history (the startup SELECT excludes them)', async () => {
+    // The loader only SELECTs pending/downloading; completed/failed are never loaded
+    // and therefore never deleted by the abandoned-clear. Seed an empty pending set.
+    vi.mocked(databaseModule.queryAll).mockReturnValueOnce([] as any)
+
+    const { getDownloadService } = await import('../download-service')
+    const service = getDownloadService()
+
+    expect(service.getState().queue).toHaveLength(0)
+    // No DELETEs issued when there is nothing abandoned to clear.
+    const runMock = vi.mocked(databaseModule.run)
+    const deletes = runMock.mock.calls.filter(
+      ([sql]) => typeof sql === 'string' && sql.includes('DELETE FROM download_queue')
+    )
+    expect(deletes).toHaveLength(0)
   })
 })

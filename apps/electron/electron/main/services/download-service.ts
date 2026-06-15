@@ -173,29 +173,19 @@ class DownloadService {
         this.state.queue.set(item.filename, queueItem)
       }
 
-      // Clear stale pending items (> 24h old) — these can never complete if the device
-      // was disconnected between sessions and left downloads in a perpetual pending state.
-      const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000
-      const now = Date.now()
-      const staleKeys: string[] = []
-      for (const [key, item] of this.state.queue) {
-        if (item.status === 'pending' && item.startedAt) {
-          const age = now - item.startedAt.getTime()
-          if (age > STALE_THRESHOLD_MS) {
-            staleKeys.push(key)
-          }
-        }
-      }
-      if (staleKeys.length > 0) {
-        for (const key of staleKeys) {
-          this.state.queue.delete(key)
-          this.removeFromDatabase(key)
-        }
-        console.log(`[DownloadService] Cleared ${staleKeys.length} stale pending item(s) older than 24h`)
+      // Clear ALL abandoned pending/downloading rows. On construction there is never a
+      // live download session, so any persisted pending/downloading item is orphaned —
+      // including never-started pending rows (started_at = NULL) that previously reloaded
+      // forever with nothing to trigger them. Resume is not supported (a mid-sync app kill
+      // requires a re-sync); completed/failed rows are excluded by the SELECT and untouched.
+      const abandoned = [...this.state.queue.keys()]
+      for (const key of abandoned) {
+        this.state.queue.delete(key)
+        this.removeFromDatabase(key)
       }
 
       this.markDirty()
-      console.log(`[DownloadService] Loaded ${items.length - staleKeys.length} items from database (${staleKeys.length} stale cleared)`)
+      console.log(`[DownloadService] Cleared ${abandoned.length} abandoned pending/downloading item(s) from previous session`)
     } catch (e) {
       console.error('[DownloadService] Failed to load queue from database:', e)
     }
