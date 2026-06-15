@@ -59,6 +59,26 @@ export function cancelDownloadsComplete(): void {
   _cancelInProgress = false
 }
 
+/**
+ * Decide which actions the device-`ready` handler should take, given the current
+ * download-service queue and whether queue processing is already in flight.
+ *
+ * Pure logic extracted so it can be unit-tested without rendering the hook or the
+ * USB/IPC stack. `'ready'` means the file-list scan is complete and the USB bus is
+ * free — the safe point to drain pending items that no longer have a live trigger.
+ */
+export function decideDeviceReadyActions(
+  state: { queue: Array<{ status: DownloadQueueItem['status'] }> },
+  isProcessing: boolean
+): { retryFailed: boolean; startPending: boolean } {
+  const hasFailed = state.queue.some((item) => item.status === 'failed')
+  const hasPending = state.queue.some((item) => item.status === 'pending')
+  return {
+    retryFailed: hasFailed,
+    startPending: hasPending && !isProcessing
+  }
+}
+
 export function useDownloadOrchestrator() {
   const deviceService = getHiDockDeviceService()
   const isProcessingDownloads = useRef(false)
@@ -393,13 +413,17 @@ export function useDownloadOrchestrator() {
     // on the USB bus, causing stalls and corrupted responses.
     const unsubDevice = deviceService.onStatusChange((status) => {
       if (status.step === 'ready' && isElectron && !isProcessingDownloads.current) {
-        // Only retry FAILED items on reconnect — don't process the full pending queue.
-        // Pending items will be processed when auto-sync calls startSession.
+        // 'ready' = file-list scan complete + USB bus free. Safe point to retry failed
+        // AND to drain pending items that no longer have a live trigger (orphaned-pending fix).
         window.electronAPI.downloadService.getState().then((state) => {
-          const hasFailed = state.queue.some((item: DownloadQueueItem) => item.status === 'failed')
-          if (hasFailed) {
+          const { retryFailed, startPending } = decideDeviceReadyActions(state, isProcessingDownloads.current)
+          if (retryFailed) {
             if (shouldLogQa()) console.log('[useDownloadOrchestrator] Device ready, retrying failed downloads')
             window.electronAPI.downloadService.retryFailed(true)
+          }
+          if (startPending) {
+            if (shouldLogQa()) console.log('[useDownloadOrchestrator] Device ready, starting pending downloads')
+            processDownloadQueueRef.current()
           }
         })
       } else if (status.step === 'idle' && !deviceService.isConnected()) {

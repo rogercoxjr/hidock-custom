@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { decideDeviceReadyActions } from '../useDownloadOrchestrator'
 
 /**
  * Tests for B-DEV-008 (per-file stall detection) and B-DEV-009 (memory cleanup)
@@ -290,5 +291,43 @@ describe('Debounce logic (B-DEV-010)', () => {
 
     // All calls should execute since they're spaced 600ms apart
     expect(results).toEqual([true, true, true])
+  })
+})
+
+// ============================================================================
+// Orphaned-pending fix (Task 1): device-ready handler starts pending downloads
+// ============================================================================
+
+describe('decideDeviceReadyActions (orphaned-pending fix)', () => {
+  type Item = { status: 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled' }
+  const queue = (...statuses: Item['status'][]) => ({ queue: statuses.map((status) => ({ status })) })
+
+  it('starts pending downloads when device becomes ready with pending items', () => {
+    const result = decideDeviceReadyActions(queue('pending', 'completed'), false)
+    expect(result.startPending).toBe(true)
+    expect(result.retryFailed).toBe(false)
+  })
+
+  it('does NOT start pending when already processing (concurrency lock held)', () => {
+    const result = decideDeviceReadyActions(queue('pending'), true)
+    expect(result.startPending).toBe(false)
+  })
+
+  it('retries failed items when device becomes ready (existing behavior preserved)', () => {
+    const result = decideDeviceReadyActions(queue('failed', 'completed'), false)
+    expect(result.retryFailed).toBe(true)
+    expect(result.startPending).toBe(false)
+  })
+
+  it('both retries failed and starts pending when both are present', () => {
+    const result = decideDeviceReadyActions(queue('failed', 'pending'), false)
+    expect(result.retryFailed).toBe(true)
+    expect(result.startPending).toBe(true)
+  })
+
+  it('does nothing when the queue has no pending or failed items', () => {
+    const result = decideDeviceReadyActions(queue('completed', 'cancelled'), false)
+    expect(result.retryFailed).toBe(false)
+    expect(result.startPending).toBe(false)
   })
 })
