@@ -140,6 +140,12 @@ export function useDeviceSubscriptions() {
         return
       }
 
+      // Defect 3 FIX: Lock NOW, not inside the debounce — otherwise the pre-connected path
+      // (checkInitialAutoSync) can slip through during the 2s window and run a second
+      // auto-sync. Reset to false on the listRecordings-failure paths and on disconnect so
+      // a genuine retry still works.
+      autoSyncTriggeredRef.current = true
+
       // spec-007: Clear existing debounce timer
       if (syncDebounceTimerRef.current) {
         clearTimeout(syncDebounceTimerRef.current)
@@ -148,9 +154,6 @@ export function useDeviceSubscriptions() {
 
       // spec-007: Debounce sync by 2 seconds
       syncDebounceTimerRef.current = setTimeout(async () => {
-        // Lock IMMEDIATELY to prevent re-entry from status changes during listRecordings
-        autoSyncTriggeredRef.current = true
-
         try {
           if (shouldLogQa()) console.log('[useDeviceSubscriptions] Auto-sync triggered after 2s debounce')
 

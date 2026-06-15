@@ -236,3 +236,66 @@ describe('useDeviceSubscriptions — auto-sync baseline gate (status-ready path)
     )
   })
 })
+
+describe('useDeviceSubscriptions — auto-sync guard race (Defect 3: both trigger paths)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ref.capturedStatusChange = null
+    vi.useFakeTimers()
+    downloadServiceMock = createDownloadServiceMock()
+    setElectronAPI()
+    deviceServiceMock.getState.mockReturnValue({
+      connected: true,
+      model: 'p1',
+      serialNumber: 'SN1',
+      firmwareVersion: null,
+      storage: null,
+      settings: null,
+      recordingCount: 2
+    })
+    deviceServiceMock.getConnectionStatus.mockReturnValue({ step: 'idle', message: 'Not connected' })
+    deviceServiceMock.isConnected.mockReturnValue(true)
+    deviceServiceMock.onStatusChange.mockImplementation(
+      (cb: (status: { step: string; message?: string }) => void) => {
+        ref.capturedStatusChange = cb
+        return () => {}
+      }
+    )
+    deviceServiceMock.onStateChange.mockReturnValue(() => {})
+    deviceServiceMock.onActivity.mockReturnValue(() => {})
+    deviceServiceMock.getCachedRecordings.mockReturnValue([REC_A, REC_B])
+    autoSyncGuardMock.checkAutoSyncAllowed.mockReturnValue({ allowed: true, reason: 'ok' })
+    autoSyncGuardMock.waitForConfig.mockResolvedValue(true)
+    // BOTH paths armed: pre-connected (Path B) AND status-ready (Path A).
+    autoSyncGuardMock.waitForDeviceReady.mockResolvedValue(true)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('Both paths fire on one connect → reconcile runs at most once (startSession called ≤ 1×)', async () => {
+    // created:false so the observable effect is startSession (not a baseline short-circuit).
+    downloadServiceMock.ensureBaseline.mockResolvedValue({ created: false })
+    // b.hda is new → would be queued by EACH path that runs reconcile.
+    downloadServiceMock.getFilesToSync.mockResolvedValue([
+      { ...REC_A, skipReason: 'baseline' },
+      { ...REC_B, skipReason: undefined }
+    ])
+
+    renderHook(() => useDeviceSubscriptions())
+
+    // Path A: status becomes 'ready' → schedules its 2s debounce.
+    expect(ref.capturedStatusChange).not.toBeNull()
+    ref.capturedStatusChange!({ step: 'ready', message: 'Ready' })
+
+    // Path B (checkInitialAutoSync) runs concurrently: its waitForConfig/waitForDeviceReady
+    // awaits resolve here, then it checks the guard and (if unlocked) runs reconcile.
+    // Path A's debounce then fires. Drain everything.
+    await vi.runAllTimersAsync()
+    await vi.runAllTimersAsync()
+
+    // The two paths must NOT both run the reconcile: startSession at most once.
+    expect(downloadServiceMock.startSession.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+})
