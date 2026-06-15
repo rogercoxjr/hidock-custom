@@ -91,6 +91,35 @@ export function decideDeviceReadyActions(
   }
 }
 
+interface DeviceReadyDeps {
+  /** Re-queue failed/cancelled items for retry (e.g. window.electronAPI.downloadService.retryFailed). */
+  retryFailed: () => void
+  /** Start draining the pending queue (e.g. processDownloadQueueRef.current). */
+  processPending: () => void
+}
+
+/**
+ * Run the device-`ready` actions: decide via {@link decideDeviceReadyActions} and dispatch.
+ * This is the REAL wiring the device-`ready` handler delegates to (deps injected so it can be
+ * unit-tested without rendering the hook or touching USB/IPC). Tests against this protect the
+ * handler→processDownloadQueue path: removing the pending dispatch here turns them red.
+ */
+export function runDeviceReadyActions(
+  state: { queue: Array<{ status: DownloadQueueItem['status'] }> },
+  isProcessing: boolean,
+  deps: DeviceReadyDeps
+): void {
+  const { retryFailed, startPending } = decideDeviceReadyActions(state, isProcessing)
+  if (retryFailed) {
+    if (shouldLogQa()) console.log('[useDownloadOrchestrator] Device ready, retrying failed downloads')
+    deps.retryFailed()
+  }
+  if (startPending) {
+    if (shouldLogQa()) console.log('[useDownloadOrchestrator] Device ready, starting pending downloads')
+    deps.processPending()
+  }
+}
+
 export function useDownloadOrchestrator() {
   const deviceService = getHiDockDeviceService()
   const isProcessingDownloads = useRef(false)
@@ -418,27 +447,21 @@ export function useDownloadOrchestrator() {
     // Downloads are triggered by auto-sync (startSession → onStateUpdate → processDownloadQueue).
     // Processing persisted items here would race with the file list scan on the USB bus.
 
-    // Handle device status changes — DO NOT start downloads here.
-    // Downloads are triggered by auto-sync (useDeviceSubscriptions) which:
-    //   1. Waits for file list scan to complete
-    //   2. Reconciles files
-    //   3. Calls startSession → emits state update → processDownloadQueue
-    // Starting downloads independently on 'ready' would race with the file list scan
-    // on the USB bus, causing stalls and corrupted responses.
+    // Handle device status changes.
+    // 'ready' is a deliberate, SAFE drain point: it fires only after the file-list scan has
+    // completed and the USB bus is free, so starting downloads here does NOT race the scan.
+    // Auto-sync (useDeviceSubscriptions → startSession → onStateUpdate) remains the primary
+    // trigger; this handler additionally retries failed items AND starts any orphaned pending
+    // items that no longer have a live trigger (the orphaned-pending fix). processDownloadQueue
+    // self-guards (DL-008 lock + isConnected re-check), so the extra caller is concurrency-safe.
+    // The real dispatch lives in runDeviceReadyActions (deps injected) so the wiring is testable.
     const unsubDevice = deviceService.onStatusChange((status) => {
       if (status.step === 'ready' && isElectron && !isProcessingDownloads.current) {
-        // 'ready' = file-list scan complete + USB bus free. Safe point to retry failed
-        // AND to drain pending items that no longer have a live trigger (orphaned-pending fix).
         window.electronAPI.downloadService.getState().then((state) => {
-          const { retryFailed, startPending } = decideDeviceReadyActions(state, isProcessingDownloads.current)
-          if (retryFailed) {
-            if (shouldLogQa()) console.log('[useDownloadOrchestrator] Device ready, retrying failed downloads')
-            window.electronAPI.downloadService.retryFailed(true)
-          }
-          if (startPending) {
-            if (shouldLogQa()) console.log('[useDownloadOrchestrator] Device ready, starting pending downloads')
-            processDownloadQueueRef.current()
-          }
+          runDeviceReadyActions(state, isProcessingDownloads.current, {
+            retryFailed: () => window.electronAPI.downloadService.retryFailed(true),
+            processPending: () => processDownloadQueueRef.current()
+          })
         })
       } else if (status.step === 'idle' && !deviceService.isConnected()) {
         if (isProcessingDownloads.current) {

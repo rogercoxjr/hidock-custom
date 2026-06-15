@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { decideDeviceReadyActions } from '../useDownloadOrchestrator'
+import { describe, it, expect, vi } from 'vitest'
+import { decideDeviceReadyActions, runDeviceReadyActions } from '../useDownloadOrchestrator'
 
 /**
  * Tests for B-DEV-008 (per-file stall detection) and B-DEV-009 (memory cleanup)
@@ -329,5 +329,66 @@ describe('decideDeviceReadyActions (orphaned-pending fix)', () => {
     const result = decideDeviceReadyActions(queue('completed', 'cancelled'), false)
     expect(result.retryFailed).toBe(false)
     expect(result.startPending).toBe(false)
+  })
+})
+
+// ============================================================================
+// Orphaned-pending fix (Task 1, integration): the REAL device-ready dispatcher
+// must invoke processDownloadQueue for pending items. This protects the
+// handler→helper→processDownloadQueue wiring the entire fix depends on — it goes
+// red if the dispatch of pending items is removed (not just the pure decision).
+// ============================================================================
+
+describe('runDeviceReadyActions (device-ready wiring)', () => {
+  type Status = 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled'
+  const queue = (...statuses: Status[]) => ({ queue: statuses.map((status) => ({ status })) })
+
+  it('invokes processPending (not retryFailed) when the queue has a pending item', () => {
+    const retryFailed = vi.fn()
+    const processPending = vi.fn()
+
+    runDeviceReadyActions(queue('pending', 'completed'), false, { retryFailed, processPending })
+
+    expect(processPending).toHaveBeenCalledTimes(1)
+    expect(retryFailed).not.toHaveBeenCalled()
+  })
+
+  it('does NOT invoke processPending while already processing (concurrency lock held)', () => {
+    const retryFailed = vi.fn()
+    const processPending = vi.fn()
+
+    runDeviceReadyActions(queue('pending'), true, { retryFailed, processPending })
+
+    expect(processPending).not.toHaveBeenCalled()
+  })
+
+  it('invokes retryFailed (not processPending) when the queue has only failed items', () => {
+    const retryFailed = vi.fn()
+    const processPending = vi.fn()
+
+    runDeviceReadyActions(queue('failed', 'completed'), false, { retryFailed, processPending })
+
+    expect(retryFailed).toHaveBeenCalledTimes(1)
+    expect(processPending).not.toHaveBeenCalled()
+  })
+
+  it('invokes both retryFailed and processPending when both statuses are present', () => {
+    const retryFailed = vi.fn()
+    const processPending = vi.fn()
+
+    runDeviceReadyActions(queue('failed', 'pending'), false, { retryFailed, processPending })
+
+    expect(retryFailed).toHaveBeenCalledTimes(1)
+    expect(processPending).toHaveBeenCalledTimes(1)
+  })
+
+  it('invokes neither when there is nothing pending or failed', () => {
+    const retryFailed = vi.fn()
+    const processPending = vi.fn()
+
+    runDeviceReadyActions(queue('completed', 'cancelled'), false, { retryFailed, processPending })
+
+    expect(retryFailed).not.toHaveBeenCalled()
+    expect(processPending).not.toHaveBeenCalled()
   })
 })
