@@ -207,6 +207,40 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   })
 
   // -------------------------------------------------------------------------
+  // Test 1d: Empty-fresh-device edge — CHARACTERIZATION of current spec-faithful
+  // behavior (code-quality review finding 2 — a spec-design gap, NOT a code bug).
+  //
+  // A brand-new device with zero recordings → ensureBaseline(serial, []) inserts
+  // NO rows yet returns { created: true } (the snapshot of an empty device is
+  // empty). Because §5.5 defines "fresh" purely by row existence
+  // (SELECT 1 FROM sync_baseline_files WHERE device_serial = ?), this serial
+  // remains INDISTINGUISHABLE from never-baselined: a later connect (after the
+  // user records meetings) finds no baseline rows + no sync history, treats the
+  // device as fresh again, and snapshots those new recordings into the baseline —
+  // silently excluding them from auto-sync (manual sync still reaches them, AC3).
+  //
+  // This test PINS that behavior so the empty-filenames case is no longer
+  // invisible to the suite. Resolving the gap requires a spec amendment
+  // (serial-level 'baselined' marker) or an agreed in-schema sentinel — both
+  // outside this code-quality fix's scope. Reported per the spec-authoritative
+  // invariant. If the spec gains a serial-level marker, this test should flip.
+  // -------------------------------------------------------------------------
+  it('empty-fresh-device edge: ensureBaseline(serial, []) inserts zero rows but reports created=true (spec gap, characterized)', () => {
+    const result = service.ensureBaseline('SN_EMPTY', [])
+
+    // Current spec-faithful behavior: created=true with no row written.
+    expect(result).toEqual({ created: true })
+    expect(baselineCount('SN_EMPTY')).toBe(0)
+
+    // The gap: a subsequent connect cannot tell SN_EMPTY was ever baselined, so
+    // newly recorded files get snapshotted (created=true again) rather than synced.
+    const second = service.ensureBaseline('SN_EMPTY', ['recorded1.hda', 'recorded2.hda'])
+    expect(second).toEqual({ created: true })
+    expect(hasBaselineRow('SN_EMPTY', 'recorded1.hda')).toBe(true)
+    expect(hasBaselineRow('SN_EMPTY', 'recorded2.hda')).toBe(true)
+  })
+
+  // -------------------------------------------------------------------------
   // Test 2: Already baselined — second call returns { created: false }, no new rows
   // -------------------------------------------------------------------------
   it('already baselined: second call returns { created: false } without changing row count', () => {
