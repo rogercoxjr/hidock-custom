@@ -115,14 +115,18 @@ import { processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 // --- electronAPI mock ------------------------------------------------------
 const mockGetFilesToSync = vi.fn()
 const mockQueueDownloads = vi.fn()
+const mockGetState = vi.fn().mockResolvedValue({ queue: [] })
+const mockOnStateUpdate = vi.fn(() => () => {})
+const mockCancelPendingDownloads = vi.fn().mockResolvedValue(0)
 
 global.window.electronAPI = {
   downloadService: {
     getFilesToSync: mockGetFilesToSync,
     queueDownloads: mockQueueDownloads,
-    getState: vi.fn().mockResolvedValue({ queue: [] }),
-    onStateUpdate: vi.fn(() => () => {}),
-    retryFailed: vi.fn().mockResolvedValue({ count: 0 })
+    getState: mockGetState,
+    onStateUpdate: mockOnStateUpdate,
+    retryFailed: vi.fn().mockResolvedValue({ count: 0 }),
+    cancelPendingDownloads: mockCancelPendingDownloads
   },
   syncedFiles: {
     getFilenames: vi.fn().mockResolvedValue([])
@@ -183,6 +187,9 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     mockAutoTranscribe = false
     mockDeviceService.isConnected.mockReturnValue(true)
     mockQueueDownloads.mockResolvedValue(['id-1'])
+    mockGetState.mockResolvedValue({ queue: [] })
+    mockOnStateUpdate.mockReturnValue(() => {})
+    mockCancelPendingDownloads.mockResolvedValue(0)
   })
 
   const clickSync = async () => {
@@ -359,5 +366,73 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     })
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(mockQueueDownloads).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Orphaned-pending fix — Task 3: "Clear queue" affordance for queued-but-not-started
+// (pending) downloads. Renderer-only; USB/transfer code is never touched here.
+// ---------------------------------------------------------------------------
+
+describe('Device — clear queued-but-not-started downloads (Task 3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockDeviceSyncing = false
+    mockAutoTranscribe = false
+    mockDeviceService.isConnected.mockReturnValue(true)
+    mockGetState.mockResolvedValue({ queue: [] })
+    mockOnStateUpdate.mockReturnValue(() => {})
+    mockCancelPendingDownloads.mockResolvedValue(2)
+    vi.mocked(useUnifiedRecordings).mockReturnValue({
+      recordings: makeDeviceRecordings(3, 1024),
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    } as any)
+  })
+
+  it('shows a "Clear queue" control when there are pending items and no active sync', async () => {
+    mockGetState.mockResolvedValue({
+      queue: [
+        { id: 'p1.hda', filename: 'p1.hda', fileSize: 1024, progress: 0, status: 'pending' },
+        { id: 'p2.hda', filename: 'p2.hda', fileSize: 2048, progress: 0, status: 'pending' }
+      ]
+    })
+    mockGetFilesToSync.mockResolvedValue(filesToSyncResult(3, 1024))
+
+    renderDevice()
+
+    const clearBtn = await screen.findByRole('button', { name: /Clear queue/i })
+    expect(clearBtn).toBeInTheDocument()
+  })
+
+  it('clicking "Clear queue" calls cancelPendingDownloads', async () => {
+    mockGetState.mockResolvedValue({
+      queue: [
+        { id: 'p1.hda', filename: 'p1.hda', fileSize: 1024, progress: 0, status: 'pending' },
+        { id: 'p2.hda', filename: 'p2.hda', fileSize: 2048, progress: 0, status: 'pending' }
+      ]
+    })
+    mockGetFilesToSync.mockResolvedValue(filesToSyncResult(3, 1024))
+
+    renderDevice()
+
+    const clearBtn = await screen.findByRole('button', { name: /Clear queue/i })
+    fireEvent.click(clearBtn)
+
+    await waitFor(() => {
+      expect(mockCancelPendingDownloads).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('does NOT show "Clear queue" when there are no pending items', async () => {
+    mockGetState.mockResolvedValue({ queue: [] })
+    mockGetFilesToSync.mockResolvedValue(filesToSyncResult(3, 1024))
+
+    renderDevice()
+
+    // Let the mount-load settle.
+    await screen.findByRole('button', { name: /Sync \d+ Recording/i })
+    expect(screen.queryByRole('button', { name: /Clear queue/i })).not.toBeInTheDocument()
   })
 })

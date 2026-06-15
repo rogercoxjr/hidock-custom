@@ -75,6 +75,8 @@ export function Device() {
 
   // Failed downloads tracking for retry button
   const [failedDownloadCount, setFailedDownloadCount] = useState(0)
+  // Pending (queued-but-not-started) downloads tracking for the "Clear queue" button
+  const [pendingDownloadCount, setPendingDownloadCount] = useState(0)
 
   // Auto-connect configuration state
   const [autoConnectConfig, setAutoConnectConfig] = useState(() => deviceService.getAutoConnectConfig())
@@ -212,6 +214,9 @@ export function Device() {
           // C-004: Count both failed and cancelled items for retry button
           const failedCount = state.queue.filter((item: { status: string }) => item.status === 'failed' || item.status === 'cancelled').length
           setFailedDownloadCount(failedCount)
+          // Count pending (queued-but-not-started) items for the "Clear queue" button
+          const pendingCount = state.queue.filter((item: { status: string }) => item.status === 'pending').length
+          setPendingDownloadCount(pendingCount)
         }
       } catch (e) {
         console.error('[Device.tsx] Failed to load download service state:', e)
@@ -225,6 +230,9 @@ export function Device() {
       if (!mounted) return
       const failedCount = state.queue.filter((item) => item.status === 'failed' || item.status === 'cancelled').length
       setFailedDownloadCount(failedCount)
+
+      // Track pending (queued-but-not-started) items for the "Clear queue" button
+      setPendingDownloadCount(state.queue.filter((item) => item.status === 'pending').length)
 
       // Track completed downloads to refresh sync count
       const completedCount = state.queue.filter((item) => item.status === 'completed').length
@@ -706,6 +714,24 @@ export function Device() {
     }
   }
 
+  // Clear queued-but-not-started (pending) downloads. The download orchestrator's
+  // processDownloadQueue self-guards, so this only removes items that have not begun.
+  const handleClearQueue = async () => {
+    try {
+      const cleared = await window.electronAPI.downloadService.cancelPendingDownloads()
+      // Keep the renderer-side queue in sync (store action; optional in non-Electron/test envs)
+      useAppStore.getState().clearDownloadQueue?.()
+      setPendingDownloadCount(0)
+      toast({
+        title: 'Queue cleared',
+        description: `Removed ${cleared} queued download${cleared !== 1 ? 's' : ''}`,
+        variant: 'default'
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to clear queue')
+    }
+  }
+
   // ==========================================
   // REALTIME STREAMING HANDLERS
   // ==========================================
@@ -1181,6 +1207,17 @@ export function Device() {
                           >
                             <RotateCcw className="h-4 w-4 mr-2" />
                             Retry {failedDownloadCount} Failed Download{failedDownloadCount !== 1 ? 's' : ''}
+                          </Button>
+                        )}
+                        {/* Clear queue button - shows for queued-but-not-started downloads when not actively syncing */}
+                        {pendingDownloadCount > 0 && !storeSyncing && (
+                          <Button
+                            className="w-full mt-2"
+                            onClick={handleClearQueue}
+                            variant="outline"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Clear queue ({pendingDownloadCount})
                           </Button>
                         )}
                       </>

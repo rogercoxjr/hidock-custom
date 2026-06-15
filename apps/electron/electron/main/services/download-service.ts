@@ -787,6 +787,27 @@ class DownloadService {
   }
 
   /**
+   * Remove all not-yet-started (pending) downloads from the queue + DB.
+   * Leaves 'downloading'/'completed'/'failed'/'cancelled' items untouched.
+   * Returns the count cleared and emits a state update so the UI refreshes.
+   */
+  cancelPendingDownloads(): number {
+    const keys: string[] = []
+    for (const [key, item] of this.state.queue) {
+      if (item.status === 'pending') keys.push(key)
+    }
+    for (const key of keys) {
+      this.state.queue.delete(key)
+      this.removeFromDatabase(key)
+    }
+    if (keys.length > 0) {
+      this.markDirty()
+      this.emitStateUpdate(true)
+    }
+    return keys.length
+  }
+
+  /**
    * Re-queue all failed downloads as pending so they can be retried
    */
   /**
@@ -1169,6 +1190,11 @@ export function registerDownloadServiceHandlers(): void {
   // spec-007: Cancel active downloads (e.g., on disconnect)
   ipcMain.handle('download-service:cancel-active', (_, reason?: string) => {
     return service.cancelActiveDownloads(reason)
+  })
+
+  // Clear queued-but-not-started (pending) downloads from the queue + DB
+  ipcMain.handle('download-service:cancel-pending', () => {
+    return service.cancelPendingDownloads()
   })
 
   // C-004: Show native OS notification when sync session completes

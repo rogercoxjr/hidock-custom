@@ -303,6 +303,71 @@ describe('DownloadService', () => {
 })
 
 // ============================================================================
+// Orphaned-pending fix (Task 3): cancelPendingDownloads() clears queued-but-not-started
+// ============================================================================
+
+describe('DownloadService.cancelPendingDownloads (Task 3)', () => {
+  let service: ReturnType<typeof getDownloadService>
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    service = getDownloadService()
+    const state = service.getState()
+    if (state.queue.length > 0) {
+      service.clearCompleted()
+      service.cancelAll()
+      service.clearCompleted()
+    }
+  })
+
+  it('removes all pending items from the queue and returns the count', () => {
+    service.queueDownloads([
+      { filename: 'pend1.hda', size: 1024 },
+      { filename: 'pend2.hda', size: 2048 }
+    ])
+
+    const cleared = service.cancelPendingDownloads()
+
+    expect(cleared).toBe(2)
+    const remaining = service.getState().queue.filter((i: DownloadQueueItem) => i.status === 'pending')
+    expect(remaining).toHaveLength(0)
+  })
+
+  it('leaves downloading and completed items untouched', () => {
+    service.queueDownloads([
+      { filename: 'active.hda', size: 10000 },
+      { filename: 'queued.hda', size: 5000 }
+    ])
+    // Transition active.hda to 'downloading' via progress.
+    service.updateProgress('active.hda', 5000)
+
+    const cleared = service.cancelPendingDownloads()
+
+    expect(cleared).toBe(1) // only the pending one
+    const state = service.getState()
+    const active = state.queue.find((i: DownloadQueueItem) => i.filename === 'active.hda')
+    expect(active?.status).toBe('downloading')
+    expect(state.queue.find((i: DownloadQueueItem) => i.filename === 'queued.hda')).toBeUndefined()
+  })
+
+  it('removes cleared pending items from the database', () => {
+    service.queueDownloads([{ filename: 'pend1.hda', size: 1024 }])
+
+    service.cancelPendingDownloads()
+
+    const runMock = vi.mocked(databaseModule.run)
+    const deletedFilenames = runMock.mock.calls
+      .filter(([sql]) => typeof sql === 'string' && sql.includes('DELETE FROM download_queue'))
+      .map(([, params]) => (params as unknown[])[0])
+    expect(deletedFilenames).toContain('pend1.hda')
+  })
+
+  it('returns 0 and is a no-op when there are no pending items', () => {
+    expect(service.cancelPendingDownloads()).toBe(0)
+  })
+})
+
+// ============================================================================
 // Orphaned-pending fix (Task 2): clear abandoned pending/downloading on startup
 //
 // Prior behavior only cleared pending rows that had a started_at AND were >24h old.
