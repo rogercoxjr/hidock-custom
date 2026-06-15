@@ -94,6 +94,7 @@ import {
   queryOne,
   addSyncedFile
 } from '../database'
+import * as database from '../database'
 import { getDownloadService } from '../download-service'
 
 // ---------------------------------------------------------------------------
@@ -155,6 +156,54 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
     expect(baselineCount('SN1')).toBe(2)
     expect(hasBaselineRow('SN1', 'a.hda')).toBe(true)
     expect(hasBaselineRow('SN1', 'b.hda')).toBe(true)
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 1b: Bulk insert is ONE batched write, not a per-file run() loop
+  // (code-quality review finding 1). A ~1400-file fresh-device backlog through
+  // the old per-row run() would do a full db.export() + writeFileSync per file
+  // (N serializations). runMany binds every row to one prepared statement and
+  // serializes exactly once — so the batched path is taken and run() is not.
+  // -------------------------------------------------------------------------
+  it('fresh device: bulk insert uses one runMany call, not a per-file run() loop', () => {
+    const runManySpy = vi.spyOn(database, 'runMany')
+    const runSpy = vi.spyOn(database, 'run')
+    const filenames = Array.from({ length: 50 }, (_, i) => `f${i}.hda`)
+
+    const result = service.ensureBaseline('SN_BULK', filenames)
+
+    expect(result).toEqual({ created: true })
+    expect(baselineCount('SN_BULK')).toBe(50)
+    // One batched write — not 50 per-row run() calls.
+    expect(runManySpy).toHaveBeenCalledTimes(1)
+    expect(runManySpy.mock.calls[0][1]).toHaveLength(50) // 50 row tuples in one call
+    expect(runSpy).not.toHaveBeenCalled()
+
+    runManySpy.mockRestore()
+    runSpy.mockRestore()
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 1c: The write is one batched call, and a failure mid-write leaves NO
+  // partial baseline (code-quality review finding 1). runMany's single
+  // saveDatabase() runs only after every row binds, so a throw never serializes
+  // a partial baseline — the un-snapshotted remainder would otherwise auto-queue
+  // through metered ASR.
+  // -------------------------------------------------------------------------
+  it('fresh device: the insert is one batched call and a failure persists zero rows', () => {
+    const runManySpy = vi.spyOn(database, 'runMany').mockImplementation(() => {
+      // Explode before persisting anything, simulating a crash during the write.
+      throw new Error('simulated write failure')
+    })
+
+    expect(() => service.ensureBaseline('SN_ATOMIC', ['a.hda', 'b.hda', 'c.hda'])).toThrow(
+      'simulated write failure'
+    )
+    // Exactly one batched call (not a per-file run() loop), and nothing persisted.
+    expect(runManySpy).toHaveBeenCalledTimes(1)
+    expect(baselineCount('SN_ATOMIC')).toBe(0)
+
+    runManySpy.mockRestore()
   })
 
   // -------------------------------------------------------------------------

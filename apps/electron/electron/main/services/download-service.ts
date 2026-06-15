@@ -24,6 +24,7 @@ import {
   queryOne,
   queryAll,
   run,
+  runMany,
   runInTransaction
 } from './database'
 import { saveRecording, getRecordingsPath } from './file-storage'
@@ -306,10 +307,22 @@ class DownloadService {
     if (existing) return { created: false }
     const hasPriorHistory = filenames.some((f) => this.isFileAlreadySynced(f).synced)
     if (hasPriorHistory) return { created: false }
-    for (const filename of filenames) {
-      run(
+    // Single-serialization insert. The fresh-device backlog can be ~1400 files
+    // (Jensen file-list notes); a per-row run() would do a full db.export() +
+    // writeFileSync per file — N serializations, GBs of writes, minutes of
+    // blocked event loop inside an IPC handler. runMany binds every row to one
+    // prepared statement and serializes exactly once. It is also crash-atomic at
+    // the persistence layer: the single saveDatabase() runs only after every
+    // step() succeeds, so a failure mid-write never reaches disk and the next
+    // connect sees no baseline rows (rather than a partial baseline whose
+    // un-snapshotted remainder would auto-queue through metered ASR).
+    // NB: runInTransaction is deliberately NOT used here — runMany's internal
+    // saveDatabase() calls db.export(), which implicitly commits an open sql.js
+    // transaction and breaks the surrounding BEGIN/COMMIT.
+    if (filenames.length > 0) {
+      runMany(
         'INSERT OR IGNORE INTO sync_baseline_files (device_serial, filename, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
-        [deviceSerial, filename]
+        filenames.map((filename) => [deviceSerial, filename])
       )
     }
     console.log(`[DownloadService] Baseline established for ${deviceSerial}: ${filenames.length} files`)
