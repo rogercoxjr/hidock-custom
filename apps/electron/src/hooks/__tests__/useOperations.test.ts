@@ -10,8 +10,10 @@ vi.mock('@/components/ui/toaster', () => ({
 // Mock useDownloadOrchestrator
 vi.mock('@/hooks/useDownloadOrchestrator', () => ({
   cancelDownloads: vi.fn(),
-  cancelDownloadsComplete: vi.fn()
+  cancelDownloadsComplete: vi.fn(),
+  processPendingDownloads: vi.fn()
 }))
+import { processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 
 // Mock transcription store
 const mockAddToQueue = vi.fn()
@@ -255,6 +257,95 @@ describe('useOperations', () => {
         size: 2048,
         dateCreated: expect.any(String)
       }])
+    })
+
+    it('starts processing after queuing — regression: Library/Calendar download must not orphan', async () => {
+      const { result } = renderHook(() => useOperations())
+
+      const deviceOnly = {
+        id: 'rec-6',
+        filename: 'REC0006.WAV',
+        location: 'device-only' as const,
+        deviceFilename: 'REC0006.WAV',
+        syncStatus: 'not-synced' as const,
+        transcriptionStatus: 'none' as const,
+        size: 4096,
+        duration: 90,
+        dateRecorded: new Date('2026-02-01')
+      }
+
+      await act(async () => {
+        await result.current.queueDownload(deviceOnly as any)
+      })
+
+      expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not start processing when the recording is not device-only', async () => {
+      const { result } = renderHook(() => useOperations())
+
+      const localOnly = {
+        id: 'rec-6b',
+        location: 'local-only' as const,
+        localPath: '/p.wav',
+        syncStatus: 'synced' as const,
+        transcriptionStatus: 'none' as const,
+        filename: 'p.wav',
+        size: 1,
+        duration: 1,
+        dateRecorded: new Date()
+      }
+
+      await act(async () => {
+        await result.current.queueDownload(localOnly as any)
+      })
+
+      expect(vi.mocked(processPendingDownloads)).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('queueBulkDownloads', () => {
+    it('starts processing after queuing eligible device-only recordings', async () => {
+      const { result } = renderHook(() => useOperations())
+
+      const recs = [
+        {
+          id: 'b1', filename: 'B1.WAV', location: 'device-only' as const, deviceFilename: 'B1.WAV',
+          syncStatus: 'not-synced' as const, transcriptionStatus: 'none' as const,
+          size: 10, duration: 5, dateRecorded: new Date('2026-03-01')
+        },
+        {
+          id: 'b2', filename: 'B2.WAV', location: 'local-only' as const, localPath: '/b2.wav',
+          syncStatus: 'synced' as const, transcriptionStatus: 'none' as const,
+          size: 10, duration: 5, dateRecorded: new Date('2026-03-02')
+        }
+      ]
+
+      let count: number | undefined
+      await act(async () => {
+        count = await result.current.queueBulkDownloads(recs as any)
+      })
+
+      expect(count).toBe(1)
+      expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not start processing when nothing is eligible', async () => {
+      const { result } = renderHook(() => useOperations())
+
+      const recs = [
+        {
+          id: 'b3', location: 'local-only' as const, localPath: '/b3.wav', filename: 'b3.wav',
+          syncStatus: 'synced' as const, transcriptionStatus: 'none' as const,
+          size: 1, duration: 1, dateRecorded: new Date()
+        }
+      ]
+
+      await act(async () => {
+        await result.current.queueBulkDownloads(recs as any)
+      })
+
+      expect(vi.mocked(processPendingDownloads)).not.toHaveBeenCalled()
     })
   })
 

@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { toast } from '@/components/ui/toaster'
 import { useTranscriptionStore } from '@/store/features/useTranscriptionStore'
-import { cancelDownloads, cancelDownloadsComplete } from '@/hooks/useDownloadOrchestrator'
+import { cancelDownloads, cancelDownloadsComplete, processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 import type { UnifiedRecording } from '@/types/unified-recording'
 import { hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 
@@ -148,6 +148,9 @@ export function useOperations() {
         size: recording.size,
         dateCreated: recording.dateRecorded.toISOString()
       }])
+      // Explicitly kick the queue — don't rely on the opportunistic onStateUpdate gate,
+      // which doesn't fire reliably once the device is already connected (orphaned-download bug).
+      processPendingDownloads()
       toast({ title: 'Download started', description: recording.filename })
       return true
     } catch (e) {
@@ -169,6 +172,8 @@ export function useOperations() {
           dateCreated: r.dateRecorded.toISOString()
         }))
       )
+      // Explicitly kick the queue — see queueDownload note (orphaned-download bug).
+      processPendingDownloads()
       toast({ title: `${eligible.length} download${eligible.length > 1 ? 's' : ''} queued` })
       return eligible.length
     } catch (e) {
