@@ -6,6 +6,7 @@
 import type { SqlValue } from 'sql.js'
 import { getVectorStore, SearchResult } from './vector-store'
 import { getOllamaService, OllamaChatMessage } from './ollama'
+import { getEmbeddingService } from './embeddings/embedding-provider'
 import { getDatabase, queryOne, escapeLikePattern } from './database'
 import { Result, success, error } from '../types/api'
 
@@ -217,7 +218,7 @@ class RAGService {
     if (context.meetingId) {
       // Search within specific meeting
       const docs = await vectorStore.searchByMeeting(context.meetingId)
-      const queryEmbedding = await ollama.generateEmbedding(message)
+      const queryEmbedding = await getEmbeddingService().generateEmbedding(message)
       if (queryEmbedding) {
         // Re-rank by actual query relevance using cosine similarity
         searchResults = docs.map((doc) => {

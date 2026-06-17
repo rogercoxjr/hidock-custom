@@ -16,6 +16,13 @@ vi.mock('../ollama', () => ({
   getOllamaService: vi.fn(() => mockOllamaService)
 }))
 
+// rag.ts now resolves the query embedding through the embedding provider.
+vi.mock('../embeddings/embedding-provider', () => ({
+  getEmbeddingService: vi.fn(() => ({
+    generateEmbedding: vi.fn().mockResolvedValue([0.1, 0.2])
+  }))
+}))
+
 vi.mock('../vector-store', () => ({
   getVectorStore: vi.fn(() => ({
     initialize: vi.fn().mockResolvedValue(true),

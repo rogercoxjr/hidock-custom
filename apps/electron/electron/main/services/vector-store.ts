@@ -4,7 +4,7 @@
  */
 
 import { getDatabase } from './database'
-import { getOllamaService } from './ollama'
+import { getEmbeddingService } from './embeddings/embedding-provider'
 
 interface VectorDocument {
   id: string
@@ -138,12 +138,12 @@ class VectorStore {
     content: string,
     metadata: VectorDocument['metadata']
   ): Promise<string | null> {
-    const ollama = getOllamaService()
+    const embeddings = getEmbeddingService()
 
-    // Generate embedding
-    const embedding = await ollama.generateEmbedding(content)
+    // Generate embedding. On failure the embedding service has already logged a
+    // single concise warning — return null silently to avoid a per-chunk flood.
+    const embedding = await embeddings.generateEmbedding(content)
     if (!embedding) {
-      console.error('Failed to generate embedding for document')
       return null
     }
 
@@ -219,12 +219,12 @@ class VectorStore {
   }
 
   async search(query: string, topK = 5): Promise<SearchResult[]> {
-    const ollama = getOllamaService()
+    const embeddings = getEmbeddingService()
 
-    // Generate query embedding
-    const queryEmbedding = await ollama.generateEmbedding(query)
+    // Generate query embedding. On failure the embedding service has already
+    // logged a single concise warning — return empty results silently.
+    const queryEmbedding = await embeddings.generateEmbedding(query)
     if (!queryEmbedding) {
-      console.error('Failed to generate query embedding')
       return []
     }
 
