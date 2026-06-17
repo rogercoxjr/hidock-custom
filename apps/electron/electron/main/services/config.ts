@@ -94,7 +94,7 @@ const DEFAULT_CONFIG: AppConfig = {
     openaiApiKey: '',
     whisperModel: 'whisper-1',
     autoTranscribe: true,
-    language: 'es'
+    language: 'en'
   },
   embeddings: {
     provider: 'ollama',

@@ -153,4 +153,10 @@ describe('config — openaiApiKey crypto (auto-pipeline P2)', () => {
     expect(cfg.transcription.whisperModel).toBe('whisper-1')
     expect(cfg.transcription.openaiApiKey).toBe('')
   })
+
+  it('4. defaults: fresh initializeConfig → language defaults to English ("en")', async () => {
+    const { initializeConfig, getConfig } = await import('../config')
+    await initializeConfig()
+    expect(getConfig().transcription.language).toBe('en')
+  })
 })
