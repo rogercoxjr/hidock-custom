@@ -64,7 +64,13 @@ vi.mock('@/store/useAppStore', () => ({
   useAppStore: vi.fn((selector: (s: typeof h.storeActions) => unknown) => selector(h.storeActions))
 }))
 
+// Auto-sync's explicit download trigger (the fix under test) — mock so we can assert it fires.
+vi.mock('@/hooks/useDownloadOrchestrator', () => ({
+  processPendingDownloads: vi.fn()
+}))
+
 import { useDeviceSubscriptions } from '../useDeviceSubscriptions'
+import { processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 
 const { deviceServiceMock, autoSyncGuardMock, storeActions, ref } = h
 
@@ -184,6 +190,10 @@ describe('useDeviceSubscriptions — auto-sync baseline gate (status-ready path)
     expect(storeActions.setDeviceSyncState).toHaveBeenCalledWith(
       expect.objectContaining({ deviceSyncing: true, deviceFileDownloading: 'b.hda' })
     )
+    // Regression: auto-sync must EXPLICITLY kick the renderer download loop after
+    // startSession — the opportunistic onStateUpdate gate is unreliable, so without
+    // this the files queue + the session starts but no transfer begins (0% forever).
+    expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
   })
 
   it('Null serial: neither ensureBaseline nor getFilesToSync called; QA skip line; no throw', async () => {
@@ -229,6 +239,7 @@ describe('useDeviceSubscriptions — auto-sync baseline gate (status-ready path)
 
     expect(downloadServiceMock.getFilesToSync).toHaveBeenCalled()
     expect(downloadServiceMock.startSession).not.toHaveBeenCalled()
+    expect(vi.mocked(processPendingDownloads)).not.toHaveBeenCalled()
     expect(deviceServiceMock.log).toHaveBeenCalledWith(
       'success',
       'All files synced',

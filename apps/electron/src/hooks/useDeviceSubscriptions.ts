@@ -11,6 +11,7 @@ import { getHiDockDeviceService } from '@/services/hidock-device'
 import { useAppStore } from '@/store/useAppStore'
 import { shouldLogQa } from '@/services/qa-monitor'
 import { checkAutoSyncAllowed, waitForConfig, waitForDeviceReady } from '@/utils/autoSyncGuard'
+import { processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 
 /** Shared auto-sync reconcile (spec §5.5): baseline-gate then auto-mode
  *  reconciliation. Used by both trigger paths. Returns without queueing when
@@ -67,6 +68,11 @@ async function runAutoSyncReconcile(
       deviceSyncProgress: { total: toSync.length, current: 0 },
       deviceFileDownloading: toSync[0]?.filename ?? null
     })
+    // Explicitly start the renderer download loop. The opportunistic onStateUpdate gate
+    // is an unreliable trigger, and the device-ready handler runs at connect — before
+    // auto-sync queues anything. Without this kick the session starts but no bytes ever
+    // transfer (progress stuck at 0%). Safe: processDownloadQueue self-guards (lock + isConnected).
+    processPendingDownloads()
   } else {
     deviceService.log('success', 'All files synced', 'No new recordings to download')
   }
