@@ -13,7 +13,7 @@ import { toast } from '@/components/ui/toaster'
 import { useAppStore } from '@/store/useAppStore'
 import { hasDeviceFile, type DeviceOnlyRecording, type BothLocationsRecording } from '@/types/unified-recording'
 import { useUnifiedRecordings } from '@/hooks/useUnifiedRecordings'
-import { cancelDownloads, processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
+import { cancelDownloads, processPendingDownloads, retryFailedDownloads } from '@/hooks/useDownloadOrchestrator'
 
 import { formatEta, formatBytes } from '@/utils/formatters'
 import { DeviceFileList } from '@/components/DeviceFileList'
@@ -688,7 +688,9 @@ export function Device() {
     try {
       // AUD4-016: Pass device connection state so retryFailed can reject when disconnected
       const deviceConnected = deviceService.isConnected()
-      const result = await window.electronAPI.downloadService.retryFailed(deviceConnected)
+      // retryFailedDownloads re-queues failed items AND kicks the download loop (the
+      // opportunistic gate is unreliable on an already-connected device).
+      const result = await retryFailedDownloads(deviceConnected)
       if (result.error) {
         toast({
           title: 'Cannot retry downloads',

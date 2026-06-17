@@ -72,6 +72,22 @@ export function processPendingDownloads(): void {
 }
 
 /**
+ * Re-queue failed downloads (the main process resets them to `pending`) and then
+ * explicitly kick the renderer download loop. Without the kick, retried items sit at
+ * `pending`/0% forever on an already-connected device (the opportunistic onStateUpdate
+ * gate is unreliable, and the device-ready drain already fired at connect). `trigger` is
+ * injectable for tests. Returns the retry result so callers keep their own toast/UX.
+ */
+export async function retryFailedDownloads(
+  deviceConnected: boolean,
+  trigger: () => void = processPendingDownloads
+): Promise<{ count: number; error?: string }> {
+  const result = await window.electronAPI.downloadService.retryFailed(deviceConnected)
+  if (!result.error && result.count > 0) trigger()
+  return result
+}
+
+/**
  * Decide which actions the device-`ready` handler should take, given the current
  * download-service queue and whether queue processing is already in flight.
  *

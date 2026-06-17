@@ -6,6 +6,7 @@ import { useDownloadQueue, useDeviceSyncProgress, useDeviceSyncEta } from '@/sto
 import { getHiDockDeviceService } from '@/services/hidock-device'
 import { useTranscriptionStore, useTranscriptionStats } from '@/store/features/useTranscriptionStore'
 import { useOperations } from '@/hooks/useOperations'
+import { retryFailedDownloads } from '@/hooks/useDownloadOrchestrator'
 import { toast } from '@/components/ui/toaster'
 import { formatEta } from '@/utils/formatters'
 
@@ -51,7 +52,9 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
     try {
       // AUD4-016: Pass device connection state so retryFailed can reject when disconnected
       const deviceConnected = getHiDockDeviceService().isConnected()
-      const result = await window.electronAPI.downloadService.retryFailed(deviceConnected)
+      // retryFailedDownloads re-queues failed items AND kicks the download loop (the
+      // opportunistic gate is unreliable on an already-connected device).
+      const result = await retryFailedDownloads(deviceConnected)
       if (result.error) {
         toast({
           title: 'Cannot retry downloads',

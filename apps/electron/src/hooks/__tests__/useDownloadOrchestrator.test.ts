@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { decideDeviceReadyActions, runDeviceReadyActions } from '../useDownloadOrchestrator'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { decideDeviceReadyActions, runDeviceReadyActions, retryFailedDownloads } from '../useDownloadOrchestrator'
 
 /**
  * Tests for B-DEV-008 (per-file stall detection) and B-DEV-009 (memory cleanup)
@@ -390,5 +390,44 @@ describe('runDeviceReadyActions (device-ready wiring)', () => {
 
     expect(retryFailed).not.toHaveBeenCalled()
     expect(processPending).not.toHaveBeenCalled()
+  })
+})
+
+// ============================================================================
+// Retry-failed must also kick the download queue (3rd occurrence of the
+// orphaned-download class: re-queue to pending without a trigger → stuck at 0%).
+// ============================================================================
+
+describe('retryFailedDownloads (retry → trigger wiring)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function setRetry(result: { count: number; error?: string }) {
+    global.window.electronAPI = {
+      downloadService: { retryFailed: vi.fn().mockResolvedValue(result) }
+    } as unknown as typeof window.electronAPI
+  }
+
+  it('kicks the download queue after re-queuing >=1 failed item', async () => {
+    setRetry({ count: 2 })
+    const trigger = vi.fn()
+    const result = await retryFailedDownloads(true, trigger)
+    expect(result.count).toBe(2)
+    expect(trigger).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT kick the queue when nothing was re-queued (count 0)', async () => {
+    setRetry({ count: 0 })
+    const trigger = vi.fn()
+    await retryFailedDownloads(true, trigger)
+    expect(trigger).not.toHaveBeenCalled()
+  })
+
+  it('does NOT kick the queue when retry returns an error', async () => {
+    setRetry({ count: 0, error: 'Device not connected' })
+    const trigger = vi.fn()
+    await retryFailedDownloads(false, trigger)
+    expect(trigger).not.toHaveBeenCalled()
   })
 })
