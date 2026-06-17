@@ -143,6 +143,21 @@ summarization: {                           // NEW section
 - **Defense-in-depth cap:** auto-triggered sessions queue at most **100 files**; overflow files get `skipReason: 'auto-cap'` and a QA log. (Manual sync has no cap.) No single bug can trigger an unbounded metered-ASR bill.
 - **IPC/preload changes (exact):** extend the `'download-service:get-files-to-sync'` handler payload (`download-service.ts:1030-1031`) and its preload typing (`preload/index.ts:343`, `:704`) with the optional opts; add the `ensure-baseline` channel + preload method. Fix the preload `dateCreated: Date` lie opportunistically (type as `string | Date`) but do **not** otherwise touch reconciliation.
 
+> **Amendment (2026-06-17) — empty-device baseline marker.** The rev-2 design keys "fresh device" off the **absence of `sync_baseline_files` rows** for the serial. This has a disclosed gap: `ensureBaseline(serial, [])` on a device with **zero recordings** inserts **0 rows**, leaving that serial indistinguishable from a never-baselined device. On the next connect — after the user has recorded a file or two — the device still looks "fresh," so `ensureBaseline` snapshots those brand-new files **into** the baseline and they are silently excluded from auto-sync forever. The row-count proxy fails precisely because "baseline established" and "baseline happens to contain files" are not the same fact.
+>
+> **Fix — a serial-level marker, not a row count.** Add a second table recording the bare fact that a serial has been baselined, independent of how many files that baseline covered:
+> ```sql
+> CREATE TABLE IF NOT EXISTS sync_baseline_meta (
+>   device_serial TEXT PRIMARY KEY,
+>   baselined_at  TEXT NOT NULL
+> );
+> ```
+> `ensureBaseline(serial, filenames)` writes **one** `sync_baseline_meta` row for the serial **whenever it establishes a baseline — including the zero-file case** (insert the marker even when `filenames` is empty and no `sync_baseline_files` rows are written). Use `INSERT OR IGNORE` (or equivalent) so re-baselining a serial is idempotent and the first marker's `baselined_at` is retained.
+> - **Fresh-device check flips to the marker:** `ensureBaseline` returns `created: true` **only when no `sync_baseline_meta` row exists for the serial** (still combined with the existing "no prior sync history" guard — none of the device's filenames appear in `synced_files`/`recordings`). Once the marker exists, the serial is never re-baselined regardless of `sync_baseline_files` content, so later-recorded files flow normally through auto-sync instead of being snapshotted away.
+> - **`baselined_at` is bookkeeping only**, exactly like `sync_baseline_files.created_at` — it is **never** consulted by the new-file semantics and introduces no timestamp comparison, keeping §5.5's timestamp-free snapshot philosophy intact (no device-clock dependence, no advance-on-completion event). The marker answers a pure boolean "has this serial been baselined?"; "new file" detection remains the unchanged set difference over filenames.
+> - **Migration:** create `sync_baseline_meta` alongside `sync_baseline_files` in the same migration (§5.8 step 2), `CREATE TABLE IF NOT EXISTS` (safe on both fresh-boot and upgrade paths).
+> - **Test impact:** the existing `baseline-sync.test.ts` **test 1d** (empty-recordings device) should flip from asserting `sync_baseline_files` row count to asserting the presence of the `sync_baseline_meta` marker row for the serial — and that a subsequent connect with newly-recorded files does **not** re-baseline (the new files are offered to auto-sync, not skipped with `skipReason: 'baseline'`).
+
 ### 5.6 Settings + Library UI
 
 - **Transcription card** (`Settings.tsx`): provider select (Gemini | OpenAI Whisper). Gemini → existing model dropdown + key field (unchanged). Whisper → OpenAI API key field (Eye toggle, §5.4) + model select fixed to `whisper-1`.
