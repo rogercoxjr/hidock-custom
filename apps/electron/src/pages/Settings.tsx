@@ -17,6 +17,20 @@ const RAG_DEFAULTS = {
   MAX_CONTEXT_CHUNKS_LIMIT: 20
 } as const
 
+// Transcription language options — value is the ISO code sent to the ASR provider
+// ('auto' = let the provider auto-detect). Default is 'en' (config.ts).
+const TRANSCRIPTION_LANGUAGES = [
+  { value: 'auto', label: 'Auto-detect' },
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+  { value: 'pt', label: 'Portuguese' },
+  { value: 'it', label: 'Italian' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'zh', label: 'Chinese' }
+] as const
+
 export function Settings() {
   // SM-09 fix: Use granular selectors
   const syncCalendar = useAppStore((s) => s.syncCalendar)
@@ -33,6 +47,7 @@ export function Settings() {
   const [syncInterval, setSyncInterval] = useState(15)
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [geminiModel, setGeminiModel] = useState('gemini-3-pro-preview')
+  const [language, setLanguage] = useState('en')
   const [asrProvider, setAsrProvider] = useState<'gemini' | 'openai-whisper'>('gemini')
   const [openaiApiKey, setOpenaiApiKey] = useState('')
   const [showOpenaiKey, setShowOpenaiKey] = useState(false)
@@ -146,9 +161,10 @@ export function Settings() {
       asrProvider !== (config.transcription.provider || 'gemini') ||
       geminiApiKey !== config.transcription.geminiApiKey ||
       geminiModel !== (config.transcription.geminiModel || 'gemini-3-pro-preview') ||
+      language !== (config.transcription.language || 'en') ||
       openaiApiKey !== (config.transcription.openaiApiKey || '')
     )
-  }, [config, asrProvider, geminiApiKey, geminiModel, openaiApiKey])
+  }, [config, asrProvider, geminiApiKey, geminiModel, language, openaiApiKey])
 
   const isChatDirty = useMemo(() => {
     if (!config) return false
@@ -195,6 +211,7 @@ export function Settings() {
       setSyncInterval(config.calendar.syncIntervalMinutes)
       setGeminiApiKey(config.transcription.geminiApiKey)
       setGeminiModel(config.transcription.geminiModel || 'gemini-3-pro-preview')
+      setLanguage(config.transcription.language || 'en')
       setAsrProvider(config.transcription.provider || 'gemini')
       setOpenaiApiKey(config.transcription.openaiApiKey || '')
       setChatProvider(config.chat.provider)
@@ -287,12 +304,14 @@ export function Settings() {
     const previousAsrProvider = config?.transcription.provider || 'gemini'
     const previousApiKey = config?.transcription.geminiApiKey || ''
     const previousModel = config?.transcription.geminiModel || 'gemini-3-pro-preview'
+    const previousLanguage = config?.transcription.language || 'en'
     const previousOpenaiApiKey = config?.transcription.openaiApiKey || ''
 
     const updates = {
       provider: asrProvider,
       geminiApiKey,
       geminiModel,
+      language,
       openaiApiKey,
       whisperModel: 'whisper-1' as const
     }
@@ -315,6 +334,7 @@ export function Settings() {
       setAsrProvider(previousAsrProvider)
       setGeminiApiKey(previousApiKey)
       setGeminiModel(previousModel)
+      setLanguage(previousLanguage)
       setOpenaiApiKey(previousOpenaiApiKey)
 
       const message = error instanceof Error ? error.message : 'Failed to save transcription settings'
@@ -742,6 +762,29 @@ export function Settings() {
                   </div>
                 </>
               )}
+
+              <div>
+                <label htmlFor="transcriptionLanguage" className="text-sm font-medium">Language</label>
+                <select
+                  id="transcriptionLanguage"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveTranscription()}
+                  disabled={saving}
+                  aria-label="Transcription Language"
+                  aria-describedby="transcriptionLanguage-description"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                  {TRANSCRIPTION_LANGUAGES.map((lang) => (
+                    <option key={lang.value} value={lang.value}>
+                      {lang.label}
+                    </option>
+                  ))}
+                </select>
+                <p id="transcriptionLanguage-description" className="text-xs text-muted-foreground mt-1">
+                  Force the spoken language, or choose Auto-detect to let the provider decide
+                </p>
+              </div>
 
               <Button
                 onClick={handleSaveTranscription}

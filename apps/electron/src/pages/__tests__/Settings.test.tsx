@@ -33,7 +33,8 @@ const mockConfig = {
     geminiApiKey: 'AIzaTestKey12345',
     geminiModel: 'gemini-3-pro-preview',
     openaiApiKey: '',
-    whisperModel: 'whisper-1'
+    whisperModel: 'whisper-1',
+    language: 'en'
   },
   summarization: {
     provider: 'gemini' as const,
@@ -417,5 +418,35 @@ describe('Settings Page', () => {
         openaiApiKey: 'sk-test-key-1234567890'
       })
     )
+  })
+
+  // Transcription language picker
+  describe('Transcription language', () => {
+    it('renders the language dropdown initialized from config', async () => {
+      render(<Settings />)
+
+      const select = screen.getByLabelText('Transcription Language') as HTMLSelectElement
+      expect(select).toBeInTheDocument()
+      // Mock config has language 'en'
+      expect(select.value).toBe('en')
+      // Auto-detect option is offered
+      expect(screen.getByRole('option', { name: 'Auto-detect' })).toBeInTheDocument()
+    })
+
+    it('persists the chosen language when saving transcription settings', async () => {
+      render(<Settings />)
+
+      const select = screen.getByLabelText('Transcription Language') as HTMLSelectElement
+      fireEvent.change(select, { target: { value: 'fr' } })
+
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Save transcription settings'))
+      })
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'transcription',
+        expect.objectContaining({ language: 'fr' })
+      )
+    })
   })
 })
