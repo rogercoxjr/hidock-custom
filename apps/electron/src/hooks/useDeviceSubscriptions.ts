@@ -166,9 +166,12 @@ export function useDeviceSubscriptions() {
           // BUG-007 FIX: File list may not be cached yet after handleConnect (it only
           // gets device info/storage/settings/time). Fetch it now so auto-sync has data.
           let recordings = deviceService.getCachedRecordings()
-          if (recordings.length === 0 && deviceService.getState().recordingCount > 0) {
+          // Do NOT gate on recordingCount: it stays 0 when the device's card-info read fails
+          // (e.g. P1 firmware), and gating here starves auto-sync (no recordings -> no reconcile
+          // -> no download). An empty in-memory cache means we must scan the device.
+          if (recordings.length === 0) {
             if (shouldLogQa()) console.log('[useDeviceSubscriptions] No cached recordings, fetching file list first...')
-            deviceService.log('info', 'Fetching file list', `${deviceService.getState().recordingCount} files expected`)
+            deviceService.log('info', 'Fetching file list', 'Scanning device for recordings')
             try {
               recordings = await deviceService.listRecordings()
             } catch (listError) {
@@ -262,9 +265,11 @@ export function useDeviceSubscriptions() {
       autoSyncTriggeredRef.current = true
 
       let recordings = deviceService.getCachedRecordings()
-      if (recordings.length === 0 && deviceService.getState().recordingCount > 0) {
+      // See status-ready path: recordingCount is unreliable (card-info can fail), so an empty
+      // in-memory cache must trigger a device scan regardless of the count.
+      if (recordings.length === 0) {
         if (shouldLogQa()) console.log('[useDeviceSubscriptions] No cached recordings for initial sync, fetching file list...')
-        deviceService.log('info', 'Fetching file list', `${deviceService.getState().recordingCount} files expected`)
+        deviceService.log('info', 'Fetching file list', 'Scanning device for recordings')
         try {
           recordings = await deviceService.listRecordings()
         } catch (listError) {

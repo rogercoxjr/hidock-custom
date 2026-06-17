@@ -196,6 +196,36 @@ describe('useDeviceSubscriptions — auto-sync baseline gate (status-ready path)
     expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
   })
 
+  it('Card-info failure (recordingCount 0, empty cache): fetches the file list anyway and reconciles', async () => {
+    // Real-hardware regression: the P1 card-info read can fail, leaving recordingCount at 0.
+    // Auto-sync must NOT gate the file-list fetch on recordingCount — an empty in-memory cache
+    // means scan, else auto-sync starves (no recordings -> no reconcile -> no download).
+    deviceServiceMock.getCachedRecordings.mockReturnValue([])
+    deviceServiceMock.getState.mockReturnValue({
+      connected: true,
+      model: 'p1',
+      serialNumber: 'SN1',
+      firmwareVersion: null,
+      storage: null,
+      settings: null,
+      recordingCount: 0
+    })
+    deviceServiceMock.listRecordings.mockResolvedValue([REC_A, REC_B])
+    downloadServiceMock.ensureBaseline.mockResolvedValue({ created: false })
+    downloadServiceMock.getFilesToSync.mockResolvedValue([
+      { ...REC_A, skipReason: undefined },
+      { ...REC_B, skipReason: undefined }
+    ])
+
+    renderHook(() => useDeviceSubscriptions())
+    await driveStatusReady()
+
+    // Must scan despite recordingCount === 0, then reconcile + start the session.
+    expect(deviceServiceMock.listRecordings).toHaveBeenCalled()
+    expect(downloadServiceMock.getFilesToSync).toHaveBeenCalled()
+    expect(downloadServiceMock.startSession).toHaveBeenCalledTimes(1)
+  })
+
   it('Null serial: neither ensureBaseline nor getFilesToSync called; QA skip line; no throw', async () => {
     deviceServiceMock.getState.mockReturnValue({
       connected: true,
@@ -308,5 +338,35 @@ describe('useDeviceSubscriptions — auto-sync guard race (Defect 3: both trigge
 
     // The two paths must NOT both run the reconcile: startSession at most once.
     expect(downloadServiceMock.startSession.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+
+  it('Pre-connected path: empty cache + recordingCount 0 still fetches the file list and reconciles', async () => {
+    // Path B mirror of the card-info-failure regression — the pre-connected auto-sync must
+    // also fetch the list when the cache is empty regardless of recordingCount, or it starves.
+    deviceServiceMock.getCachedRecordings.mockReturnValue([])
+    deviceServiceMock.getState.mockReturnValue({
+      connected: true,
+      model: 'p1',
+      serialNumber: 'SN1',
+      firmwareVersion: null,
+      storage: null,
+      settings: null,
+      recordingCount: 0
+    })
+    deviceServiceMock.listRecordings.mockResolvedValue([REC_A, REC_B])
+    downloadServiceMock.ensureBaseline.mockResolvedValue({ created: false })
+    downloadServiceMock.getFilesToSync.mockResolvedValue([
+      { ...REC_A, skipReason: undefined },
+      { ...REC_B, skipReason: undefined }
+    ])
+
+    renderHook(() => useDeviceSubscriptions())
+    // Do NOT drive status-ready (Path A) — exercise the pre-connected path (Path B) in isolation.
+    await vi.runAllTimersAsync()
+    await vi.runAllTimersAsync()
+
+    expect(deviceServiceMock.listRecordings).toHaveBeenCalled()
+    expect(downloadServiceMock.getFilesToSync).toHaveBeenCalled()
+    expect(downloadServiceMock.startSession).toHaveBeenCalledTimes(1)
   })
 })
