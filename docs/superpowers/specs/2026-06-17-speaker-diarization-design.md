@@ -1,10 +1,12 @@
 # Speaker Diarization ("Who Said What") — Design Spec
 
-**Date:** 2026-06-17 (rev 2 — post-adversarial-review)
+**Date:** 2026-06-17 (rev 3 — post-adversarial-review + default-provider decision)
 **App:** `apps/electron` (universal knowledge hub)
 **Goal:** Every new recording is transcribed with **speaker turns** ("Speaker A/B/C…") by a single cloud call; the user **maps each speaker to a Contact** (with inline quick-add, pre-filled from the meeting's calendar attendees); the transcript renders speaker-attributed and the summary attributes decisions/commitments to people. A **voiceprint is captured on every manual mapping** so a Phase-2 auto-ID layer launches pre-trained.
 
-> **Rev 2:** a 4-lens adversarial review (verifying against the live AssemblyAI/sherpa-onnx docs and the real `apps/electron` tree) confirmed 25 findings (5 false-positives dropped). It found **one blocker** — the rev-1 request used the singular `speech_model: "universal"`; the pre-recorded `/v2/transcript` endpoint requires the **plural `speech_models` array** with id **`universal-3-pro`** (`"universal"` is not a valid id; the singular form is streaming-only) — plus a cluster of ambiguities. Rev 2 fixes the API fact, keeps `gemini` as the code default (AssemblyAI is explicit opt-in, so existing installs are untouched), documents the cost cap, defines the `sentiment` shape and merge/reassign/re-transcribe semantics, adds a privacy disclosure, quantifies AC0, specifies the PCM decode + concrete voiceprint gate, designs sherpa graceful-degradation, pins the migration to v26, and tightens the ACs. Every change traces to a verified finding.
+> **Rev 2:** a 4-lens adversarial review (verifying against the live AssemblyAI/sherpa-onnx docs and the real `apps/electron` tree) confirmed 25 findings (5 false-positives dropped). It found **one blocker** — the rev-1 request used the singular `speech_model: "universal"`; the pre-recorded `/v2/transcript` endpoint requires the **plural `speech_models` array** with id **`universal-3-pro`** (`"universal"` is not a valid id; the singular form is streaming-only) — plus a cluster of ambiguities. Rev 2 fixes the API fact, documents the cost cap, defines the `sentiment` shape and merge/reassign/re-transcribe semantics, adds a privacy disclosure, quantifies AC0, specifies the PCM decode + concrete voiceprint gate, designs sherpa graceful-degradation, pins the migration to v26, and tightens the ACs. Every change traces to a verified finding.
+
+> **Rev 3:** per user decision, the **default ASR provider is `assemblyai`** (not `gemini`). A missing AssemblyAI key must **fail loudly and visibly** — the preflight blocks queueing with a clear Settings prompt, and any job run without a key terminal-fails non-retryably and appears in the failure chip — and must **never silently fall back to Gemini/Whisper**. This reverses rev 2's "keep gemini default / explicit opt-in" and supersedes the AP-AC7 default-provider guarantee; Gemini/Whisper remain **manually** selectable only.
 
 > **Relationship to the auto-pipeline spec (`2026-06-11-auto-pipeline-model-choice-design.md`):** this design **adds AssemblyAI as a selectable ASR provider** and makes it the user's chosen ASR, reusing the two-stage worker (AP-§5.3), queue hardening (AP-§5.7), per-stage key checks, failure taxonomy + parking (AP-§7), the **100-file auto-sync cap + large-manual-sync confirmation** (AP-§5.5 / AP-AC10), and the config-encryption recipe (AP-§5.4) **unchanged**. Whisper/Gemini remain selectable fallbacks behind the existing `AsrProvider` interface. Section references prefixed "AP-" point at that spec.
 
@@ -15,7 +17,7 @@
 | Core interaction model | **Auto-split → user edits (merge/reassign) → names from Contacts** |
 | Diarization source | **Dedicated cloud one-call API** (transcript + speaker turns + word timestamps in one request) |
 | Provider | **AssemblyAI Universal-3 Pro** (async/batch), behind the existing `AsrProvider` interface |
-| Trigger scope | **When AssemblyAI is the selected ASR, diarization is always-on for every new recording** — one ASR path, no fork. (Selecting AssemblyAI is an explicit user action; see §6.2.) |
+| Trigger scope | **AssemblyAI is the default ASR; diarization is always-on for every new recording** — one ASR path, no fork. A missing key **fails loudly** (never falls back to Gemini); see §6.2/§8. |
 | Speaker naming | **Tie into the existing Contacts feature**, with **inline quick-add** in the assignment UI |
 | Existing recordings | **New recordings only**; the existing "transcribe again" action re-runs diarization **after a confirmation warning** |
 | v1 scope | **Core diarization + structured turns + render + attendee-prefilled mapping + attributed summaries + voiceprint *capture* hook** |
@@ -49,14 +51,14 @@ The two-stage transcription pipeline this design extends already exists (AP spec
 - **Transcript rendering** — `src/features/library/components/TranscriptViewer.tsx`: `parseTranscriptSegments` (~`:86-125`) parses `[MM:SS]`/`[HH:MM:SS]` anchors and a speaker from `"Name:"`/`"[Name]"` **text prefixes** (~`:34-48`); speaker badge (~`:257-261`); auto-scroll + active-segment highlight (~`:146-165`); `TimeAnchor` click-to-seek. **It does not consume structured turns today.** Hosted by `SourceDetailDrawer.tsx` (Transcript interface ~`:21-38`, `speakers` field ~`:31`).
 - **Re-transcribe** — `recordings:transcribe` IPC (`recording-handlers.ts` ~`:284-298`) → `addToQueue` + `processQueueManually`; `transcription:resummarize` (~`:391-402`) clears the Stage-2 marker + re-enqueues Stage 2 only.
 - **People UI** — `src/pages/People.tsx`: a **quick-add button (~`:183-191`) is disabled ("Coming soon")** — the source for the reusable inline quick-add.
-- **Config** — `electron/main/services/config.ts`: `transcription: { provider, geminiApiKey, geminiModel, openaiApiKey (encrypted), whisperModel, autoTranscribe, language }` + `summarization: { provider, ollamaCloudApiKey (encrypted), ollamaCloudModel }`. Defaults (verified): provider **`'gemini'`**, `language 'en'`. `initializeConfig` does `deepMerge(DEFAULT_CONFIG, savedConfig)` — **new defaults reach existing installs**, so a default flip would silently change behavior (see §6.2). safeStorage encryption is two hardcoded per-field sites (encrypt in `saveConfig`, decrypt in `initializeConfig`).
+- **Config** — `electron/main/services/config.ts`: `transcription: { provider, geminiApiKey, geminiModel, openaiApiKey (encrypted), whisperModel, autoTranscribe, language }` + `summarization: { provider, ollamaCloudApiKey (encrypted), ollamaCloudModel }`. Defaults (verified): provider **`'gemini'`** (rev 3 flips the default to `'assemblyai'`), `language 'en'`. `initializeConfig` does `deepMerge(DEFAULT_CONFIG, savedConfig)` — **new defaults reach existing installs**, so the flip makes a keyless install **fail loudly** rather than silently switch (see §6.2). safeStorage encryption is two hardcoded per-field sites (encrypt in `saveConfig`, decrypt in `initializeConfig`).
 - **BLOB-embedding precedent** — text embeddings are BLOBs in an `embeddings` table (`vector-store.ts`); voiceprint BLOBs follow the same pattern.
 
 ## 4. What this design adds / changes
 
 1. **AssemblyAI provider** (`asr/assemblyai-asr.ts`) implementing the existing `AsrProvider`; `getAsrProvider` gains an `'assemblyai'` branch (§6.1).
 2. **`AsrResult` extended** with optional `turns: Turn[]`; Whisper/Gemini leave it undefined (§6.1).
-3. **Config:** `transcription.provider` widened to include `'assemblyai'`; new encrypted `assemblyaiApiKey`; `assemblyaiModels: string[]` (default `['universal-3-pro','universal-2']`). **Code default provider stays `'gemini'`** — no silent migration (§6.2).
+3. **Config:** `transcription.provider` widened to include `'assemblyai'` and **defaults to `'assemblyai'`**; new encrypted `assemblyaiApiKey`; `assemblyaiModels: string[]` (default `['universal-3-pro','universal-2']`). A missing key **fails loudly with no silent fallback** (§6.2/§8).
 4. **Data model (v26 migration):** `transcripts.turns`; fill `sentiment`; new `recording_speakers` + `voiceprints` tables (§6.3).
 5. **`contacts:create` IPC** wrapping `upsertContact` (gap fix) (§6.4).
 6. **Speakers panel + mapping UI** (attendee pre-fill, inline quick-add, reassign/merge); **`TranscriptViewer` upgraded** to render from structured turns with a legacy fallback (§6.5).
@@ -109,14 +111,16 @@ One async job per recording:
 
 ```ts
 transcription: {
-  provider: 'gemini' | 'openai-whisper' | 'assemblyai'   // widened; CODE DEFAULT STAYS 'gemini'
+  provider: 'gemini' | 'openai-whisper' | 'assemblyai'   // widened; CODE DEFAULT = 'assemblyai'
   assemblyaiApiKey: string        // NEW — safeStorage-encrypted (both sites, AP-§5.4 recipe + __enc__ guard)
   assemblyaiModels: string[]      // NEW — default ['universal-3-pro','universal-2']
   // … existing gemini/openai/whisper fields retained as fallbacks
   language: string                // 'en'
 }
 ```
-- **Default provider remains `'gemini'`.** Because `deepMerge(DEFAULT_CONFIG, savedConfig)` pushes new defaults onto existing installs, flipping the default would silently switch a Gemini user (with no AssemblyAI key) to a metered provider. Instead, **AssemblyAI is an explicit opt-in**: the user enters the AssemblyAI key and selects the provider in Settings (this is the intended configuration for diarization). Fresh-install onboarding *may suggest* AssemblyAI, but never auto-selects it without a key.
+- **Default provider is `'assemblyai'`** (per user decision — diarization is the intended default ASR). `deepMerge(DEFAULT_CONFIG, savedConfig)` pushes this default onto installs without an explicit `provider`; an install with no AssemblyAI key then **fails loudly** on the next transcription rather than silently using another provider — the desired behavior.
+- **No silent fallback.** `getAsrProvider` selects exactly the configured provider and never substitutes another (it throws on unknown). When `provider='assemblyai'` and the key is missing/empty: (a) the `transcription:validateConfig` preflight (AP-§5.6) **blocks queueing and shows a clear "Add your AssemblyAI key in Settings → Transcription" prompt** before any files are enqueued; (b) any job that still runs without a key terminal-fails **non-retryably** (§8) and appears in the AP-§7.3 aggregate "N failed — Retry all" chip + per-row error. Gemini/Whisper remain **manually** selectable, never auto-used.
+- This supersedes the AP-AC7 default-provider guarantee: transcripts already produced by Gemini/Whisper are untouched, but new transcription defaults to AssemblyAI.
 - `model_region:'global'` is a fixed request constant (a code comment documents the in-region US swap for future residency needs).
 - Encryption: add `transcription.assemblyaiApiKey` to **both** the encrypt (`saveConfig`) and decrypt (`initializeConfig`) lists; reuse the `__enc__` idempotency guard; unit-test the cold-start decrypt.
 - Extend the `transcription:validateConfig` preflight (AP-§5.6) to accept an AssemblyAI key.
@@ -183,7 +187,7 @@ New recording downloaded (USB, unchanged; ≤100 auto / confirmed manual) → au
 ## 8. Error handling & edge cases
 
 - **AssemblyAI async:** upload fail / `status:'error'` / poll timeout / 429 → existing queue retry with **bounded backoff** (cap retries + max delay; avoid the ~16401 s runaway) and AP-§7.2 parking for 429; hard poll wall-clock cap. Transient → retry; terminal → fail + AP-§7.3 aggregate chip.
-- **Missing/invalid AssemblyAI key:** `validateTranscriptionConfig` (AP-§5.6) + non-retryable "AssemblyAI API key not configured / rejected"; key-fix re-pend (AP-§7.3) gains an `'AssemblyAI'` marker.
+- **Missing/invalid AssemblyAI key (loud, never silent):** the `validateTranscriptionConfig` preflight (AP-§5.6) **blocks queueing with a visible "AssemblyAI API key not configured — add it in Settings → Transcription" prompt** (never a silent Gemini fallback); a job that runs without a key terminal-fails **non-retryably** with that message via the AP-§7.3 aggregate chip + per-row error; key-fix re-pend gains an `'AssemblyAI'` marker.
 - **Audio file missing / not downloaded:** skip diarization + voiceprint gracefully with a clear status; don't crash the queue.
 - **Voiceprint:** insufficient clean speech (<10 s) or **ffmpeg-decode failure** → skip enrollment, keep the mapping; sherpa binary missing → feature disabled (§6.7). AC4 covers sherpa-missing **and** ffmpeg-decode-failure.
 - **Zero-speaker** (silence/music): empty `turns`, Stage 2 proceeds on `full_text`, panel hidden. **Single-speaker:** panel read-only, no merge. **Non-English:** v1 sends `language_code:'en'` (English-only assumption); non-English audio degrades — accepted, no v1 validation gate; documented limitation.
@@ -205,7 +209,7 @@ TDD throughout; **mocks-first; zero real-hardware/USB tests** (post-download fea
 - **Unit (Vitest, mocked `fetch`/`spawn`):** AssemblyAI provider (upload→submit→poll→`utterances`→`Turn[]`; **asserts `speech_models` array incl. `universal-3-pro`, never singular `speech_model`, never `word_boost`**, `model_region:'global'`, `keyterms_prompt` build/cap, **seconds→ms conversion**; `error`/timeout/429/backoff-cap paths); `turns`/`speakers`/`sentiment` (roster-summary shape) persistence; reassign + **merge** mutation (roster collapse, no orphan `recording_speakers`); re-transcribe drops prior mappings; attendee pre-fill query; `contacts:create` (name-required, dup-email, shape); voiceprint (mock sherpa: ≥10 s clean-speech gate, overlap exclusion, BLOB store + `model_id`/`dim`, **load-success AND load-failure**, ffmpeg-decode-failure skip); attributed-summary input + staleness badge; config (assemblyaiApiKey both-site encryption incl. cold-start decrypt).
 - **Named regression tests:** (a) worker handles `turns===undefined` (Whisper/Gemini) without error; (b) `TranscriptViewer` renders legacy text-prefix format when `turns` absent, no speaker UI; (c) `resummarize` reuses persisted `full_text`/`turns`, does **not** call AssemblyAI.
 - **Integration:** transcribe → store turns → attributed summarize (mock AssemblyAI + Ollama); assert `turns`/`sentiment`/`recording_speakers` shape + fresh-boot v26 migration (e2e-smoke asserts `turns` column + `recording_speakers`/`voiceprints` tables).
-- **Backward-compat AC:** an existing Gemini config survives upgrade unchanged (default not flipped).
+- **Loud-fail / no-fallback AC:** with `provider='assemblyai'` and no key, the preflight blocks queueing with a visible Settings prompt and any forced job fails non-retryably + visibly — never substituting Gemini/Whisper (AC9).
 - Gates: `npm run typecheck && npm run lint && npm run test:run`.
 
 ## 11. Dependencies
@@ -227,18 +231,18 @@ Test-harness criteria (mocked AssemblyAI/Ollama, in-memory sql.js):
 - **AC6:** "transcribe again" on an already-transcribed recording shows the confirmation; confirm re-runs AssemblyAI + replaces transcript + drops prior `recording_speakers`; cancel does nothing.
 - **AC7:** a missing AssemblyAI key terminal-fails with a clear message + re-pends on key save; a 429 parks (AP-§7.2) and resumes; a poll-timeout becomes a normal retryable failure.
 - **AC8:** the request body contains `speech_models` as an array including `universal-3-pro`, **never** the singular `speech_model`, **never** `word_boost`, with `model_region:'global'`; a provider returning no `turns` (Whisper/Gemini) renders via the legacy path with no speaker UI (no regression).
-- **AC9 (backward-compat):** an existing `gemini` config survives upgrade unchanged — the default provider is not flipped; all existing AP tests stay green.
+- **AC9 (loud-fail, no silent fallback):** with `provider='assemblyai'` and no key, the preflight blocks queueing with a visible Settings prompt, and a job forced to run terminal-fails non-retryably with the missing-key message and appears in the failure chip — it **never** falls back to Gemini/Whisper. Default provider is `'assemblyai'`; Gemini/Whisper remain manually selectable.
 - **AC10 (privacy):** the cloud/global-routing disclosure renders when AssemblyAI is the selected provider.
 
 ## 13. Implementation phasing
 
 **Task 0 — Validation spike (gate, AC0):** non-automated; free tier; the user records a dated PASS/FAIL **before D1**. On FAIL → escalate to pyannoteAI + ElevenLabs and revise.
 
-**v1 (each phase independently shippable; non-AssemblyAI providers stay behavior-identical — default not flipped):**
+**v1 (each phase independently shippable; default ASR is AssemblyAI; Gemini/Whisper remain manually selectable, never auto-substituted):**
 
 | Phase | Scope | Sections | ACs |
 |---|---|---|---|
-| **D1** | AssemblyAI provider + `AsrResult.turns` + config (`assemblyaiApiKey` crypto, `assemblyaiModels`, `global`, `keyterms`, default unchanged) + preflight | §6.1, §6.2, §5 | AC1, AC7, AC8, AC9 |
+| **D1** | AssemblyAI provider + `AsrResult.turns` + config (default provider `assemblyai`, `assemblyaiApiKey` crypto, `assemblyaiModels`, `global`, `keyterms`) + **loud no-key preflight (no silent fallback)** | §6.1, §6.2, §5 | AC1, AC7, AC8, AC9 |
 | **D2** | v26 migration: `turns`/`sentiment` write + `recording_speakers` + `voiceprints`; Stage-1 persistence | §6.3 | AC1 |
 | **D3** | `contacts:create` IPC (first) → Speakers panel (attendee pre-fill + inline quick-add) + reassign/merge + `TranscriptViewer` structured render + privacy disclosure | §6.4, §6.5 | AC2, AC3, AC10 |
 | **D4** | Voiceprint capture hook (`sherpa-onnx-node`, PCM decode, `speakers:assign`, graceful degrade) — capture only | §6.7 | AC4 |
