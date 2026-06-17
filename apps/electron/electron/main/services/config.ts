@@ -44,9 +44,10 @@ export interface AppConfig {
     language: string
   }
   embeddings: {
-    provider: 'ollama'
+    provider: 'ollama' | 'openai'
     ollamaBaseUrl: string
     ollamaModel: string
+    openaiModel: string
     chunkSize: number
     chunkOverlap: number
   }
@@ -97,9 +98,10 @@ const DEFAULT_CONFIG: AppConfig = {
     language: 'en'
   },
   embeddings: {
-    provider: 'ollama',
+    provider: 'openai',
     ollamaBaseUrl: 'http://localhost:11434',
     ollamaModel: 'nomic-embed-text',
+    openaiModel: 'text-embedding-3-small',
     chunkSize: 500,
     chunkOverlap: 50
   },
