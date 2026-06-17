@@ -47,9 +47,9 @@ import { createWhisperAsr } from '../asr/whisper-asr'
 import { ProviderRateLimitError, ProviderAuthError } from '../provider-errors'
 
 // Narrow test double of AppConfig — only the fields createWhisperAsr reads.
-function whisperConfig(openaiApiKey = 'sk-x', whisperModel = 'whisper-1') {
+function whisperConfig(openaiApiKey = 'sk-x', whisperModel = 'whisper-1', language?: string) {
   return {
-    transcription: { provider: 'openai-whisper', openaiApiKey, whisperModel }
+    transcription: { provider: 'openai-whisper', openaiApiKey, whisperModel, language }
   } as never
 }
 
@@ -192,6 +192,35 @@ describe('createWhisperAsr — timeout', () => {
     const assertion = expect(promise).rejects.toThrow(/abort/i)
     await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 1)
     await assertion
+  })
+})
+
+describe('createWhisperAsr — language', () => {
+  it('appends the configured language to the multipart form when set', async () => {
+    fetchMock.mockResolvedValueOnce(fetchResponse({ jsonBody: { text: 'HELLO' } }))
+    const asr = createWhisperAsr(whisperConfig('sk-x', 'whisper-1', 'en'))
+    await asr.transcribe('/r/a.hda', {})
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const form = init.body as FormData
+    expect(form.get('language')).toBe('en')
+  })
+
+  it('omits the language field when language is "auto"', async () => {
+    fetchMock.mockResolvedValueOnce(fetchResponse({ jsonBody: { text: 'HELLO' } }))
+    const asr = createWhisperAsr(whisperConfig('sk-x', 'whisper-1', 'auto'))
+    await asr.transcribe('/r/a.hda', {})
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const form = init.body as FormData
+    expect(form.get('language')).toBeNull()
+  })
+
+  it('omits the language field when language is undefined', async () => {
+    fetchMock.mockResolvedValueOnce(fetchResponse({ jsonBody: { text: 'HELLO' } }))
+    const asr = createWhisperAsr(whisperConfig('sk-x', 'whisper-1', undefined))
+    await asr.transcribe('/r/a.hda', {})
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const form = init.body as FormData
+    expect(form.get('language')).toBeNull()
   })
 })
 

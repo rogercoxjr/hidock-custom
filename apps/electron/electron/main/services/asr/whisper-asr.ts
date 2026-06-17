@@ -13,6 +13,8 @@ export function createWhisperAsr(config: AppConfig): AsrProvider {
   }
   const apiKey = config.transcription.openaiApiKey
   const model = config.transcription.whisperModel || 'whisper-1'
+  // Honor the configured language; 'auto' (or unset) lets Whisper auto-detect (omit the field).
+  const language = config.transcription.language
 
   return {
     async transcribe(filePath: string, _opts: { meetingContext?: string }): Promise<AsrResult> {
@@ -20,13 +22,13 @@ export function createWhisperAsr(config: AppConfig): AsrProvider {
       const { files } = await normalizeForWhisper(filePath)
       try {
         const texts: string[] = []
-        let language: string | undefined
+        let detectedLanguage: string | undefined
         for (const chunk of files) {
-          const result = await transcribeChunk(chunk, apiKey, model)
+          const result = await transcribeChunk(chunk, apiKey, model, language)
           texts.push(result.text)
-          language = language ?? result.language // language from the FIRST chunk (spec §5.1)
+          detectedLanguage = detectedLanguage ?? result.language // language from the FIRST chunk (spec §5.1)
         }
-        return { text: texts.join('\n'), language }
+        return { text: texts.join('\n'), language: detectedLanguage }
       } finally {
         cleanAsrTempDir()
       }
@@ -34,11 +36,18 @@ export function createWhisperAsr(config: AppConfig): AsrProvider {
   }
 }
 
-async function transcribeChunk(path: string, apiKey: string, model: string): Promise<{ text: string; language?: string }> {
+async function transcribeChunk(
+  path: string,
+  apiKey: string,
+  model: string,
+  language?: string
+): Promise<{ text: string; language?: string }> {
   const form = new FormData()
   form.append('file', new Blob([readFileSync(path)], { type: 'audio/mpeg' }), basename(path))
   form.append('model', model)
   form.append('response_format', 'verbose_json') // whisper-1-only format; supplies language (spec §5.1)
+  // Force the recognition language unless 'auto' (or unset) — then let Whisper detect.
+  if (language && language !== 'auto') form.append('language', language)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), WHISPER_TIMEOUT_MS)
   try {
