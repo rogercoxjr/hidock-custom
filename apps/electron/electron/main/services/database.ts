@@ -2654,6 +2654,15 @@ export function buildAttributedTranscript(recordingId: string): string | undefin
  *  badge; clears once a resummarize moves the stamp past every mapping. Returns
  *  false when no transcript row exists or no mappings exist.
  *
+ *  SUMMARY-EXISTS GUARD: because updateTranscriptStage2 re-stamps created_at, a
+ *  Stage-1-only row (no summary yet, or Stage 2 failed/parked) still carries its
+ *  row-insert created_at. A later mapping would otherwise satisfy the timestamp
+ *  comparison and wrongly report stale even though there is NO summary to be stale.
+ *  We gate on summarization_provider IS NOT NULL — the canonical Stage-2-completion
+ *  marker (cleared to NULL by clearTranscriptStage2Marker on resummarize; always
+ *  set by updateTranscriptStage2). NOT summary IS NOT NULL, since a completed
+ *  Stage 2 may legitimately produce a NULL summary.
+ *
  *  TIMESTAMP NORMALIZATION: recording_speakers.created_at is written as a JS ISO
  *  string ('YYYY-MM-DDTHH:MM:SS.sssZ') while transcripts.created_at is stamped by
  *  CURRENT_TIMESTAMP (SQLite space-format: 'YYYY-MM-DD HH:MM:SS'). A raw lexical
@@ -2667,6 +2676,7 @@ export function isSummaryStale(recordingId: string): boolean {
        SELECT 1 FROM recording_speakers rs
        JOIN transcripts t ON t.recording_id = rs.recording_id
        WHERE rs.recording_id = ?
+         AND t.summarization_provider IS NOT NULL
          AND datetime(rs.created_at) > datetime(t.created_at)
      ) THEN 1 ELSE 0 END AS stale`,
     [recordingId]

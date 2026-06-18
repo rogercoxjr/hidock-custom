@@ -57,6 +57,18 @@ function seedStage1And2(id: string): void {
   })
   updateTranscriptStage2(id, { summary: 'S', summarization_provider: 'ollama-cloud', summarization_model: 'm' })
 }
+/** Seed ONLY Stage 1 (full_text set, summarization_provider NULL) — Stage 2 not
+ *  yet run / failed / parked. The row still has a created_at from its insert. */
+function seedStage1Only(id: string): void {
+  upsertTranscriptStage1({
+    recording_id: id,
+    full_text: 'text',
+    language: 'en',
+    word_count: 1,
+    transcription_provider: 'assemblyai',
+    transcription_model: 'universal-3-pro'
+  })
+}
 /** Force a recording_speakers row's created_at to a fixed ISO instant. */
 function mapSpeakerAt(id: string, label: string, createdAt: string): void {
   run(
@@ -133,6 +145,16 @@ describe('isSummaryStale (spec §6.6 / AC5)', () => {
     mapSpeakerAt('s6', 'A', '2026-06-17T11:00:00.000Z')
     // datetime() normalization must correctly identify that 11:00 > 10:00 → stale
     expect(isSummaryStale('s6')).toBe(true)
+  })
+
+  it('false when only Stage 1 exists (no summary): a newer mapping is NOT stale', async () => {
+    insertRecording('s7')
+    seedStage1Only('s7') // full_text set, summarization_provider NULL — no summary
+    stampSummaryAt('s7', '2026-06-17T10:00:00.000Z') // row-insert stamp
+    mapSpeakerAt('s7', 'A', '2026-06-17T11:00:00.000Z') // mapped AFTER the stamp
+    // Mapping post-dates created_at, but there is no summary to be stale, so the
+    // summarization_provider IS NOT NULL guard must keep this false.
+    expect(isSummaryStale('s7')).toBe(false)
   })
 })
 
