@@ -157,7 +157,9 @@ import {
   initializeDatabase,
   closeDatabase,
   run,
-  getTranscriptByRecordingId
+  getTranscriptByRecordingId,
+  clearTranscriptForRetranscribe,
+  deleteRecordingSpeakersForRecording
 } from '../database'
 import { transcribeManually } from '../transcription'
 
@@ -300,6 +302,100 @@ describe('assemblyai worker→DB seam (speaker diarization §6.3)', () => {
     expect(row.sentiment ?? null).toBeNull()
     expect(row.transcription_model).toBe('gemini-2.0-flash')
     expect(row.transcription_provider).toBe('gemini')
+  })
+})
+
+/**
+ * Re-transcribe seam (D5 §6.8 / AC6) — the path that was a SILENT NO-OP in the
+ * live app: the worker short-circuits when `full_text && summarization_provider`
+ * are both set, so a forced re-transcribe MUST first clear those markers (what
+ * the `recordings:transcribe` IPC does via clearTranscriptForRetranscribe +
+ * deleteRecordingSpeakersForRecording). These two tests pin both halves end-to-end
+ * against a REAL sql.js DB: clear → fresh re-run; no clear → short-circuit.
+ */
+describe('re-transcribe seam (§6.8 / AC6)', () => {
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    fs.mkdirSync(shared.recordingsDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    shared.textResponses = []
+    shared.textCalls = 0
+    shared.transcriptionProvider = 'assemblyai'
+    shared.assemblyaiModels = ['universal-3-pro', 'universal-2']
+    shared.summarizationProvider = 'gemini'
+    vi.clearAllMocks()
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('clearing the markers (what recordings:transcribe does) makes the worker re-run FRESH — no short-circuit', async () => {
+    insertRecordingWithFile('recReta')
+
+    // First pass: 2 speakers.
+    shared.asrText = 'first take ok'
+    shared.asrTurns = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'first take' },
+      { speaker: 'B', startMs: 1000, endMs: 2000, text: 'ok' }
+    ]
+    shared.textResponses = [validAnalysisJson()]
+    await transcribeManually('recReta')
+
+    const first = getTranscriptByRecordingId('recReta')!
+    expect(first.full_text).toBe('first take ok')
+    expect(JSON.parse(first.turns as string)).toHaveLength(2)
+    expect(first.summarization_provider).toBeTruthy() // fully transcribed → would short-circuit
+
+    // Re-transcribe: clear BOTH stage markers + drop mappings, exactly as the
+    // recordings:transcribe IPC handler does before enqueueing.
+    clearTranscriptForRetranscribe('recReta')
+    deleteRecordingSpeakersForRecording('recReta')
+
+    // Second pass returns DIFFERENT, 3-speaker output.
+    shared.asrText = 'second take sure new voice'
+    shared.asrTurns = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'second take' },
+      { speaker: 'B', startMs: 1000, endMs: 2000, text: 'sure' },
+      { speaker: 'C', startMs: 2000, endMs: 3000, text: 'new voice' }
+    ]
+    shared.textResponses = [validAnalysisJson()]
+    await transcribeManually('recReta')
+
+    // Worker did NOT short-circuit — the transcript reflects the SECOND run.
+    const second = getTranscriptByRecordingId('recReta')!
+    expect(second.full_text).toBe('second take sure new voice')
+    const turns2 = JSON.parse(second.turns as string)
+    expect(turns2).toHaveLength(3)
+    expect(JSON.parse(second.speakers as string)).toContain('C')
+  })
+
+  it('WITHOUT clearing, re-transcribing a complete recording short-circuits (documents the live no-op the fix prevents)', async () => {
+    insertRecordingWithFile('recRetb')
+
+    shared.asrText = 'original transcript'
+    shared.asrTurns = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'original' },
+      { speaker: 'B', startMs: 1000, endMs: 2000, text: 'transcript' }
+    ]
+    shared.textResponses = [validAnalysisJson()]
+    await transcribeManually('recRetb')
+
+    // No clear. Stage a totally different ASR result, then re-run the worker.
+    shared.asrText = 'this should never be written'
+    shared.asrTurns = [{ speaker: 'A', startMs: 0, endMs: 500, text: 'changed' }]
+    shared.textResponses = [validAnalysisJson()]
+    await transcribeManually('recRetb')
+
+    // Short-circuited: the transcript is UNCHANGED from the first pass.
+    const row = getTranscriptByRecordingId('recRetb')!
+    expect(row.full_text).toBe('original transcript')
+    expect(JSON.parse(row.turns as string)).toHaveLength(2)
   })
 })
 
