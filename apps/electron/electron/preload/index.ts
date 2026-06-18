@@ -123,6 +123,11 @@ export interface ElectronAPI {
     getForMeeting: (meetingId: string) => Promise<Result<Contact[]>>
   }
 
+  // Speakers (diarization — D3)
+  speakers: {
+    assign: (request: { recordingId: string; fileLabel: string; contactId: string }) => Promise<Result<{ recordingId: string; fileLabel: string; contactId: string }>>
+  }
+
   // Projects
   projects: {
     getAll: (request?: GetProjectsRequest & { status?: string }) => Promise<Result<GetProjectsResponse>>
@@ -557,6 +562,10 @@ const electronAPI: ElectronAPI = {
     update: (request) => callIPC('contacts:update', request),
     delete: (id) => callIPC('contacts:delete', id),
     getForMeeting: (meetingId) => callIPC('contacts:getForMeeting', meetingId)
+  },
+
+  speakers: {
+    assign: (request) => callIPC('speakers:assign', request)
   },
 
   projects: {
