@@ -127,6 +127,7 @@ export interface ElectronAPI {
   speakers: {
     assign: (request: { recordingId: string; fileLabel: string; contactId: string }) => Promise<Result<{ recordingId: string; fileLabel: string; contactId: string }>>
     merge: (request: { recordingId: string; fromLabel: string; toLabel: string }) => Promise<Result<{ recordingId: string; fromLabel: string; toLabel: string }>>
+    getForRecording: (recordingId: string) => Promise<Result<Record<string, { contactId: string; contactName: string }>>>
   }
 
   // Projects
@@ -568,7 +569,8 @@ const electronAPI: ElectronAPI = {
 
   speakers: {
     assign: (request) => callIPC('speakers:assign', request),
-    merge: (request) => callIPC('speakers:merge', request)
+    merge: (request) => callIPC('speakers:merge', request),
+    getForRecording: (recordingId) => callIPC('speakers:getForRecording', recordingId)
   },
 
   projects: {

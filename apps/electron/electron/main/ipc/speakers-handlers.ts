@@ -32,10 +32,32 @@ const MergeSpeakerSchema = z
   })
   .refine((d) => d.fromLabel !== d.toLabel, { message: 'fromLabel and toLabel must differ' })
 
+/** Strict per-turn shape — mirrors the `Turn` interface. A malformed payload is
+ *  rejected here so it can never be JSON.stringified into transcripts.turns and
+ *  corrupt the column. */
+const TurnSchema = z.object({
+  speaker: z.string(),
+  startMs: z.number(),
+  endMs: z.number(),
+  text: z.string(),
+  words: z
+    .array(
+      z.object({
+        text: z.string(),
+        startMs: z.number(),
+        endMs: z.number()
+      })
+    )
+    .optional(),
+  sentiment: z.enum(['POSITIVE', 'NEUTRAL', 'NEGATIVE']).optional()
+})
+
 const UpdateTurnsSchema = z.object({
   recordingId: z.string().min(1),
-  turns: z.array(z.any())
+  turns: z.array(TurnSchema)
 })
+
+const GetForRecordingSchema = z.string().min(1)
 
 /** Parse the JSON turns column into a typed array (tolerant of NULL/garbage). */
 function parseTurns(raw: string | null | undefined): Turn[] {
@@ -142,6 +164,41 @@ export function registerSpeakersHandlers(): void {
       } catch (err) {
         console.error('speakers:merge error:', err)
         return error('DATABASE_ERROR', 'Failed to merge speakers', err)
+      }
+    }
+  )
+
+  /**
+   * Return the recording's speaker mappings joined to contact names, keyed by
+   * file_label: `{ [label]: { contactId, contactName } }`. Powers the SpeakersPanel
+   * "→ <name>" display and the live refresh after assign/merge/reassign. Rows with a
+   * null contact_id, or whose contact no longer resolves, are omitted.
+   */
+  ipcMain.handle(
+    'speakers:getForRecording',
+    async (
+      _,
+      recordingId: unknown
+    ): Promise<Result<Record<string, { contactId: string; contactName: string }>>> => {
+      try {
+        const parsed = GetForRecordingSchema.safeParse(recordingId)
+        if (!parsed.success) {
+          return error('VALIDATION_ERROR', 'Invalid recordingId', parsed.error.format())
+        }
+
+        const rows = getRecordingSpeakers(parsed.data)
+        const map: Record<string, { contactId: string; contactName: string }> = {}
+        for (const row of rows) {
+          if (!row.contact_id) continue
+          const contact = getContactById(row.contact_id)
+          if (!contact) continue
+          map[row.file_label] = { contactId: row.contact_id, contactName: contact.name }
+        }
+
+        return success(map)
+      } catch (err) {
+        console.error('speakers:getForRecording error:', err)
+        return error('DATABASE_ERROR', 'Failed to load recording speakers', err)
       }
     }
   )

@@ -302,7 +302,7 @@ export function SpeakersPanel({
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Turns</p>
           {turns.map((t, i) => (
-            <div key={i} className="relative flex items-start gap-2 p-2 border rounded-lg bg-muted/20">
+            <div key={`${t.startMs}-${t.speaker}`} className="relative flex items-start gap-2 p-2 border rounded-lg bg-muted/20">
               <span className="font-semibold text-xs w-6 shrink-0">{t.speaker}</span>
               <span className="text-xs flex-1 min-w-0">{t.text}</span>
               <Button

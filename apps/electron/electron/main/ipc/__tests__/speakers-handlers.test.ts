@@ -186,4 +186,118 @@ describe('transcripts:updateTurns (AC3 — per-turn reassign persistence)', () =
     expect(result.error.code).toBe('VALIDATION_ERROR')
     expect(db.updateTranscriptTurns).not.toHaveBeenCalled()
   })
+
+  it('rejects a malformed turns payload (data integrity — not persisted)', async () => {
+    const db = await import('../../services/database')
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'transcripts:updateTurns')?.[1]
+
+    // Each entry is missing required Turn fields (no startMs/endMs/text, wrong types).
+    const malformed = [
+      { speaker: 'A' }, // missing startMs/endMs/text
+      { speaker: 'B', startMs: 'oops', endMs: 1000, text: 'x' } // startMs wrong type
+    ]
+    const result = await handler?.({} as any, { recordingId: 'rec-1', turns: malformed }) as any
+
+    expect(result.success).toBe(false)
+    expect(result.error.code).toBe('VALIDATION_ERROR')
+    // Critically: nothing was written to the DB.
+    expect(db.updateTranscriptTurns).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid sentiment enum value (data integrity)', async () => {
+    const db = await import('../../services/database')
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'transcripts:updateTurns')?.[1]
+
+    const badSentiment = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'a', sentiment: 'HAPPY' } // not in enum
+    ]
+    const result = await handler?.({} as any, { recordingId: 'rec-1', turns: badSentiment }) as any
+
+    expect(result.success).toBe(false)
+    expect(result.error.code).toBe('VALIDATION_ERROR')
+    expect(db.updateTranscriptTurns).not.toHaveBeenCalled()
+  })
+
+  it('accepts a well-formed turn with optional words + sentiment', async () => {
+    const db = await import('../../services/database')
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'transcripts:updateTurns')?.[1]
+
+    const turns = [
+      {
+        speaker: 'A',
+        startMs: 0,
+        endMs: 1000,
+        text: 'a',
+        words: [{ text: 'a', startMs: 0, endMs: 1000 }],
+        sentiment: 'POSITIVE'
+      }
+    ]
+    const result = await handler?.({} as any, { recordingId: 'rec-1', turns }) as any
+
+    expect(result.success).toBe(true)
+    expect(db.updateTranscriptTurns).toHaveBeenCalledWith('rec-1', turns)
+  })
+})
+
+describe('speakers:getForRecording (panel display + live refresh)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('registers speakers:getForRecording', () => {
+    registerSpeakersHandlers()
+    expect(ipcMain.handle).toHaveBeenCalledWith('speakers:getForRecording', expect.any(Function))
+  })
+
+  it('returns a label -> { contactId, contactName } map joined from contacts', async () => {
+    const db = await import('../../services/database')
+    vi.mocked(db.getRecordingSpeakers).mockReturnValue([
+      { recording_id: 'rec-1', file_label: 'A', contact_id: 'cA', confidence: null, source: 'user', created_at: 't' },
+      { recording_id: 'rec-1', file_label: 'B', contact_id: 'cB', confidence: null, source: 'user', created_at: 't' }
+    ] as any)
+    vi.mocked(db.getContactById).mockImplementation((id: string) => {
+      if (id === 'cA') return { id: 'cA', name: 'Alice' } as any
+      if (id === 'cB') return { id: 'cB', name: 'Bob' } as any
+      return undefined
+    })
+
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'speakers:getForRecording')?.[1]
+    const result = await handler?.({} as any, 'rec-1') as any
+
+    expect(result.success).toBe(true)
+    expect(result.data).toEqual({
+      A: { contactId: 'cA', contactName: 'Alice' },
+      B: { contactId: 'cB', contactName: 'Bob' }
+    })
+  })
+
+  it('omits rows whose contact_id is null or no longer resolves', async () => {
+    const db = await import('../../services/database')
+    vi.mocked(db.getRecordingSpeakers).mockReturnValue([
+      { recording_id: 'rec-1', file_label: 'A', contact_id: 'cA', confidence: null, source: 'user', created_at: 't' },
+      { recording_id: 'rec-1', file_label: 'B', contact_id: null, confidence: null, source: 'user', created_at: 't' },
+      { recording_id: 'rec-1', file_label: 'C', contact_id: 'gone', confidence: null, source: 'user', created_at: 't' }
+    ] as any)
+    vi.mocked(db.getContactById).mockImplementation((id: string) =>
+      id === 'cA' ? ({ id: 'cA', name: 'Alice' } as any) : undefined
+    )
+
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'speakers:getForRecording')?.[1]
+    const result = await handler?.({} as any, 'rec-1') as any
+
+    expect(result.success).toBe(true)
+    expect(result.data).toEqual({ A: { contactId: 'cA', contactName: 'Alice' } })
+  })
+
+  it('rejects an empty recordingId (validation)', async () => {
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'speakers:getForRecording')?.[1]
+    const result = await handler?.({} as any, '') as any
+
+    expect(result.success).toBe(false)
+    expect(result.error.code).toBe('VALIDATION_ERROR')
+  })
 })

@@ -5,7 +5,7 @@
  * Shows transcript, summary, metadata, and provides actions.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Play, Pause, FileText, Wand2, Calendar, Download, Trash2, ExternalLink, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
@@ -89,6 +89,12 @@ export function SourceDetailDrawer({
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const [errorDetailsExpanded, setErrorDetailsExpanded] = useState(false)
 
+  // Speaker diarization (D3-T3): local turns + assigned-contact-name state so the
+  // SpeakersPanel can display "→ <name>" and refresh live after assign/merge/reassign.
+  const recordingId = transcript?.recording_id
+  const [turns, setTurns] = useState<Turn[]>([])
+  const [assignedNames, setAssignedNames] = useState<Record<string, string>>({})
+
   const error = useLibraryStore((state) => (source ? state.recordingErrors.get(source.id) : undefined))
   const clearRecordingError = useLibraryStore((state) => state.clearRecordingError)
 
@@ -103,6 +109,53 @@ export function SourceDetailDrawer({
       previousFocusRef.current = null
     }
   }, [isOpen])
+
+  /**
+   * Re-fetch BOTH the recording's turns (transcripts.getByRecordingId) and its
+   * speaker→contact-name map (speakers:getForRecording). Called on open / recording
+   * change and again whenever the panel reports an edit, so the panel reflects the
+   * new turns + names live without closing the drawer.
+   */
+  const refreshSpeakers = useCallback(async () => {
+    if (!recordingId) {
+      setTurns([])
+      setAssignedNames({})
+      return
+    }
+    const api = window.electronAPI
+    const [freshTranscript, speakerRes] = await Promise.all([
+      api.transcripts.getByRecordingId(recordingId),
+      api.speakers.getForRecording(recordingId)
+    ])
+
+    let parsedTurns: Turn[] = []
+    const rawTurns = (freshTranscript as { turns?: string | null } | null | undefined)?.turns
+    if (rawTurns) {
+      try { parsedTurns = JSON.parse(rawTurns) } catch { parsedTurns = [] }
+    }
+    setTurns(parsedTurns)
+
+    const names: Record<string, string> = {}
+    if (speakerRes?.success && speakerRes.data) {
+      for (const [label, entry] of Object.entries(speakerRes.data)) {
+        names[label] = (entry as { contactName: string }).contactName
+      }
+    }
+    setAssignedNames(names)
+  }, [recordingId])
+
+  // Seed turns from the prop transcript immediately (so the panel renders before the
+  // async fetch resolves), then fetch fresh turns + assignment names.
+  useEffect(() => {
+    if (!isOpen) return
+    let parsed: Turn[] = []
+    if (transcript?.turns) {
+      try { parsed = JSON.parse(transcript.turns) } catch { parsed = [] }
+    }
+    setTurns(parsed)
+    setAssignedNames({})
+    void refreshSpeakers()
+  }, [isOpen, recordingId, transcript?.turns, refreshSpeakers])
 
   if (!source) return null
 
@@ -348,21 +401,15 @@ export function SourceDetailDrawer({
               )}
 
               {/* Speakers panel (structured turns only) */}
-              {(() => {
-                let parsedTurns: Turn[] = []
-                if (transcript.turns) {
-                  try { parsedTurns = JSON.parse(transcript.turns) } catch { parsedTurns = [] }
-                }
-                if (parsedTurns.length === 0) return null
-                return (
-                  <SpeakersPanel
-                    recordingId={transcript.recording_id}
-                    meetingId={meeting?.id}
-                    turns={parsedTurns}
-                    onChanged={() => { /* host refetch wired by caller via key/refresh */ }}
-                  />
-                )
-              })()}
+              {turns.length > 0 && (
+                <SpeakersPanel
+                  recordingId={transcript.recording_id}
+                  meetingId={meeting?.id}
+                  turns={turns}
+                  assignedNames={assignedNames}
+                  onChanged={() => { void refreshSpeakers() }}
+                />
+              )}
 
               {/* Full transcript */}
               <div>
