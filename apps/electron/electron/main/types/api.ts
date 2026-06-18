@@ -304,7 +304,7 @@ export interface GetMeetingsResponse {
 export interface ContactsAPI {
   getAll: (request?: GetContactsRequest) => Promise<Result<GetContactsResponse>>
   getById: (id: string) => Promise<Result<ContactWithMeetings>>
-  create: (request: { name: string; email?: string | null; type?: string; role?: string | null; company?: string | null }) => Promise<Result<Contact>>
+  create: (request: { name: string; email?: string | null; type?: string; role?: string | null; company?: string | null }) => Promise<Result<Person>>
   update: (request: UpdateContactRequest) => Promise<Result<Contact>>
 }
 

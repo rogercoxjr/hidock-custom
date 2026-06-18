@@ -68,6 +68,7 @@ import type {
   GenerateOutputResponse
 } from '../main/types/api'
 import type { Contact, ContactWithMeetings, Project, ProjectWithMeetings } from '../main/types/database'
+import type { Person } from '../../src/types/knowledge'
 import type { MigrationAPI } from './migration-types'
 import type { 
   KnowledgeCapture, 
@@ -116,7 +117,7 @@ export interface ElectronAPI {
   contacts: {
     getAll: (request?: GetContactsRequest) => Promise<Result<GetContactsResponse>>
     getById: (id: string) => Promise<Result<ContactWithMeetings>>
-    create: (request: { name: string; email?: string | null; type?: string; role?: string | null; company?: string | null }) => Promise<Result<any>>
+    create: (request: { name: string; email?: string | null; type?: string; role?: string | null; company?: string | null }) => Promise<Result<Person>>
     update: (request: UpdateContactRequest) => Promise<Result<Contact>>
     delete: (id: string) => Promise<Result<void>>
     getForMeeting: (meetingId: string) => Promise<Result<Contact[]>>

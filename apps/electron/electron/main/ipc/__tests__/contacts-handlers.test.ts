@@ -159,12 +159,20 @@ describe('Contacts IPC Handlers', () => {
 
   it('creates a contact with a required name and returns a Person (AC2)', async () => {
     const { upsertContact } = await import('../../services/database')
+    // Return a raw DB Contact row (snake_case) so the test proves mapToPerson ran
+    // by asserting the camelCase Person-only fields it produces.
     vi.mocked(upsertContact).mockImplementation((c: any) => ({
-      ...c,
+      id: c.id,
+      name: c.name,
+      email: c.email,
       type: c.type ?? 'unknown',
       role: c.role ?? null,
       company: c.company ?? null,
       notes: c.notes ?? null,
+      tags: c.tags ?? null,
+      first_seen_at: '2026-06-17T00:00:00.000Z',
+      last_seen_at: '2026-06-17T00:00:00.000Z',
+      meeting_count: 0,
       created_at: '2026-06-17T00:00:00.000Z'
     }))
 
@@ -177,6 +185,12 @@ describe('Contacts IPC Handlers', () => {
     expect(result.data.email).toBe('a@example.com')
     expect(typeof result.data.id).toBe('string')
     expect(result.data.id.length).toBeGreaterThan(0)
+    // Person-only camelCase fields — present only if mapToPerson ran (not on the raw Contact)
+    expect(result.data.firstSeenAt).toBe('2026-06-17T00:00:00.000Z')
+    expect(result.data.lastSeenAt).toBe('2026-06-17T00:00:00.000Z')
+    expect(result.data.interactionCount).toBe(0)
+    expect(result.data.createdAt).toBe('2026-06-17T00:00:00.000Z')
+    expect(result.data.tags).toEqual([])
     expect(upsertContact).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Speaker A', email: 'a@example.com' })
     )
