@@ -125,26 +125,34 @@ export function SourceReader({
       setSpeakerNames({})
       return
     }
+    // Defensive: a partially-initialized electronAPI (e.g. in unit tests) or a
+    // missing IPC must NOT produce an unhandled rejection on mount. No-op if absent.
     const api = window.electronAPI
-    const [freshTranscript, speakerRes] = await Promise.all([
-      api.transcripts.getByRecordingId(recordingId),
-      api.speakers.getForRecording(recordingId),
-    ])
+    if (!api?.transcripts?.getByRecordingId || !api?.speakers?.getForRecording) return
 
-    let parsedTurns: Turn[] = []
-    const rawTurns = (freshTranscript as Transcript | null | undefined)?.turns
-    if (rawTurns) {
-      try { parsedTurns = JSON.parse(rawTurns) } catch { parsedTurns = [] }
-    }
-    setTurns(parsedTurns)
+    try {
+      const [freshTranscript, speakerRes] = await Promise.all([
+        api.transcripts.getByRecordingId(recordingId),
+        api.speakers.getForRecording(recordingId),
+      ])
 
-    const names: Record<string, string> = {}
-    if (speakerRes?.success && speakerRes.data) {
-      for (const [label, entry] of Object.entries(speakerRes.data)) {
-        names[label] = (entry as { contactName: string }).contactName
+      let parsedTurns: Turn[] = []
+      const rawTurns = (freshTranscript as Transcript | null | undefined)?.turns
+      if (rawTurns) {
+        try { parsedTurns = JSON.parse(rawTurns) } catch { parsedTurns = [] }
       }
+      setTurns(parsedTurns)
+
+      const names: Record<string, string> = {}
+      if (speakerRes?.success && speakerRes.data) {
+        for (const [label, entry] of Object.entries(speakerRes.data)) {
+          names[label] = (entry as { contactName: string }).contactName
+        }
+      }
+      setSpeakerNames(names)
+    } catch {
+      // Swallow IPC/parse failures: the prop-seeded turns remain; never propagate.
     }
-    setSpeakerNames(names)
   }, [recordingId])
 
   // Seed turns from the prop transcript immediately (so the panel renders before the
@@ -157,7 +165,7 @@ export function SourceReader({
     }
     setTurns(parsed)
     setSpeakerNames({})
-    void refreshSpeakers()
+    refreshSpeakers().catch(() => {})
   }, [recordingId, transcriptTurns, refreshSpeakers])
 
   const hasStructuredTurns = turns.length > 0
@@ -613,7 +621,7 @@ export function SourceReader({
                   meetingId={meeting?.id}
                   turns={turns}
                   assignedNames={speakerNames}
-                  onChanged={() => { void refreshSpeakers() }}
+                  onChanged={() => { refreshSpeakers().catch(() => {}) }}
                 />
               </div>
             )}
