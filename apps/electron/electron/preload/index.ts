@@ -126,6 +126,7 @@ export interface ElectronAPI {
   // Speakers (diarization — D3)
   speakers: {
     assign: (request: { recordingId: string; fileLabel: string; contactId: string }) => Promise<Result<{ recordingId: string; fileLabel: string; contactId: string }>>
+    merge: (request: { recordingId: string; fromLabel: string; toLabel: string }) => Promise<Result<{ recordingId: string; fromLabel: string; toLabel: string }>>
   }
 
   // Projects
@@ -183,6 +184,7 @@ export interface ElectronAPI {
     getByRecordingId: (recordingId: string) => Promise<any>
     getByRecordingIds: (recordingIds: string[]) => Promise<Record<string, any>>
     search: (query: string) => Promise<any[]>
+    updateTurns: (request: { recordingId: string; turns: unknown[] }) => Promise<Result<{ recordingId: string }>>
   }
 
   // Database - Queue
@@ -565,7 +567,8 @@ const electronAPI: ElectronAPI = {
   },
 
   speakers: {
-    assign: (request) => callIPC('speakers:assign', request)
+    assign: (request) => callIPC('speakers:assign', request),
+    merge: (request) => callIPC('speakers:merge', request)
   },
 
   projects: {
@@ -614,7 +617,8 @@ const electronAPI: ElectronAPI = {
   transcripts: {
     getByRecordingId: (recordingId) => callIPC('db:get-transcript', recordingId),
     getByRecordingIds: (recordingIds) => callIPC('db:get-transcripts-by-recording-ids', recordingIds),
-    search: (query) => callIPC('db:search-transcripts', query)
+    search: (query) => callIPC('db:search-transcripts', query),
+    updateTurns: (request) => callIPC('transcripts:updateTurns', request)
   },
 
   queue: {

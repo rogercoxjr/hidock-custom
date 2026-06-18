@@ -9,7 +9,10 @@ vi.mock('electron', () => ({
 vi.mock('../../services/database', () => ({
   upsertRecordingSpeaker: vi.fn(),
   getRecordingSpeakers: vi.fn(),
-  getContactById: vi.fn()
+  deleteRecordingSpeaker: vi.fn(),
+  getContactById: vi.fn(),
+  getTranscriptByRecordingId: vi.fn(),
+  updateTranscriptTurns: vi.fn()
 }))
 
 describe('Speakers IPC Handlers (AC3/AC4)', () => {
@@ -56,5 +59,131 @@ describe('Speakers IPC Handlers (AC3/AC4)', () => {
     expect(result.success).toBe(false)
     expect(result.error.code).toBe('VALIDATION_ERROR')
     expect(upsertRecordingSpeaker).not.toHaveBeenCalled()
+  })
+})
+
+describe('speakers:merge (AC3 — server-side merge, no orphan rows)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  function getMergeHandler() {
+    registerSpeakersHandlers()
+    return vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'speakers:merge')?.[1]
+  }
+
+  it('registers speakers:merge', () => {
+    registerSpeakersHandlers()
+    expect(ipcMain.handle).toHaveBeenCalledWith('speakers:merge', expect.any(Function))
+  })
+
+  it('rewrites turns C -> A, persists them, and deletes the from-label mapping (no orphan)', async () => {
+    const db = await import('../../services/database')
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      recording_id: 'rec-1',
+      turns: JSON.stringify([
+        { speaker: 'A', startMs: 0, endMs: 1000, text: 'a' },
+        { speaker: 'C', startMs: 1000, endMs: 2000, text: 'c' }
+      ])
+    } as any)
+    // A is already mapped; C is mapped (the orphan we will delete).
+    vi.mocked(db.getRecordingSpeakers).mockReturnValue([
+      { recording_id: 'rec-1', file_label: 'A', contact_id: 'cA', confidence: null, source: 'user', created_at: 't' },
+      { recording_id: 'rec-1', file_label: 'C', contact_id: 'cC', confidence: null, source: 'user', created_at: 't' }
+    ] as any)
+
+    const handler = getMergeHandler()
+    const result = await handler?.({} as any, { recordingId: 'rec-1', fromLabel: 'C', toLabel: 'A' }) as any
+
+    expect(result.success).toBe(true)
+
+    // Turns persisted with every C rewritten to A.
+    expect(db.updateTranscriptTurns).toHaveBeenCalledWith(
+      'rec-1',
+      [
+        { speaker: 'A', startMs: 0, endMs: 1000, text: 'a' },
+        { speaker: 'A', startMs: 1000, endMs: 2000, text: 'c' }
+      ]
+    )
+    // The from-label mapping is deleted (Issue 3 — no orphaned recording_speakers row).
+    expect(db.deleteRecordingSpeaker).toHaveBeenCalledWith('rec-1', 'C')
+  })
+
+  it('upserts the target mapping when toLabel had no row but fromLabel did (preserve mapping)', async () => {
+    const db = await import('../../services/database')
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      recording_id: 'rec-2',
+      turns: JSON.stringify([
+        { speaker: 'A', startMs: 0, endMs: 1000, text: 'a' },
+        { speaker: 'C', startMs: 1000, endMs: 2000, text: 'c' }
+      ])
+    } as any)
+    // Only C is mapped; A has no row yet — merge should carry C's contact onto A.
+    vi.mocked(db.getRecordingSpeakers).mockReturnValue([
+      { recording_id: 'rec-2', file_label: 'C', contact_id: 'cC', confidence: null, source: 'user', created_at: 't' }
+    ] as any)
+
+    const handler = getMergeHandler()
+    const result = await handler?.({} as any, { recordingId: 'rec-2', fromLabel: 'C', toLabel: 'A' }) as any
+
+    expect(result.success).toBe(true)
+    expect(db.upsertRecordingSpeaker).toHaveBeenCalledWith(
+      expect.objectContaining({ recording_id: 'rec-2', file_label: 'A', contact_id: 'cC', source: 'user' })
+    )
+    expect(db.deleteRecordingSpeaker).toHaveBeenCalledWith('rec-2', 'C')
+  })
+
+  it('rejects when the transcript has no turns', async () => {
+    const db = await import('../../services/database')
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({ recording_id: 'rec-3', turns: null } as any)
+
+    const handler = getMergeHandler()
+    const result = await handler?.({} as any, { recordingId: 'rec-3', fromLabel: 'C', toLabel: 'A' }) as any
+
+    expect(result.success).toBe(false)
+    expect(db.updateTranscriptTurns).not.toHaveBeenCalled()
+  })
+
+  it('rejects fromLabel === toLabel (validation)', async () => {
+    const db = await import('../../services/database')
+    const handler = getMergeHandler()
+    const result = await handler?.({} as any, { recordingId: 'rec-4', fromLabel: 'A', toLabel: 'A' }) as any
+
+    expect(result.success).toBe(false)
+    expect(result.error.code).toBe('VALIDATION_ERROR')
+    expect(db.updateTranscriptTurns).not.toHaveBeenCalled()
+  })
+})
+
+describe('transcripts:updateTurns (AC3 — per-turn reassign persistence)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('registers transcripts:updateTurns', () => {
+    registerSpeakersHandlers()
+    expect(ipcMain.handle).toHaveBeenCalledWith('transcripts:updateTurns', expect.any(Function))
+  })
+
+  it('persists the supplied turns array verbatim via updateTranscriptTurns', async () => {
+    const db = await import('../../services/database')
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'transcripts:updateTurns')?.[1]
+
+    const turns = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'a' },
+      { speaker: 'B', startMs: 1000, endMs: 2000, text: 'b' } // reassigned from A -> B; others unchanged
+    ]
+    const result = await handler?.({} as any, { recordingId: 'rec-1', turns }) as any
+
+    expect(result.success).toBe(true)
+    expect(db.updateTranscriptTurns).toHaveBeenCalledWith('rec-1', turns)
+  })
+
+  it('rejects an empty recordingId (validation)', async () => {
+    const db = await import('../../services/database')
+    registerSpeakersHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(c => c[0] === 'transcripts:updateTurns')?.[1]
+    const result = await handler?.({} as any, { recordingId: '', turns: [] }) as any
+
+    expect(result.success).toBe(false)
+    expect(result.error.code).toBe('VALIDATION_ERROR')
+    expect(db.updateTranscriptTurns).not.toHaveBeenCalled()
   })
 })

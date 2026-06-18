@@ -8,6 +8,8 @@ vi.mock('@/components/ui/toaster', () => ({
 }))
 
 const mockAssign = vi.fn().mockResolvedValue({ success: true })
+const mockMerge = vi.fn().mockResolvedValue({ success: true })
+const mockUpdateTurns = vi.fn().mockResolvedValue({ success: true })
 const mockCreate = vi.fn()
 const mockGetForMeeting = vi.fn()
 const mockGetAll = vi.fn()
@@ -27,7 +29,8 @@ beforeEach(() => {
   Object.defineProperty(window, 'electronAPI', {
     value: {
       contacts: { getForMeeting: mockGetForMeeting, getAll: mockGetAll, create: mockCreate },
-      speakers: { assign: mockAssign },
+      speakers: { assign: mockAssign, merge: mockMerge },
+      transcripts: { updateTurns: mockUpdateTurns },
     },
     writable: true,
     configurable: true,
@@ -37,9 +40,9 @@ beforeEach(() => {
 describe('SpeakersPanel (AC2/AC3)', () => {
   it('renders one row per distinct file_label with turn-count and talk-time', async () => {
     render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={makeTurns()} onChanged={vi.fn()} />)
-    // labels A and B
-    expect(await screen.findByText('A')).toBeInTheDocument()
-    expect(screen.getByText('B')).toBeInTheDocument()
+    // One assign control per distinct label (A and B) confirms one row each.
+    expect(await screen.findByRole('button', { name: /assign contact to a/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /assign contact to b/i })).toBeInTheDocument()
     // A: 2 turns; talk-time 5000 + 4000 = 9s -> 00:00:09
     expect(screen.getByText(/2 turns/i)).toBeInTheDocument()
     expect(screen.getByText('00:00:09')).toBeInTheDocument()
@@ -83,27 +86,64 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     )
   })
 
-  it('merge C -> A rewrites turns and calls onMergeTurns + onChanged (AC3)', async () => {
-    const onMergeTurns = vi.fn()
+  it('merge C -> A persists server-side via speakers:merge + onChanged (AC3)', async () => {
     const onChanged = vi.fn()
     const turns: Turn[] = [
       { speaker: 'A', startMs: 0, endMs: 1000, text: 'a' },
       { speaker: 'C', startMs: 1000, endMs: 2000, text: 'c' },
     ]
-    render(
-      <SpeakersPanel
-        recordingId="rec-1"
-        meetingId="meet-1"
-        turns={turns}
-        onChanged={onChanged}
-        onMergeTurns={onMergeTurns}
-      />
-    )
+    render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={onChanged} />)
     // Merge C into A via the per-row merge control
     fireEvent.click(await screen.findByRole('button', { name: /merge speaker c/i }))
     fireEvent.click(await screen.findByRole('button', { name: /merge into a/i }))
-    await waitFor(() => expect(onMergeTurns).toHaveBeenCalledWith('C', 'A'))
+    await waitFor(() =>
+      expect(mockMerge).toHaveBeenCalledWith({ recordingId: 'rec-1', fromLabel: 'C', toLabel: 'A' })
+    )
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('reassign a single turn persists the updated turns array, leaving other turns unchanged (AC3)', async () => {
+    const onChanged = vi.fn()
+    // Two A turns + one B turn; reassign the SECOND A turn to B.
+    const turns: Turn[] = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'first' },
+      { speaker: 'A', startMs: 1000, endMs: 2000, text: 'second' },
+      { speaker: 'B', startMs: 2000, endMs: 3000, text: 'third' },
+    ]
+    render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={onChanged} />)
+
+    // Open the per-turn reassign control for the turn whose text is "second".
+    fireEvent.click(await screen.findByRole('button', { name: /reassign turn: second/i }))
+    // Pick target label B.
+    fireEvent.click(await screen.findByRole('button', { name: /reassign to b/i }))
+
+    await waitFor(() =>
+      expect(mockUpdateTurns).toHaveBeenCalledWith({
+        recordingId: 'rec-1',
+        turns: [
+          { speaker: 'A', startMs: 0, endMs: 1000, text: 'first' },
+          { speaker: 'B', startMs: 1000, endMs: 2000, text: 'second' },
+          { speaker: 'B', startMs: 2000, endMs: 3000, text: 'third' },
+        ],
+      })
+    )
+    expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('talk-time merges overlapping intervals (no double-count) (AC3)', async () => {
+    // One label A with OVERLAPPING turns: 0-3000 and 1000-4000.
+    // Naive sum = 3000 + 3000 = 6000ms; merged interval 0-4000 = 4000ms -> 00:00:04.
+    const turns: Turn[] = [
+      { speaker: 'A', startMs: 0, endMs: 3000, text: 'a1' },
+      { speaker: 'A', startMs: 1000, endMs: 4000, text: 'a2' },
+      // A second label so the panel isn't read-only (single-speaker) — irrelevant to A's talk-time.
+      { speaker: 'B', startMs: 5000, endMs: 6000, text: 'b' },
+    ]
+    render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
+    expect(await screen.findByRole('button', { name: /assign contact to a/i })).toBeInTheDocument()
+    // 00:00:04 (merged), NOT 00:00:06 (naive sum).
+    expect(screen.getByText('00:00:04')).toBeInTheDocument()
+    expect(screen.queryByText('00:00:06')).not.toBeInTheDocument()
   })
 
   it('single-speaker recording renders read-only (no merge control)', async () => {
@@ -111,5 +151,12 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
     expect(await screen.findByText('A')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /merge speaker/i })).not.toBeInTheDocument()
+  })
+
+  it('single-speaker recording also hides per-turn reassign (read-only)', async () => {
+    const turns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 1000, text: 'solo' }]
+    render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
+    expect(await screen.findByText('A')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reassign turn/i })).not.toBeInTheDocument()
   })
 })

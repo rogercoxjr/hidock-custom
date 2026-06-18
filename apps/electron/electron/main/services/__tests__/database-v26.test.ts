@@ -89,7 +89,8 @@ import {
   upsertRecordingSpeaker,
   getRecordingSpeakers,
   deleteRecordingSpeaker,
-  deleteRecordingSpeakersForRecording
+  deleteRecordingSpeakersForRecording,
+  updateTranscriptTurns
 } from '../database'
 
 // ---------------------------------------------------------------------------
@@ -408,5 +409,69 @@ describe('recording_speakers helpers (spec §6.3)', () => {
     const removed = deleteRecordingSpeakersForRecording('rec_rs4')
     expect(removed).toBe(2)
     expect(getRecordingSpeakers('rec_rs4')).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D3-T3 (fix): updateTranscriptTurns — persist merge/reassign turn edits (§6.3)
+// ---------------------------------------------------------------------------
+
+describe('updateTranscriptTurns — persist edited turns (spec §6.3, AC3)', () => {
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('writes the JSON-serialized turns array to transcripts.turns for the recording', () => {
+    insertTestRecording('rec_upd')
+    upsertTranscriptStage1({
+      recording_id: 'rec_upd',
+      full_text: 'a b',
+      transcription_provider: 'assemblyai',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 1000, text: 'a' },
+        { speaker: 'C', startMs: 1000, endMs: 2000, text: 'c' }
+      ]
+    })
+
+    // Rewrite C -> A (merge) and persist.
+    updateTranscriptTurns('rec_upd', [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'a' },
+      { speaker: 'A', startMs: 1000, endMs: 2000, text: 'c' }
+    ])
+
+    const row = queryOne<{ turns: string }>("SELECT turns FROM transcripts WHERE recording_id='rec_upd'")
+    const turns = JSON.parse(row!.turns)
+    expect(turns).toHaveLength(2)
+    expect(turns.map((t: { speaker: string }) => t.speaker)).toEqual(['A', 'A'])
+  })
+
+  it('does not touch Stage-2 columns (summary / summarization_provider)', () => {
+    insertTestRecording('rec_upd2')
+    upsertTranscriptStage1({
+      recording_id: 'rec_upd2',
+      full_text: 'v1',
+      transcription_provider: 'assemblyai',
+      turns: [{ speaker: 'A', startMs: 0, endMs: 1, text: 'v1' }]
+    })
+    run(`UPDATE transcripts SET summary='S', summarization_provider='ollama-cloud' WHERE recording_id='rec_upd2'`)
+
+    updateTranscriptTurns('rec_upd2', [{ speaker: 'B', startMs: 0, endMs: 1, text: 'v1' }])
+
+    const row = queryOne<{ turns: string; summary: string; summarization_provider: string }>(
+      "SELECT turns, summary, summarization_provider FROM transcripts WHERE recording_id='rec_upd2'"
+    )
+    expect(JSON.parse(row!.turns)[0].speaker).toBe('B')
+    expect(row!.summary).toBe('S')
+    expect(row!.summarization_provider).toBe('ollama-cloud')
   })
 })

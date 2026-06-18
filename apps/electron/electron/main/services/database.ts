@@ -2295,6 +2295,8 @@ export interface Transcript {
   key_points?: string
   sentiment?: string
   speakers?: string
+  /** JSON-serialized Turn[] (AssemblyAI diarization path; NULL for Whisper/Gemini). */
+  turns?: string
   word_count?: number
   transcription_provider?: string
   transcription_model?: string
@@ -2375,6 +2377,19 @@ export function upsertRecordingSpeaker(s: {
       new Date().toISOString()
     ]
   )
+}
+
+/**
+ * Persist an edited turns array (merge / per-turn reassign, §6.3, D3-T3).
+ *
+ * Writes ONLY the `transcripts.turns` column (JSON-serialized). Stage-1 roster
+ * (`speakers`/`sentiment`) and all Stage-2 columns are intentionally left intact:
+ * merge/reassign mutate which label a turn carries but never re-derive the roster
+ * here — the caller (speakers:merge handler) owns the recording_speakers rows, and
+ * Stage-2 (summary) must never be clobbered by an edit (single-writer rule).
+ */
+export function updateTranscriptTurns(recordingId: string, turns: Turn[]): void {
+  run('UPDATE transcripts SET turns = ? WHERE recording_id = ?', [JSON.stringify(turns), recordingId])
 }
 
 /** All speaker rows for a recording (roster order = insertion order). */
