@@ -2577,7 +2577,8 @@ export function updateTranscriptStage2(recordingId: string, fields: {
        summary = ?, action_items = ?, topics = ?, key_points = ?,
        title_suggestion = ?, question_suggestions = ?,
        language = COALESCE(language, ?),
-       summarization_provider = ?, summarization_model = ?
+       summarization_provider = ?, summarization_model = ?,
+       created_at = CURRENT_TIMESTAMP
      WHERE recording_id = ?`,
     [
       fields.summary ?? null,
@@ -2644,6 +2645,33 @@ export function buildAttributedTranscript(recordingId: string): string | undefin
       return `${label}: ${turn.text}`
     })
     .join('\n')
+}
+
+/** D5 §6.6: the Stage-2 summary is "stale" iff at least one speaker mapping
+ *  exists whose created_at is strictly NEWER than the transcript's summary stamp
+ *  (transcripts.created_at, re-stamped by updateTranscriptStage2). Used to drive
+ *  the "Summary uses generic speaker labels — re-summarize to attribute names"
+ *  badge; clears once a resummarize moves the stamp past every mapping. Returns
+ *  false when no transcript row exists or no mappings exist.
+ *
+ *  TIMESTAMP NORMALIZATION: recording_speakers.created_at is written as a JS ISO
+ *  string ('YYYY-MM-DDTHH:MM:SS.sssZ') while transcripts.created_at is stamped by
+ *  CURRENT_TIMESTAMP (SQLite space-format: 'YYYY-MM-DD HH:MM:SS'). A raw lexical
+ *  '>' comparison is unreliable across these formats because 'T' > ' ' in ASCII,
+ *  making ISO strings sort later than space-format strings with the same time value.
+ *  Both sides are normalized via datetime() so the comparison is time-correct
+ *  regardless of which format each column holds. */
+export function isSummaryStale(recordingId: string): boolean {
+  const row = queryOne<{ stale: number }>(
+    `SELECT CASE WHEN EXISTS (
+       SELECT 1 FROM recording_speakers rs
+       JOIN transcripts t ON t.recording_id = rs.recording_id
+       WHERE rs.recording_id = ?
+         AND datetime(rs.created_at) > datetime(t.created_at)
+     ) THEN 1 ELSE 0 END AS stale`,
+    [recordingId]
+  )
+  return row?.stale === 1
 }
 
 /**

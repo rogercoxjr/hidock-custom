@@ -30,7 +30,7 @@ import {
   cancelAllTranscriptions,
   processQueueManually
 } from '../services/transcription'
-import { getQueueItems, addToQueue, updateQueueItem, clearTranscriptStage2Marker, rependFailedItems } from '../services/database'
+import { getQueueItems, addToQueue, updateQueueItem, clearTranscriptStage2Marker, rependFailedItems, isSummaryStale } from '../services/database'
 import { getConfig } from '../services/config'
 import {
   GetRecordingByIdSchema,
@@ -403,6 +403,19 @@ export function registerRecordingHandlers(): void {
     } catch (error) {
       console.error('transcription:resummarize error:', error)
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // D5 §6.6: staleness probe for the "generic speaker labels" badge — true once
+  // a mapping post-dates the summary, false after a names-attributing resummarize.
+  ipcMain.handle('transcription:isSummaryStale', async (_, recordingId: unknown): Promise<boolean> => {
+    try {
+      const result = TranscribeRecordingSchema.safeParse({ recordingId })
+      if (!result.success) return false
+      return isSummaryStale(result.data.recordingId)
+    } catch (error) {
+      console.error('transcription:isSummaryStale error:', error)
+      return false
     }
   })
 
