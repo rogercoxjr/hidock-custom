@@ -167,6 +167,8 @@ export interface AppConfig {
     geminiModel: string
     openaiApiKey: string   // safeStorage-encrypted at rest (spec §5.4); decrypted in memory
     whisperModel: string   // fixed 'whisper-1' in v1 (spec §5.1; 4o-transcribe deferred §10)
+    assemblyaiApiKey: string  // safeStorage-encrypted at rest (spec §6.2); decrypted in memory
+    assemblyaiModels: string[]
     autoTranscribe: boolean
     language: string
   }

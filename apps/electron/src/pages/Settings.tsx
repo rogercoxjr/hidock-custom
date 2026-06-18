@@ -51,6 +51,8 @@ export function Settings() {
   const [asrProvider, setAsrProvider] = useState<'gemini' | 'openai-whisper' | 'assemblyai'>('gemini')
   const [openaiApiKey, setOpenaiApiKey] = useState('')
   const [showOpenaiKey, setShowOpenaiKey] = useState(false)
+  const [assemblyaiApiKey, setAssemblyaiApiKey] = useState('')
+  const [showAssemblyaiKey, setShowAssemblyaiKey] = useState(false)
   const [chatProvider, setChatProvider] = useState<'gemini' | 'ollama'>('gemini')
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
   const [showApiKey, setShowApiKey] = useState(false)
@@ -162,9 +164,10 @@ export function Settings() {
       geminiApiKey !== config.transcription.geminiApiKey ||
       geminiModel !== (config.transcription.geminiModel || 'gemini-3-pro-preview') ||
       language !== (config.transcription.language || 'en') ||
-      openaiApiKey !== (config.transcription.openaiApiKey || '')
+      openaiApiKey !== (config.transcription.openaiApiKey || '') ||
+      assemblyaiApiKey !== (config.transcription.assemblyaiApiKey || '')
     )
-  }, [config, asrProvider, geminiApiKey, geminiModel, language, openaiApiKey])
+  }, [config, asrProvider, geminiApiKey, geminiModel, language, openaiApiKey, assemblyaiApiKey])
 
   const isChatDirty = useMemo(() => {
     if (!config) return false
@@ -214,6 +217,7 @@ export function Settings() {
       setLanguage(config.transcription.language || 'en')
       setAsrProvider(config.transcription.provider || 'gemini')
       setOpenaiApiKey(config.transcription.openaiApiKey || '')
+      setAssemblyaiApiKey(config.transcription.assemblyaiApiKey || '')
       setChatProvider(config.chat.provider)
       setOllamaUrl(config.embeddings.ollamaBaseUrl)
       // C-CHAT: Load RAG context window size
@@ -306,6 +310,7 @@ export function Settings() {
     const previousModel = config?.transcription.geminiModel || 'gemini-3-pro-preview'
     const previousLanguage = config?.transcription.language || 'en'
     const previousOpenaiApiKey = config?.transcription.openaiApiKey || ''
+    const previousAssemblyaiApiKey = config?.transcription.assemblyaiApiKey || ''
 
     const updates = {
       provider: asrProvider,
@@ -313,6 +318,7 @@ export function Settings() {
       geminiModel,
       language,
       openaiApiKey,
+      assemblyaiApiKey,
       whisperModel: 'whisper-1' as const
     }
 
@@ -327,7 +333,9 @@ export function Settings() {
     try {
       await updateConfig('transcription', updates)
 
-      const activeProviderLabel = asrProvider === 'openai-whisper' ? 'OpenAI Whisper' : 'Gemini'
+      const activeProviderLabel =
+        asrProvider === 'openai-whisper' ? 'OpenAI Whisper' :
+        asrProvider === 'assemblyai' ? 'AssemblyAI' : 'Gemini'
       toast.success('Settings Saved', `Transcription provider set to ${activeProviderLabel}`)
     } catch (error) {
       // Rollback on error
@@ -336,6 +344,7 @@ export function Settings() {
       setGeminiModel(previousModel)
       setLanguage(previousLanguage)
       setOpenaiApiKey(previousOpenaiApiKey)
+      setAssemblyaiApiKey(previousAssemblyaiApiKey)
 
       const message = error instanceof Error ? error.message : 'Failed to save transcription settings'
       toast.error('Save Failed', message)
@@ -638,8 +647,32 @@ export function Settings() {
                   >
                     OpenAI Whisper
                   </Button>
+                  <Button
+                    variant={asrProvider === 'assemblyai' ? 'default' : 'outline'}
+                    onClick={() => setAsrProvider('assemblyai')}
+                    onKeyDown={(e) => e.key === 'Enter' && setAsrProvider('assemblyai')}
+                    disabled={saving}
+                    aria-label="Use AssemblyAI ASR provider"
+                    aria-pressed={asrProvider === 'assemblyai'}
+                  >
+                    AssemblyAI
+                  </Button>
                 </div>
               </div>
+
+              {asrProvider === 'assemblyai' && (
+                <p className="text-xs text-muted-foreground rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-2">
+                  Speaker detection uses AssemblyAI (cloud, global routing); recordings are uploaded for processing.{' '}
+                  <a
+                    href="https://www.assemblyai.com/legal/terms-of-service"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Terms of Service
+                  </a>
+                </p>
+              )}
 
               {asrProvider === 'gemini' && (
                 <>
@@ -761,6 +794,48 @@ export function Settings() {
                     </p>
                   </div>
                 </>
+              )}
+
+              {asrProvider === 'assemblyai' && (
+                <div>
+                  <label htmlFor="assemblyaiApiKey" className="text-sm font-medium">AssemblyAI API Key</label>
+                  <div className="relative mt-1">
+                    <Input
+                      id="assemblyaiApiKey"
+                      type={showAssemblyaiKey ? 'text' : 'password'}
+                      placeholder="Enter your AssemblyAI API key"
+                      value={assemblyaiApiKey}
+                      onChange={(e) => setAssemblyaiApiKey(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveTranscription()}
+                      disabled={saving}
+                      aria-label="AssemblyAI API Key"
+                      aria-describedby="assemblyaiApiKey-description"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                      onClick={() => setShowAssemblyaiKey(!showAssemblyaiKey)}
+                      aria-label={showAssemblyaiKey ? 'Hide AssemblyAI API key' : 'Show AssemblyAI API key'}
+                      tabIndex={-1}
+                    >
+                      {showAssemblyaiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p id="assemblyaiApiKey-description" className="text-xs text-muted-foreground mt-1">
+                    Get your API key from{' '}
+                    <a
+                      href="https://www.assemblyai.com/dashboard"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      AssemblyAI Dashboard
+                    </a>
+                  </p>
+                </div>
               )}
 
               <div>

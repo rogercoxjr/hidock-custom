@@ -31,6 +31,7 @@ import {
 import type { Person, PersonType } from '@/types/knowledge'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
+import { QuickAddContact } from '@/components/QuickAddContact'
 
 export function People() {
   const navigate = useNavigate()
@@ -49,6 +50,9 @@ export function People() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [sortBy, setSortBy] = useState<'name' | 'lastSeen' | 'interactions'>('name')
+
+  // Quick-add contact dialog
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
 
   // Debounce: skip firing on initial mount
   const isFirstMount = useRef(true)
@@ -183,8 +187,7 @@ export function People() {
             <Button
               size="sm"
               variant="default"
-              title="Coming soon"
-              onClick={() => toast.info('Coming soon', 'Contact creation is not yet available.')}
+              onClick={() => setQuickAddOpen(true)}
             >
               <UserPlus className="h-4 w-4 mr-2" />
               Add Person
@@ -409,6 +412,12 @@ export function People() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <QuickAddContact
+        open={quickAddOpen}
+        onClose={() => setQuickAddOpen(false)}
+        onCreated={() => { setQuickAddOpen(false); loadPeople(currentPage) }}
+      />
     </div>
   )
 }
