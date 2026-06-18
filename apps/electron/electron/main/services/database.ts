@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { getDatabasePath } from './file-storage'
+import type { Turn } from './asr/asr-provider'
 
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
@@ -2342,12 +2343,64 @@ export function getTranscriptsByRecordingIds(recordingIds: string[]): Map<string
 // columns) and `updateTranscriptStage2` (Stage 2, writes the marker atomically).
 
 /**
+ * Compute the derived diarization columns from a Turn[] (spec §6.3):
+ *  - speakers: distinct speaker roster in first-seen order, e.g. ["A","B"]
+ *  - sentiment: per-label dominant (majority) sentiment {label: 'POSITIVE'|...};
+ *    ties broken by fixed precedence POSITIVE > NEUTRAL > NEGATIVE
+ *    (order-independent — spec §Integration Corrections); {} when no turn
+ *    carries a sentiment field.
+ * Pure + exported so the persistence behavior is unit-testable in isolation.
+ */
+export function deriveSpeakerRosterSummary(turns: Turn[]): {
+  speakers: string[]
+  sentiment: Record<string, 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'>
+} {
+  const speakers: string[] = []
+  // label -> tally of sentiments
+  const sentimentsByLabel = new Map<string, Map<'POSITIVE' | 'NEUTRAL' | 'NEGATIVE', number>>()
+
+  for (const turn of turns) {
+    if (!speakers.includes(turn.speaker)) speakers.push(turn.speaker)
+    if (turn.sentiment) {
+      if (!sentimentsByLabel.has(turn.speaker)) {
+        sentimentsByLabel.set(turn.speaker, new Map())
+      }
+      const counts = sentimentsByLabel.get(turn.speaker)!
+      counts.set(turn.sentiment, (counts.get(turn.sentiment) ?? 0) + 1)
+    }
+  }
+
+  const sentiment: Record<string, 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'> = {}
+  // Fixed tie-break precedence: POSITIVE > NEUTRAL > NEGATIVE (order-independent)
+  const precedence: Array<'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'> = ['POSITIVE', 'NEUTRAL', 'NEGATIVE']
+  for (const [label, counts] of sentimentsByLabel) {
+    let best: 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE' | undefined
+    let bestCount = -1
+    for (const s of precedence) {
+      const c = counts.get(s) ?? 0
+      if (c > bestCount) {
+        best = s
+        bestCount = c
+      }
+    }
+    if (best !== undefined) sentiment[label] = best
+  }
+
+  return { speakers, sentiment }
+}
+
+/**
  * Stage 1 write (auto-pipeline spec §5.3): persist ASR output without ever
  * touching Stage-2 (analysis) columns. The conflict target is the UNIQUE
  * recording_id; id keeps the existing `trans_${recordingId}` rule.
  * NOTE: language inserts as NULL when the ASR doesn't supply one (Gemini path) —
  * Stage 2 fills it via COALESCE. The schema DEFAULT 'es' applies only when the
  * column is omitted, which this INSERT never does.
+ *
+ * When `turns` is supplied (AssemblyAI diarization path), also writes the
+ * derived `speakers` roster and `sentiment` roster-summary (spec §6.3, AC1).
+ * When `turns` is absent (Whisper/Gemini), those columns are written as NULL
+ * (backward-compatible with all pre-diarization callers).
  */
 export function upsertTranscriptStage1(t: {
   recording_id: string
@@ -2356,17 +2409,36 @@ export function upsertTranscriptStage1(t: {
   word_count?: number
   transcription_provider: string
   transcription_model?: string
+  turns?: Turn[]
 }): void {
+  // Diarization columns (spec §6.3) are additive and written ONLY when the
+  // provider supplies turns. Whisper/Gemini (no turns) leave turns/speakers/
+  // sentiment NULL — exactly today's behavior. These are Stage-1 columns, so the
+  // ON CONFLICT update sets them alongside full_text and never touches the
+  // Stage-2 (analysis) columns.
+  let turnsJson: string | null = null
+  let speakersJson: string | null = null
+  let sentimentJson: string | null = null
+  if (t.turns) {
+    const { speakers, sentiment } = deriveSpeakerRosterSummary(t.turns)
+    turnsJson = JSON.stringify(t.turns)
+    speakersJson = JSON.stringify(speakers)
+    sentimentJson = JSON.stringify(sentiment)
+  }
+
   run(
     `INSERT INTO transcripts (id, recording_id, full_text, language, word_count,
-       transcription_provider, transcription_model)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+       transcription_provider, transcription_model, turns, speakers, sentiment)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(recording_id) DO UPDATE SET
        full_text = excluded.full_text,
        language = COALESCE(excluded.language, transcripts.language),
        word_count = excluded.word_count,
        transcription_provider = excluded.transcription_provider,
-       transcription_model = excluded.transcription_model`,
+       transcription_model = excluded.transcription_model,
+       turns = excluded.turns,
+       speakers = excluded.speakers,
+       sentiment = excluded.sentiment`,
     [
       `trans_${t.recording_id}`,
       t.recording_id,
@@ -2374,7 +2446,10 @@ export function upsertTranscriptStage1(t: {
       t.language ?? null,
       t.word_count ?? null,
       t.transcription_provider,
-      t.transcription_model ?? null
+      t.transcription_model ?? null,
+      turnsJson,
+      speakersJson,
+      sentimentJson
     ]
   )
 }

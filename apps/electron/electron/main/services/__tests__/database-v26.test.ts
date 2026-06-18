@@ -84,7 +84,8 @@ import {
   closeDatabase,
   queryAll,
   queryOne,
-  run
+  run,
+  upsertTranscriptStage1
 } from '../database'
 
 // ---------------------------------------------------------------------------
@@ -188,5 +189,145 @@ describe('schema v26 (speaker diarization)', () => {
     ).toBeTruthy()
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
     expect(ver?.version).toBe(26)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D2-T2: upsertTranscriptStage1 turns/speakers/sentiment persistence (AC1)
+// ---------------------------------------------------------------------------
+
+describe('upsertTranscriptStage1 — turns/speakers/sentiment (spec §6.3, AC1)', () => {
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('writes turns JSON, a distinct speakers roster, and a dominant-sentiment roster summary', () => {
+    insertTestRecording('rec_aa')
+    upsertTranscriptStage1({
+      recording_id: 'rec_aa',
+      full_text: 'Hi there. Yes hello. Good to see you.',
+      language: 'en',
+      word_count: 8,
+      transcription_provider: 'assemblyai',
+      transcription_model: 'universal-3-pro',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 1000, text: 'Hi there.', sentiment: 'POSITIVE' },
+        { speaker: 'B', startMs: 1000, endMs: 2000, text: 'Yes hello.', sentiment: 'NEUTRAL' },
+        // A has two turns; POSITIVE is the majority -> dominant POSITIVE
+        { speaker: 'A', startMs: 2000, endMs: 3000, text: 'Good to see you.', sentiment: 'POSITIVE' }
+      ]
+    })
+
+    const row = queryOne<{ turns: string; speakers: string; sentiment: string }>(
+      "SELECT turns, speakers, sentiment FROM transcripts WHERE recording_id='rec_aa'"
+    )
+    expect(row).toBeDefined()
+
+    const turns = JSON.parse(row!.turns)
+    expect(turns).toHaveLength(3)
+    expect(turns[0]).toMatchObject({ speaker: 'A', startMs: 0, endMs: 1000, text: 'Hi there.', sentiment: 'POSITIVE' })
+
+    const speakers = JSON.parse(row!.speakers)
+    expect(speakers).toEqual(['A', 'B']) // distinct roster, first-seen order
+
+    const sentiment = JSON.parse(row!.sentiment)
+    expect(sentiment).toEqual({ A: 'POSITIVE', B: 'NEUTRAL' }) // dominant per label
+  })
+
+  it('writes empty roster + {} sentiment when turns carry no sentiment field', () => {
+    insertTestRecording('rec_bb')
+    upsertTranscriptStage1({
+      recording_id: 'rec_bb',
+      full_text: 'one two three',
+      language: 'en',
+      word_count: 3,
+      transcription_provider: 'assemblyai',
+      transcription_model: 'universal-3-pro',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 500, text: 'one two' },
+        { speaker: 'B', startMs: 500, endMs: 1000, text: 'three' }
+      ]
+    })
+    const row = queryOne<{ speakers: string; sentiment: string }>(
+      "SELECT speakers, sentiment FROM transcripts WHERE recording_id='rec_bb'"
+    )
+    expect(JSON.parse(row!.speakers)).toEqual(['A', 'B'])
+    expect(JSON.parse(row!.sentiment)).toEqual({}) // no per-turn sentiment -> empty summary
+  })
+
+  it('breaks a sentiment tie deterministically: POSITIVE > NEUTRAL > NEGATIVE precedence', () => {
+    insertTestRecording('rec_tie')
+    upsertTranscriptStage1({
+      recording_id: 'rec_tie',
+      full_text: 'a b',
+      transcription_provider: 'assemblyai',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 1, text: 'a', sentiment: 'POSITIVE' },
+        { speaker: 'A', startMs: 1, endMs: 2, text: 'b', sentiment: 'NEGATIVE' }
+      ]
+    })
+    const row = queryOne<{ sentiment: string }>(
+      "SELECT sentiment FROM transcripts WHERE recording_id='rec_tie'"
+    )
+    // 1 POSITIVE vs 1 NEGATIVE -> POSITIVE wins (POSITIVE > NEUTRAL > NEGATIVE precedence)
+    expect(JSON.parse(row!.sentiment)).toEqual({ A: 'POSITIVE' })
+  })
+
+  it('REGRESSION: a provider with no turns leaves turns/speakers/sentiment NULL (Whisper/Gemini path)', () => {
+    insertTestRecording('rec_legacy')
+    upsertTranscriptStage1({
+      recording_id: 'rec_legacy',
+      full_text: 'plain whisper transcript',
+      language: 'en',
+      word_count: 3,
+      transcription_provider: 'openai-whisper',
+      transcription_model: 'whisper-1'
+      // no turns
+    })
+    const row = queryOne<{ turns: string | null; speakers: string | null; sentiment: string | null }>(
+      "SELECT turns, speakers, sentiment FROM transcripts WHERE recording_id='rec_legacy'"
+    )
+    expect(row!.turns).toBeNull()
+    expect(row!.speakers).toBeNull()
+    expect(row!.sentiment).toBeNull()
+  })
+
+  it('never clobbers Stage-2 columns on a Stage-1 re-run with turns', () => {
+    insertTestRecording('rec_s2safe')
+    upsertTranscriptStage1({
+      recording_id: 'rec_s2safe',
+      full_text: 'v1',
+      transcription_provider: 'assemblyai',
+      turns: [{ speaker: 'A', startMs: 0, endMs: 1, text: 'v1' }]
+    })
+    // Simulate Stage 2 having completed:
+    run(`UPDATE transcripts SET summary='S', summarization_provider='ollama-cloud' WHERE recording_id='rec_s2safe'`)
+    // Re-run Stage 1 (e.g. re-transcribe) with different turns:
+    upsertTranscriptStage1({
+      recording_id: 'rec_s2safe',
+      full_text: 'v2',
+      transcription_provider: 'assemblyai',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 1, text: 'v2a' },
+        { speaker: 'B', startMs: 1, endMs: 2, text: 'v2b' }
+      ]
+    })
+    const row = queryOne<{ full_text: string; summary: string; summarization_provider: string; speakers: string }>(
+      "SELECT full_text, summary, summarization_provider, speakers FROM transcripts WHERE recording_id='rec_s2safe'"
+    )
+    expect(row!.full_text).toBe('v2')                         // Stage-1 columns updated
+    expect(JSON.parse(row!.speakers)).toEqual(['A', 'B'])     // roster recomputed
+    expect(row!.summary).toBe('S')                            // Stage-2 untouched
+    expect(row!.summarization_provider).toBe('ollama-cloud')  // marker untouched
   })
 })
