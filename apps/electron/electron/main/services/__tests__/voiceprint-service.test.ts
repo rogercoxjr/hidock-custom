@@ -26,21 +26,41 @@
  * factory captures args via the hoisted `shared` object so each test can assert
  * the exact ffmpeg invocation without spawning a real process.
  *
+ * D4-T5 addition: `captureVoiceprint` is the full orchestrator. The sherpa
+ * extractor is stubbed via `Module._load` (same pattern as test 1). The DB
+ * helpers (`getRecordingById`, `getTranscriptByRecordingId`, `insertVoiceprint`)
+ * are stubbed via `vi.mock('../database')`. AC4 covers all five outcomes:
+ * (a) ≥10s clean → one voiceprints row; (b) <10s → skip; (c) decode failure →
+ * skip; (d) sherpa unavailable → skip; (e) file_path null → skip. The
+ * `pcmToFloat32` helper is tested directly for slice ranges + s16le→Float32
+ * normalisation.
+ *
  * @vitest-environment node
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
 import Module from 'module'
-import { collectCleanSpeechMs, MIN_CLEAN_SPEECH_MS, decodeRecordingPcm16k } from '../voiceprint-service'
+import {
+  collectCleanSpeechMs,
+  MIN_CLEAN_SPEECH_MS,
+  decodeRecordingPcm16k,
+  pcmToFloat32,
+  VOICEPRINT_MODEL_ID,
+} from '../voiceprint-service'
+import * as db from '../database'
 import type { Turn } from '../asr/asr-provider'
 
 // ---------------------------------------------------------------------------
 // Shared state for child_process mock (vi.hoisted so the factory can close
 // over it before any imports are resolved).
+// D4-T5: also holds sherpa extractor stub state (extractorDim, computeResult).
 // ---------------------------------------------------------------------------
 const shared = vi.hoisted(() => ({
   execFileReject: null as null | { message: string; stderr: string },
   pcmStdout: Buffer.alloc(0) as Buffer,
   capturedArgs: [] as string[],
+  // D4-T5 extractor stub state — mutated by beforeEach
+  extractorDim: 256,
+  computeResult: new Float32Array(256).fill(0.5),
 }))
 
 vi.mock('child_process', () => {
@@ -79,6 +99,28 @@ vi.mock('child_process', () => {
 
 vi.mock('../asr/audio-normalize', () => ({
   resolveFfmpegPath: vi.fn(() => '/fake/ffmpeg'),
+}))
+
+// ---------------------------------------------------------------------------
+// D4-T5: DB mock — vi.mock intercepts ESM imports so getRecordingById,
+// getTranscriptByRecordingId, and insertVoiceprint are all vi.fn()s.
+// ---------------------------------------------------------------------------
+vi.mock('../database', () => ({
+  getRecordingById: vi.fn(),
+  getTranscriptByRecordingId: vi.fn(),
+  insertVoiceprint: vi.fn(),
+}))
+
+// ---------------------------------------------------------------------------
+// D4-T5: electron mock — app is not available outside the real Electron main
+// process. Stub it so getExtractor()'s model-path computation doesn't crash.
+// The stub SpeakerEmbeddingExtractor (in Module._load) ignores the model path.
+// ---------------------------------------------------------------------------
+vi.mock('electron', () => ({
+  app: {
+    isPackaged: false,
+    getAppPath: () => '/fake/app',
+  },
 }))
 
 type LoadFn = (request: string, ...rest: unknown[]) => unknown
@@ -186,5 +228,209 @@ describe('decodeRecordingPcm16k() — whole-file PCM decode (§6.7 step 3)', () 
     shared.execFileReject = { message: 'stdout maxBuffer exceeded', stderr: 'bad input' }
     await expect(decodeRecordingPcm16k('/recordings/huge.hda')).rejects.toThrow(/pcm decode failed/i)
     await expect(decodeRecordingPcm16k('/recordings/huge.hda')).rejects.toThrow(/bad input/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D4-T5: pcmToFloat32 — slice / normalise unit tests (AC4-e)
+// ---------------------------------------------------------------------------
+describe('pcmToFloat32() — s16le slice + normalise (AC4-e)', () => {
+  // Build a PCM buffer: 4 samples at 16 kHz mono = 4 * 2 = 8 bytes.
+  // Each s16le sample is stored as a pair of bytes (little-endian).
+  // Sample values: 0, 16384 (0.5 after /32768), -32768 (-1.0), 32767 (~1.0)
+  //   bytes: [0,0], [0,64], [0,128], [255,127]
+  const makePcm = () => {
+    const buf = Buffer.alloc(8)
+    buf.writeInt16LE(0, 0)
+    buf.writeInt16LE(16384, 2)
+    buf.writeInt16LE(-32768, 4)
+    buf.writeInt16LE(32767, 6)
+    return buf
+  }
+
+  it('8e-1. returns Float32Array with correct s16le→Float32 normalisation', () => {
+    // At 16000 samples/s: 1 ms = 16 samples = 32 bytes. Use ms=0..1 for first
+    // 2 samples, but since BYTES_PER_MS = 32, a 1ms window gives 32 bytes → 16
+    // samples. Our 8-byte PCM has only 4 samples total; use a turn spanning the
+    // whole buffer (0..250 ms rounds to 8000 bytes, clamped to pcm.length=8).
+    const pcm = makePcm()
+    const turns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 250, text: 'x' }]
+    const result = pcmToFloat32(pcm, turns, 'A')
+    expect(result).toBeInstanceOf(Float32Array)
+    expect(result.length).toBe(4)
+    // sample 0: 0 / 32768 = 0
+    expect(result[0]).toBeCloseTo(0, 5)
+    // sample 1: 16384 / 32768 = 0.5
+    expect(result[1]).toBeCloseTo(0.5, 4)
+    // sample 2: -32768 / 32768 = -1.0
+    expect(result[2]).toBeCloseTo(-1.0, 5)
+    // sample 3: 32767 / 32768 ≈ 0.99997
+    expect(result[3]).toBeCloseTo(32767 / 32768, 4)
+  })
+
+  it('8e-2. skips turns for other labels, only includes the target label', () => {
+    const pcm = makePcm()
+    const turns: Turn[] = [
+      { speaker: 'A', startMs: 0, endMs: 250, text: 'a' },
+      { speaker: 'B', startMs: 0, endMs: 250, text: 'b' },
+    ]
+    // Only 'A' turns included — same 4 samples as above
+    const resultA = pcmToFloat32(pcm, turns, 'A')
+    const resultB = pcmToFloat32(pcm, turns, 'B')
+    expect(resultA.length).toBe(4)
+    expect(resultB.length).toBe(4)
+    // Both have same bytes, different label filter — both grab the whole buffer
+    expect(resultA[1]).toBeCloseTo(0.5, 4)
+    expect(resultB[1]).toBeCloseTo(0.5, 4)
+  })
+
+  it('8e-3. byte offset calculation: startMs=0 endMs maps to correct byte range', () => {
+    // BYTES_PER_MS = 16000 * 2 / 1000 = 32. startMs=0 → byte 0; 1 sample = 2 bytes.
+    // A turn covering ms 0..0 (0 bytes) returns empty array.
+    const pcm = makePcm()
+    const turns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 0, text: 'x' }]
+    expect(pcmToFloat32(pcm, turns, 'A').length).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D4-T5: captureVoiceprint() — AC4 four outcomes (§6.7)
+//
+// Sherpa is stubbed via Module._load (same CJS bypass as test 1). The stub
+// reads `shared.extractorDim` + `shared.computeResult` so each test can vary
+// them. DB helpers are vi.fn()s from the vi.mock('../database') above.
+//
+// NOTE: test 8d (sherpa unavailable) uses vi.resetModules() + a separate
+// dynamic import to get a fresh module instance without the stub.
+// ---------------------------------------------------------------------------
+describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
+  type LoadFn8 = (request: string, ...rest: unknown[]) => unknown
+  const mod8 = Module as unknown as { _load: LoadFn8 }
+  let realLoad8: LoadFn8
+
+  // 12 s of 16 kHz s16le mono = 12000 * 32 bytes/ms = 384000 bytes
+  const TWELVE_SEC_PCM = Buffer.alloc(12000 * 32)
+
+  const longTurns: Turn[] = [
+    { speaker: 'A', startMs: 0, endMs: 12000, text: 'plenty' }, // 12 s clean ≥ 10 s
+  ]
+
+  beforeAll(() => {
+    // Install the sherpa stub for the whole suite (except 8d which resets modules).
+    realLoad8 = mod8._load
+    mod8._load = function (request: string, ...rest: unknown[]): unknown {
+      if (request === 'sherpa-onnx-node') {
+        const { extractorDim, computeResult } = shared
+        class SpeakerEmbeddingExtractor {
+          dim = extractorDim
+          createStream() {
+            return {}
+          }
+          acceptWaveform() {}
+          isReady() {
+            return true
+          }
+          compute() {
+            return computeResult
+          }
+        }
+        return { SpeakerEmbeddingExtractor }
+      }
+      return realLoad8.apply(this, [request, ...rest])
+    }
+    vi.resetModules()
+  })
+
+  afterAll(() => {
+    mod8._load = realLoad8
+    vi.resetModules()
+  })
+
+  beforeEach(() => {
+    vi.mocked(db.getRecordingById).mockReturnValue({ file_path: '/recordings/m.hda' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      turns: JSON.stringify(longTurns),
+    } as never)
+    vi.mocked(db.insertVoiceprint).mockReset()
+    shared.execFileReject = null
+    shared.pcmStdout = TWELVE_SEC_PCM
+    shared.extractorDim = 256
+    shared.computeResult = new Float32Array(256).fill(0.5)
+  })
+
+  it('8a. ≥10s clean speech → one voiceprints row with model_id + dim', async () => {
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(true)
+    expect(vi.mocked(db.insertVoiceprint)).toHaveBeenCalledTimes(1)
+    const row = vi.mocked(db.insertVoiceprint).mock.calls[0][0]
+    expect(row.contact_id).toBe('c_1')
+    expect(row.model_id).toBe(VOICEPRINT_MODEL_ID)
+    expect(row.dim).toBe(256)
+    expect(row.embedding).toBeInstanceOf(Uint8Array)
+  })
+
+  it('8b. <10s clean speech → mapping kept, NO voiceprint, no throw', async () => {
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      turns: JSON.stringify([{ speaker: 'A', startMs: 0, endMs: 3000, text: 'short' }]),
+    } as never)
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(false)
+    expect(res.reason).toMatch(/clean speech/i)
+    expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
+  })
+
+  it('8c. ffmpeg decode failure → mapping kept, NO voiceprint, no throw', async () => {
+    shared.execFileReject = { message: 'exit 1', stderr: 'bad' }
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(false)
+    expect(res.reason).toMatch(/decode/i)
+    expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
+  })
+
+  it('8d. sherpa unavailable → no-op, no throw', async () => {
+    // This test loads a fresh module instance WITHOUT the stub so sherpa.require()
+    // hits a real "Cannot find module" and the service degrades gracefully.
+    mod8._load = realLoad8 // temporarily remove stub
+    vi.resetModules()
+    try {
+      const mod = await import('../voiceprint-service')
+      const res = await mod.captureVoiceprint('rec_1', 'A', 'c_1')
+      expect(res.captured).toBe(false)
+      expect(res.reason).toMatch(/unavailable/i)
+    } finally {
+      // Restore stub for subsequent tests (8e)
+      mod8._load = function (request: string, ...rest: unknown[]): unknown {
+        if (request === 'sherpa-onnx-node') {
+          const { extractorDim, computeResult } = shared
+          class SpeakerEmbeddingExtractor {
+            dim = extractorDim
+            createStream() {
+              return {}
+            }
+            acceptWaveform() {}
+            isReady() {
+              return true
+            }
+            compute() {
+              return computeResult
+            }
+          }
+          return { SpeakerEmbeddingExtractor }
+        }
+        return realLoad8.apply(this, [request, ...rest])
+      }
+      vi.resetModules()
+    }
+  })
+
+  it('8e. audio file not downloaded (file_path null) → no-op, no throw', async () => {
+    vi.mocked(db.getRecordingById).mockReturnValue({ file_path: null } as never)
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(false)
+    expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
   })
 })

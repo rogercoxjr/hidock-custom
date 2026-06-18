@@ -13,7 +13,11 @@
  */
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { randomUUID } from 'crypto'
+import { join } from 'path'
+import { app } from 'electron'
 import { resolveFfmpegPath } from './asr/audio-normalize'
+import { getRecordingById, getTranscriptByRecordingId, insertVoiceprint } from './database'
 import type { Turn } from './asr/asr-provider'
 
 // promisify(execFile) — same primitive as the sibling ffmpeg service
@@ -134,4 +138,124 @@ export function collectCleanSpeechMs(turns: Turn[], label: string): number {
     for (const [s, e] of segments) cleanMs += e - s
   }
   return cleanMs
+}
+
+// ---------------------------------------------------------------------------
+// D4-T5: captureVoiceprint orchestrator (§6.7, AC4)
+// ---------------------------------------------------------------------------
+
+export interface CaptureResult {
+  captured: boolean
+  reason?: string
+}
+
+// Lazy-init the extractor on first captureVoiceprint call (§6.7). null until
+// first capture; ctor can throw on bad/missing model — degrades to "unavailable".
+type SherpaExtractor = InstanceType<SherpaModule['SpeakerEmbeddingExtractor']>
+let extractor: SherpaExtractor | null = null
+
+function getExtractor(): SherpaExtractor | null {
+  if (!sherpa) return null
+  if (extractor) return extractor
+  try {
+    const modelPath = app.isPackaged
+      ? join(process.resourcesPath, 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
+      : join(app.getAppPath(), 'resources', 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
+    extractor = new sherpa.SpeakerEmbeddingExtractor({ model: modelPath, numThreads: 1, debug: false })
+    return extractor
+  } catch (e) {
+    console.warn(`[Voiceprint] extractor init failed — capture disabled: ${(e as Error).message}`)
+    return null
+  }
+}
+
+/** Convert 16 kHz s16le mono PCM bytes to a Float32Array of the label's
+ *  clean turn samples (32 bytes/ms = 16000 Hz × 2 bytes). Exported for tests. */
+export function pcmToFloat32(pcm: Buffer, turns: Turn[], label: string): Float32Array {
+  const BYTES_PER_MS = 32 // 16000 samples/s × 2 bytes/sample ÷ 1000 ms/s
+  const out: number[] = []
+  for (const t of turns) {
+    if (t.speaker !== label) continue
+    const start = Math.max(0, Math.floor(t.startMs * BYTES_PER_MS))
+    const end = Math.min(pcm.length, Math.floor(t.endMs * BYTES_PER_MS))
+    for (let i = start; i + 1 < end; i += 2) {
+      out.push(pcm.readInt16LE(i) / 32768)
+    }
+  }
+  return Float32Array.from(out)
+}
+
+/** Float32 embedding → little-endian byte BLOB (4 bytes/element). */
+function embeddingToBlob(vec: Float32Array): Uint8Array {
+  return new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength)
+}
+
+/**
+ * Capture-only voiceprint hook (§6.7, AC4). Fired by the speakers:assign IPC
+ * after the recording_speakers row is written. NEVER throws — every failure
+ * mode returns { captured: false, reason } so the speaker mapping always succeeds.
+ *
+ * Outcomes (AC4):
+ *   (a) ≥10 s clean speech + sherpa available → one voiceprints row stored.
+ *   (b) <10 s clean speech → skip (reason: 'insufficient clean speech').
+ *   (c) ffmpeg decode failure → skip (reason: 'decode failed: …').
+ *   (d) sherpa unavailable → skip (reason: 'voiceprint unavailable').
+ *   (e) file_path null/missing → skip (reason: 'audio file not downloaded').
+ */
+export async function captureVoiceprint(
+  recordingId: string,
+  fileLabel: string,
+  contactId: string,
+): Promise<CaptureResult> {
+  const ext = getExtractor()
+  if (!ext) return { captured: false, reason: 'voiceprint unavailable' }
+
+  const recording = getRecordingById(recordingId)
+  if (!recording?.file_path) return { captured: false, reason: 'audio file not downloaded' }
+
+  const transcript = getTranscriptByRecordingId(recordingId)
+  let turns: Turn[] = []
+  try {
+    turns = transcript?.turns ? (JSON.parse(transcript.turns) as Turn[]) : []
+  } catch {
+    turns = []
+  }
+
+  const cleanMs = collectCleanSpeechMs(turns, fileLabel)
+  if (cleanMs < MIN_CLEAN_SPEECH_MS) {
+    return {
+      captured: false,
+      reason: `insufficient clean speech (${cleanMs} ms < ${MIN_CLEAN_SPEECH_MS} ms)`,
+    }
+  }
+
+  let pcm: Buffer
+  try {
+    pcm = await decodeRecordingPcm16k(recording.file_path)
+  } catch (e) {
+    console.warn(`[Voiceprint] decode failed for recording ${recordingId}: ${(e as Error).message}`)
+    return { captured: false, reason: `decode failed: ${(e as Error).message}` }
+  }
+
+  const samples = pcmToFloat32(pcm, turns, fileLabel)
+  if (samples.length === 0) return { captured: false, reason: 'no usable samples after slicing' }
+
+  try {
+    const stream = ext.createStream()
+    ext.acceptWaveform(stream, { sampleRate: 16000, samples })
+    if (!ext.isReady(stream)) return { captured: false, reason: 'extractor not ready' }
+    const embedding = ext.compute(stream)
+
+    insertVoiceprint({
+      id: `vp_${randomUUID()}`,
+      contact_id: contactId,
+      model_id: VOICEPRINT_MODEL_ID,
+      dim: ext.dim,
+      embedding: embeddingToBlob(embedding),
+    })
+    return { captured: true }
+  } catch (e) {
+    console.warn(`[Voiceprint] embedding failed for recording ${recordingId}: ${(e as Error).message}`)
+    return { captured: false, reason: `embedding failed: ${(e as Error).message}` }
+  }
 }
