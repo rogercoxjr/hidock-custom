@@ -13,6 +13,10 @@
 > 2. **AssemblyAI timestamps are MILLISECONDS, not seconds.** `utterances[].start/end` and `words[].start/end` are already ms (confirmed: a ~5 s clip's only utterance ended at `1486`). The provider **passes them through** (rounds only); it does **NOT** multiply by 1000. Every "seconds → ms ×1000" note below is **superseded**.
 > 3. **The PCM decode muxer is `-f s16le`, not `-f pcm_s16le`.** `pcm_s16le` is the codec name; `-f pcm_s16le` errors "Requested output format is not known". Every `-f pcm_s16le` below is **superseded** by `-f s16le`.
 
+> **Rev 5 (2026-06-18 — live-run findings, authoritative over anything below):**
+> 1. **`sentiment_analysis` DROPPED.** A live run confirmed the field bills +$0.02/hr but its result is returned in a separate top-level `sentiment_analysis_results` array (NOT on each utterance), which the provider never read — 0/76 turns had sentiment, roster `sentiment` column was `{}`. Per user decision the flag is **no longer sent**; the `transcripts.sentiment` column stays `{}` for now. Every `sentiment_analysis`/per-turn-sentiment mention below is **superseded** (if revisited, read `sentiment_analysis_results`, never `utterance.sentiment`).
+> 2. **Forced re-transcribe routing fix.** `queueTranscription({force})` now routes through the `recordings:transcribe` IPC (clears stage markers + drops speaker mappings before enqueue); the bare `recordings:addToQueue` path it used before skipped the clear → the worker short-circuited and re-transcribe was a silent no-op (AC6). Validated live.
+
 > **Relationship to the auto-pipeline spec (`2026-06-11-auto-pipeline-model-choice-design.md`):** this design **adds AssemblyAI as a selectable ASR provider** and makes it the user's chosen ASR, reusing the two-stage worker (AP-§5.3), queue hardening (AP-§5.7), per-stage key checks, failure taxonomy + parking (AP-§7), the **100-file auto-sync cap + large-manual-sync confirmation** (AP-§5.5 / AP-AC10), and the config-encryption recipe (AP-§5.4) **unchanged**. Whisper/Gemini remain selectable fallbacks behind the existing `AsrProvider` interface. Section references prefixed "AP-" point at that spec.
 
 ## 1. User decisions (locked during brainstorming)
@@ -86,7 +90,8 @@ One async job per recording:
      "speech_models": ["universal-3-pro", "universal-2"],  // PLURAL ARRAY; never singular speech_model
      // NO model_region — the live API rejects it (Rev 4); account default region applies
      "speaker_labels": true,              // +$0.02/hr — diarized utterances + per-word speaker
-     "sentiment_analysis": true,          // +$0.02/hr — per-utterance sentiment
+     // sentiment_analysis DROPPED (Rev 5, 2026-06-18): billed +$0.02/hr but its result is
+     // in a separate sentiment_analysis_results array (NOT on utterances) we never consumed.
      "keyterms_prompt": ["<contact/company/project names, capped 1000 / ≤6 words>"],  // FREE; NOT word_boost
      "language_code": "en"
    }

@@ -100,11 +100,14 @@ export function createAssemblyAiAsr(config: AppConfig): AsrProvider {
       // 2. Submit. speech_models PLURAL; keyterms_prompt (NOT word_boost).
       // NO model_region — the live API rejects it (400 "Invalid endpoint schema",
       // confirmed by probe 2026-06-18); the account's default region applies.
+      // NO sentiment_analysis — it bills +$0.02/hr but its result comes back in a
+      // separate `sentiment_analysis_results` array (NOT on each utterance), which we
+      // never consumed; dropped per 2026-06-18 decision. If sentiment is revisited,
+      // read sentiment_analysis_results — do NOT expect it on utterances.
       const submitBody = {
         audio_url: upload_url,
         speech_models: speechModels,
         speaker_labels: true,
-        sentiment_analysis: true,
         keyterms_prompt: buildKeyterms(opts.meetingContext),
         language_code: languageCode
       }

@@ -125,7 +125,7 @@ describe('createAssemblyAiAsr — happy path', () => {
     expect(result.turns![1].sentiment).toBe('NEUTRAL')
   })
 
-  it('submit body uses speech_models ARRAY incl. universal-3-pro, labels+sentiment, language_code; NEVER singular speech_model, word_boost, or model_region (AC8)', async () => {
+  it('submit body uses speech_models ARRAY incl. universal-3-pro, speaker_labels, language_code; NEVER singular speech_model, word_boost, model_region, or sentiment_analysis (AC8)', async () => {
     const asr = createAssemblyAiAsr(aaiConfig())
     await runWithPoll(asr.transcribe('/recordings/a.hda', { meetingContext: 'Acme Corp; Project Phoenix' }))
 
@@ -142,13 +142,15 @@ describe('createAssemblyAiAsr — happy path', () => {
     expect(Array.isArray(body.speech_models)).toBe(true)
     expect(body.speech_models).toEqual(['universal-3-pro', 'universal-2'])
     expect(body.speaker_labels).toBe(true)
-    expect(body.sentiment_analysis).toBe(true)
     expect(body.language_code).toBe('en')
     // forbidden keys — singular speech_model (deprecated), word_boost (silent downgrade),
-    // and model_region (live API rejects it: 400 "Invalid endpoint schema" — AC8).
+    // model_region (live API rejects it: 400 "Invalid endpoint schema"), and
+    // sentiment_analysis (billed +$0.02/hr but the result lives in a separate
+    // sentiment_analysis_results array we never read — dropped per 2026-06-18 decision).
     expect(body).not.toHaveProperty('speech_model')
     expect(body).not.toHaveProperty('word_boost')
     expect(body).not.toHaveProperty('model_region')
+    expect(body).not.toHaveProperty('sentiment_analysis')
   })
 
   it('builds keyterms_prompt from meetingContext (NOT word_boost)', async () => {
