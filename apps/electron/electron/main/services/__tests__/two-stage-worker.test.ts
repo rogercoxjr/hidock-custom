@@ -703,6 +703,44 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     expect(analysisInput).toContain('Speaker B: agreed')
     expect(shared.audioCalls).toBe(0) // Stage-2-only resume (full_text already present)
   })
+
+  // -------------------------------------------------------------------------
+  // D5-T4 (spec §6.8 / AC3/AC6): re-transcribe drops prior recording_speakers;
+  // resummarize (Stage-2-only) keeps them.
+  // -------------------------------------------------------------------------
+
+  it('re-transcribe (Stage-1 run) DROPS prior recording_speakers; resummarize (Stage-2-only) KEEPS them (spec §6.8 / AC3/AC6)', async () => {
+    const filePath = insertRecordingWithFile('recRT')
+    // First full run produces a transcript; then the user maps a speaker.
+    shared.audioResponse = 'FIRST PASS TEXT'
+    shared.textResponses = [validAnalysisJson('First')]
+    await transcribeManually('recRT')
+    run(
+      `INSERT INTO recording_speakers (recording_id, file_label, contact_id, source, created_at)
+       VALUES ('recRT', 'A', NULL, 'user', ?)`,
+      [new Date().toISOString()]
+    )
+    expect(queryAll("SELECT 1 FROM recording_speakers WHERE recording_id='recRT'").length).toBe(1)
+
+    // --- Resummarize (Stage-2-only): clear marker, re-run. Mappings MUST survive. ---
+    run("UPDATE transcripts SET summarization_provider=NULL WHERE recording_id='recRT'")
+    shared.textResponses = [validAnalysisJson('Second')]
+    await transcribeManually('recRT')
+    expect(queryAll("SELECT 1 FROM recording_speakers WHERE recording_id='recRT'").length)
+      .toBe(1) // resummarize keeps mappings
+
+    // --- Re-transcribe (Stage-1 run): force a fresh ASR by clearing full_text so
+    //     the worker takes the Stage-1 branch. Prior mappings MUST be dropped. ---
+    run("UPDATE transcripts SET full_text='', summarization_provider=NULL WHERE recording_id='recRT'")
+    fs.writeFileSync(filePath, Buffer.from('fresh-audio')) // ensure file exists for Stage 1
+    shared.audioResponse = 'RE-TRANSCRIBED TEXT'
+    shared.textResponses = [validAnalysisJson('Third')]
+    await transcribeManually('recRT')
+
+    expect(queryAll("SELECT 1 FROM recording_speakers WHERE recording_id='recRT'").length)
+      .toBe(0) // re-transcribe dropped prior mappings — no orphans
+    expect(getTranscriptByRecordingId('recRT')!.full_text).toBe('RE-TRANSCRIBED TEXT')
+  })
 })
 
 afterAll(() => {

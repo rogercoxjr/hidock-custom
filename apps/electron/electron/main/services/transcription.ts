@@ -26,7 +26,8 @@ import {
   releaseTranscriptionLock,
   clearStaleTranscriptionLock,
   resetStuckTranscriptions,
-  buildAttributedTranscript
+  buildAttributedTranscript,
+  deleteRecordingSpeakersForRecording
 } from './database'
 import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
@@ -463,6 +464,14 @@ async function transcribeRecording(
     }
 
     progressCallback?.('reading_file', 5) // spec-014: progress reporting
+
+    // D5 §6.8: a NEW ASR pass may re-letter speakers (AssemblyAI labels are
+    // per-job), so prior label->contact mappings no longer apply. Drop them
+    // here — at the START of Stage 1 — so AC3 holds (no orphaned rows) even if
+    // the ASR call later fails. Stage-2-only resumes/resummarize never reach
+    // this branch, so their mappings survive. Voiceprints are per-contact and
+    // are NOT dropped.
+    deleteRecordingSpeakersForRecording(recordingId)
 
     // Build meeting context for better transcription
     let meetingContext = ''
