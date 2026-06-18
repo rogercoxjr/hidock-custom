@@ -9,9 +9,12 @@
 import { useEffect, useRef, useMemo, useState } from 'react'
 import { TimeAnchor } from './TimeAnchor'
 import { ChevronDown, ChevronRight } from 'lucide-react'
+import type { Turn } from '../types/turns'
 
 interface TranscriptViewerProps {
   transcript: string
+  turns?: Turn[]
+  speakerNames?: Record<string, string>
   currentTimeMs?: number
   onSeek: (startMs: number, endMs?: number) => void
   showSummary?: boolean
@@ -124,8 +127,24 @@ function parseTranscriptSegments(transcript: string): TranscriptSegment[] {
   return segments
 }
 
+const SPEAKER_BADGE_CLASSES = [
+  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300'
+]
+
+function speakerBadgeClass(label: string): string {
+  let hash = 0
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0
+  return SPEAKER_BADGE_CLASSES[Math.abs(hash) % SPEAKER_BADGE_CLASSES.length]
+}
+
 export function TranscriptViewer({
   transcript,
+  turns,
+  speakerNames,
   currentTimeMs,
   onSeek,
   showSummary = true,
@@ -140,8 +159,20 @@ export function TranscriptViewer({
   const [actionItemsExpanded, setActionItemsExpanded] = useState(true)
   const [transcriptExpanded, setTranscriptExpanded] = useState(true)
 
-  // Parse transcript into segments
-  const segments = useMemo(() => parseTranscriptSegments(transcript), [transcript])
+  const hasStructuredTurns = !!turns && turns.length > 0
+
+  // Parse transcript into segments (structured turns take precedence)
+  const segments = useMemo(() => {
+    if (hasStructuredTurns) {
+      return turns!.map((t) => ({
+        startMs: t.startMs,
+        endMs: t.endMs,
+        text: t.text,
+        speaker: t.speaker
+      }))
+    }
+    return parseTranscriptSegments(transcript)
+  }, [hasStructuredTurns, turns, transcript])
 
   // Find current segment index based on currentTimeMs
   const currentSegmentIndex = useMemo(() => {
@@ -165,7 +196,7 @@ export function TranscriptViewer({
   }, [currentSegmentIndex])
 
   // If transcript has no timestamps, render as plain text
-  const hasTimestamps = segments.length > 1 || (segments.length === 1 && segments[0].startMs > 0)
+  const hasTimestamps = hasStructuredTurns || segments.length > 1 || (segments.length === 1 && segments[0].startMs > 0)
 
   return (
     <div className="space-y-4">
@@ -255,9 +286,15 @@ export function TranscriptViewer({
                         {null}
                       </TimeAnchor>
                       {segment.speaker && (
-                        <span className="font-semibold text-foreground">
-                          {segment.speaker}
-                        </span>
+                        hasStructuredTurns ? (
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${speakerBadgeClass(segment.speaker)}`}>
+                            {speakerNames?.[segment.speaker] ?? segment.speaker}
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-foreground">
+                            {segment.speaker}
+                          </span>
+                        )
                       )}
                     </div>
                     <p className="whitespace-pre-wrap leading-relaxed">{segment.text}</p>
