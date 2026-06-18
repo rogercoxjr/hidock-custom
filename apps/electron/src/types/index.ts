@@ -88,6 +88,7 @@ export interface Transcript {
   key_points: string | null // JSON string
   sentiment: string | null
   speakers: string | null // JSON string
+  turns?: string | null // JSON-serialized Turn[] (v26+; null for pre-diarization rows)
   word_count: number | null
   transcription_provider: string | null
   transcription_model: string | null

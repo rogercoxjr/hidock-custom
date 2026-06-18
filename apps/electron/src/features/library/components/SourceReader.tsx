@@ -132,7 +132,7 @@ export function SourceReader({
     ])
 
     let parsedTurns: Turn[] = []
-    const rawTurns = (freshTranscript as { turns?: string | null } | null | undefined)?.turns
+    const rawTurns = (freshTranscript as Transcript | null | undefined)?.turns
     if (rawTurns) {
       try { parsedTurns = JSON.parse(rawTurns) } catch { parsedTurns = [] }
     }
@@ -149,7 +149,7 @@ export function SourceReader({
 
   // Seed turns from the prop transcript immediately (so the panel renders before the
   // async fetch resolves), then fetch fresh turns + assignment names.
-  const transcriptTurns = (transcript as { turns?: string | null } | undefined)?.turns
+  const transcriptTurns = transcript?.turns
   useEffect(() => {
     let parsed: Turn[] = []
     if (transcriptTurns) {
