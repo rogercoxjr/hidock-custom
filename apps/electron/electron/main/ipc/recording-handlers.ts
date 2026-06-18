@@ -74,6 +74,10 @@ export function validateTranscriptionConfig(): {
   if (asrProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
     problems.push({ stage: 'asr', provider: 'gemini', problem: 'missing-key' })
   }
+  if (asrProvider === 'assemblyai' && !config.transcription.assemblyaiApiKey?.trim()) {
+    // Loud preflight (spec §6.2/§8/AC9): blocks queueing; NEVER substitutes gemini/whisper.
+    problems.push({ stage: 'asr', provider: 'assemblyai', problem: 'missing-key' })
+  }
   // Summarization stage: reads config.summarization.provider (added in P3).
   const sumProvider = config.summarization?.provider ?? 'gemini'
   if (sumProvider === 'gemini' && !config.transcription.geminiApiKey.trim()) {
@@ -361,7 +365,7 @@ export function registerRecordingHandlers(): void {
   // CONSTRUCTION — their error messages match none of the provider markers.
   ipcMain.handle('transcription:retryAll', async (): Promise<{ success: boolean; count: number }> => {
     try {
-      const count = rependFailedItems(['OpenAI', 'Ollama Cloud', 'Gemini API key'])
+      const count = rependFailedItems(['OpenAI', 'Ollama Cloud', 'Gemini API key', 'AssemblyAI'])
       if (count > 0) {
         void processQueueManually()
       }

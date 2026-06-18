@@ -121,6 +121,7 @@ async function processQueue(): Promise<void> {
       'Recording file not found',
       'Gemini API key not configured',
       'OpenAI API key not configured',
+      'AssemblyAI API key not configured',
       'Ollama Cloud API key not configured',
       'Not enough disk space',
       'API key was rejected',

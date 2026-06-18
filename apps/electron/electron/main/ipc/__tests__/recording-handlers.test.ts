@@ -920,6 +920,59 @@ describe('Recording IPC Handlers', () => {
       expect(updateRecordingTranscriptionStatus).toHaveBeenCalledWith('rec-1', 'queued')
       expect(result).toBe('queue-item-id')
     })
+
+    // Speaker-diarization D1 §6.2/§8/AC9: provider 'assemblyai' with no key must
+    // block queueing (loud, no silent fallback to gemini/whisper).
+    it('should reject an assemblyai provider with no AssemblyAI key (AC9 loud fail)', async () => {
+      const { getConfig } = await import('../../services/config')
+      const { addToQueue: addToQueueDb } = await import('../../services/database')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'assemblyai',
+          geminiApiKey: 'gemini-present', // present but irrelevant — must NOT be used as a fallback
+          openaiApiKey: '',
+          assemblyaiApiKey: '', // missing → must block
+          assemblyaiModels: ['universal-3-pro', 'universal-2'],
+          geminiModel: 'm',
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'en'
+        },
+        summarization: { provider: 'ollama-cloud', ollamaCloudApiKey: 'ok', ollamaCloudModel: 'm' }
+      } as never)
+
+      const result = await handlers['recordings:addToQueue']({}, 'rec-1')
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Transcription API key not configured. Please add your API key in Settings.'
+      })
+      expect(addToQueueDb).not.toHaveBeenCalled()
+    })
+
+    it('should queue an assemblyai provider WITH a key', async () => {
+      const { getConfig } = await import('../../services/config')
+      const { addToQueue: addToQueueDb } = await import('../../services/database')
+      vi.mocked(addToQueueDb).mockReturnValue('queue-item-id')
+      vi.mocked(getConfig).mockReturnValue({
+        transcription: {
+          provider: 'assemblyai',
+          geminiApiKey: '',
+          openaiApiKey: '',
+          assemblyaiApiKey: 'aai-key',
+          assemblyaiModels: ['universal-3-pro', 'universal-2'],
+          geminiModel: 'm',
+          whisperModel: 'whisper-1',
+          autoTranscribe: true,
+          language: 'en'
+        },
+        summarization: { provider: 'ollama-cloud', ollamaCloudApiKey: 'ok', ollamaCloudModel: 'm' }
+      } as never)
+
+      const result = await handlers['recordings:addToQueue']({}, 'rec-2')
+      expect(result).toBe('queue-item-id')
+      expect(addToQueueDb).toHaveBeenCalledWith('rec-2')
+    })
   })
 
   describe('recordings:processQueue', () => {
@@ -1147,7 +1200,7 @@ describe('Recording IPC Handlers', () => {
 
       const result = await handlers['transcription:retryAll'](null)
 
-      expect(rependFailedItems).toHaveBeenCalledWith(['OpenAI', 'Ollama Cloud', 'Gemini API key'])
+      expect(rependFailedItems).toHaveBeenCalledWith(['OpenAI', 'Ollama Cloud', 'Gemini API key', 'AssemblyAI'])
       expect(processQueueManually).toHaveBeenCalled()
       expect(result).toEqual({ success: true, count: 3 })
     })
