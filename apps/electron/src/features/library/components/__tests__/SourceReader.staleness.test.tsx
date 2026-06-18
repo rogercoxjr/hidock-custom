@@ -8,8 +8,9 @@
  *  (d) no unhandled rejection when the IPC is absent or rejects.
  */
 
+import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { SourceReader } from '../SourceReader'
 import type { UnifiedRecording } from '@/types/unified-recording'
 import type { Transcript } from '@/types'
@@ -199,6 +200,87 @@ describe('SourceReader staleness badge (spec §6.6 / AC5)', () => {
     render(<SourceReader recording={recording} transcript={undefined} onResummarize={vi.fn()} />)
     await waitFor(() => {}, { timeout: 50 })
     expect(isSummaryStale).not.toHaveBeenCalled()
+  })
+
+  // Dedup: when the staleness badge is visible, exactly ONE re-summarize control
+  // renders (the badge's contextual button). The plain header button is suppressed.
+  it('renders exactly one Re-summarize control while the badge is visible', async () => {
+    isSummaryStale.mockResolvedValue(true)
+    render(<SourceReader recording={recording} transcript={transcript} onResummarize={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText(STALE_MSG)).toBeInTheDocument())
+    expect(screen.getAllByRole('button', { name: /re-summarize/i })).toHaveLength(1)
+  })
+
+  // When NOT stale, the single plain header Re-summarize button still renders
+  // (regression guard against the dedup hiding it unconditionally).
+  it('renders the plain Re-summarize button when the summary is fresh', async () => {
+    isSummaryStale.mockResolvedValue(false)
+    render(<SourceReader recording={recording} transcript={transcript} onResummarize={vi.fn()} />)
+    await waitFor(() => expect(isSummaryStale).toHaveBeenCalled())
+    expect(screen.getAllByRole('button', { name: /re-summarize/i })).toHaveLength(1)
+  })
+
+})
+
+// ---------------------------------------------------------------------------
+// Live clear path: clicking the badge's actual Re-summarize button runs the
+// Library-style handler (resummarize IPC -> refetch transcript -> update prop),
+// which re-runs the staleness effect and clears the badge. This exercises the
+// REAL button click + refetch, not just a manual parent rerender.
+// ---------------------------------------------------------------------------
+describe('SourceReader staleness badge — live clear via real button click', () => {
+
+  it('clears the badge after clicking Re-summarize (IPC resummarize + refetch)', async () => {
+    // First probe (mount) → stale; after refetch the second probe → fresh.
+    isSummaryStale.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+
+    const resummarize = vi.fn().mockResolvedValue({ success: true })
+    const freshTranscript: Transcript = { ...transcript, created_at: '2026-06-17T11:00:00Z' }
+    const getByRecordingId = vi.fn().mockResolvedValue(freshTranscript)
+
+    Object.defineProperty(window, 'electronAPI', {
+      value: makeElectronAPI({ resummarize }),
+      writable: true,
+      configurable: true,
+    })
+    ;(window.electronAPI as unknown as {
+      transcripts: { getByRecordingId: typeof getByRecordingId }
+    }).transcripts.getByRecordingId = getByRecordingId
+
+    // Harness mirroring Library.tsx's onResummarize: call resummarize, then on
+    // success refetch the transcript and swap the prop reference.
+    function Harness() {
+      const [tx, setTx] = useState<Transcript>(transcript)
+      return (
+        <SourceReader
+          recording={recording}
+          transcript={tx}
+          onResummarize={() => {
+            window.electronAPI.recordings
+              .resummarize(recording.id)
+              .then(async (r: { success: boolean }) => {
+                if (!r.success) return
+                const updated = await window.electronAPI.transcripts.getByRecordingId(recording.id)
+                if (updated) setTx(updated as Transcript)
+              })
+          }}
+        />
+      )
+    }
+
+    render(<Harness />)
+
+    // Badge appears (first probe → stale).
+    await waitFor(() => expect(screen.getByText(STALE_MSG)).toBeInTheDocument())
+
+    // Click the badge's actual Re-summarize button.
+    fireEvent.click(screen.getByRole('button', { name: /re-summarize/i }))
+
+    // IPC + refetch ran, prop swapped, effect re-ran → second probe false → badge clears.
+    await waitFor(() => expect(screen.queryByText(STALE_MSG)).not.toBeInTheDocument())
+    expect(resummarize).toHaveBeenCalledWith('rec-1')
+    expect(getByRecordingId).toHaveBeenCalledWith('rec-1')
+    expect(isSummaryStale).toHaveBeenCalledTimes(2)
   })
 
 })

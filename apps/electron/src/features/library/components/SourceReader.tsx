@@ -571,8 +571,10 @@ export function SourceReader({
           </Button>
         )}
 
-        {/* Re-summarize - any recording with a transcript (spec §5.6: healthy + failed) */}
-        {transcript?.full_text && onResummarize && (
+        {/* Re-summarize - any recording with a transcript (spec §5.6: healthy + failed).
+            Suppressed when the staleness badge is visible (D5-T3): the badge's
+            contextual Re-summarize button is the single affordance in that state. */}
+        {transcript?.full_text && onResummarize && !summaryStale && (
           <Button
             variant="outline"
             size="sm"

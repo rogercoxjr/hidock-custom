@@ -1132,11 +1132,27 @@ export function Library() {
                 if (selectedRecording) queueTranscription(selectedRecording)
               }}
               onResummarize={() => {
-                if (selectedRecording) {
-                  window.electronAPI.recordings.resummarize(selectedRecording.id).then((r) => {
-                    if (!r.success) toast.error('Re-summarize failed', r.error)
+                if (!selectedRecording) return
+                const recId = selectedRecording.id
+                window.electronAPI.recordings
+                  .resummarize(recId)
+                  .then(async (r) => {
+                    if (!r.success) {
+                      toast.error('Re-summarize failed', r.error)
+                      return
+                    }
+                    // Refetch the transcript so the `transcript` prop reference
+                    // changes; this re-runs SourceReader's staleness effect and
+                    // clears the "generic speaker labels" badge once the summary
+                    // is re-stamped (D5-T3 live-clear path).
+                    const updated = await window.electronAPI.transcripts.getByRecordingId(recId)
+                    if (updated) {
+                      setTranscripts((prev) => new Map(prev).set(recId, updated))
+                    }
                   })
-                }
+                  .catch((err) => {
+                    toast.error('Re-summarize failed', err instanceof Error ? err.message : String(err))
+                  })
               }}
               onDelete={() => {
                 if (selectedRecording) handleDeleteCallback(selectedRecording)
