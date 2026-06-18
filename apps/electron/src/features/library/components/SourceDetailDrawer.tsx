@@ -504,7 +504,7 @@ export function SourceDetailDrawer({
                   </div>
                 )}
                 <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Transcribed</dt>
+                  <dt className="text-xs font-medium text-muted-foreground">Last processed</dt>
                   <dd className="mt-1">{formatDateTime(transcript.created_at)}</dd>
                 </div>
               </dl>
