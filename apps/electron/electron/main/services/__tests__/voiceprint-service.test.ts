@@ -16,16 +16,21 @@
  * all: the addon genuinely is not installed yet (it arrives in D4-T7), so a
  * fresh import of the service hits a real "Cannot find module" and degrades.
  *
- * D4-T4 addition: `decodeLabelPcm` uses an ESM `import { execFile }` so
- * `vi.mock('child_process')` DOES intercept it (unlike the CJS require above).
- * The mock factory captures args via the hoisted `shared` object so each test
- * can assert the exact ffmpeg invocation without spawning a real process.
+ * D4-T4 addition: `decodeRecordingPcm16k` uses an ESM `import { execFile }`
+ * wrapped in `promisify(execFile)` — the SAME primitive as the sibling ffmpeg
+ * service (audio-normalize.ts). `vi.mock('child_process')` DOES intercept it
+ * (unlike the CJS require above). The mock mirrors audio-normalize's callback
+ * `execFile`, and additionally attaches `util.promisify.custom` so
+ * `promisify(execFile)` resolves `{ stdout, stderr }` and rejects with an Error
+ * carrying the captured `.stderr` — exactly like Node's real execFile. The
+ * factory captures args via the hoisted `shared` object so each test can assert
+ * the exact ffmpeg invocation without spawning a real process.
  *
  * @vitest-environment node
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Module from 'module'
-import { collectCleanSpeechMs, MIN_CLEAN_SPEECH_MS, decodeLabelPcm } from '../voiceprint-service'
+import { collectCleanSpeechMs, MIN_CLEAN_SPEECH_MS, decodeRecordingPcm16k } from '../voiceprint-service'
 import type { Turn } from '../asr/asr-provider'
 
 // ---------------------------------------------------------------------------
@@ -39,6 +44,7 @@ const shared = vi.hoisted(() => ({
 }))
 
 vi.mock('child_process', () => {
+  // Callback-style execFile, mirroring audio-normalize.test.ts.
   const execFile = vi.fn((...args: unknown[]) => {
     const callback = args[args.length - 1] as (e: Error | null, stdout: Buffer, stderr: string) => void
     shared.capturedArgs = args[1] as string[]
@@ -52,6 +58,22 @@ vi.mock('child_process', () => {
     }
     return { pid: 1 }
   })
+  // Mirror Node's execFile[util.promisify.custom]: resolve { stdout, stderr } on
+  // success, reject with an Error carrying .stderr on failure. This lets the
+  // service keep promisify(execFile) (consistent with audio-normalize) while the
+  // test still drives both paths.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { promisify } = require('util') as typeof import('util')
+  ;(execFile as unknown as Record<symbol, unknown>)[promisify.custom] = (...args: unknown[]) => {
+    shared.capturedArgs = args[1] as string[]
+    if (shared.execFileReject) {
+      const err = Object.assign(new Error(shared.execFileReject!.message), {
+        stderr: shared.execFileReject!.stderr,
+      })
+      return Promise.reject(err)
+    }
+    return Promise.resolve({ stdout: shared.pcmStdout, stderr: '' })
+  }
   return { execFile }
 })
 
@@ -131,7 +153,7 @@ describe('collectCleanSpeechMs() — ≥10 s clean-speech gate (§6.7)', () => {
   })
 })
 
-describe('decodeLabelPcm() — distinct PCM invocation (§6.7 step 3)', () => {
+describe('decodeRecordingPcm16k() — whole-file PCM decode (§6.7 step 3)', () => {
   beforeEach(() => {
     shared.execFileReject = null
     shared.pcmStdout = Buffer.from([0, 1, 0, 2]) // 2 s16le samples (4 bytes)
@@ -139,7 +161,7 @@ describe('decodeLabelPcm() — distinct PCM invocation (§6.7 step 3)', () => {
   })
 
   it('6. decodes 16 kHz mono pcm_s16le to stdout (pipe:1), NOT mp3', async () => {
-    const buf = await decodeLabelPcm('/recordings/m.hda')
+    const buf = await decodeRecordingPcm16k('/recordings/m.hda')
     expect(shared.capturedArgs).toContain('-ar')
     expect(shared.capturedArgs).toContain('16000')
     expect(shared.capturedArgs).toContain('-ac')
@@ -154,6 +176,15 @@ describe('decodeLabelPcm() — distinct PCM invocation (§6.7 step 3)', () => {
 
   it('7. ffmpeg decode failure throws (caller skips enrollment, keeps mapping)', async () => {
     shared.execFileReject = { message: 'exit 1', stderr: 'bad input' }
-    await expect(decodeLabelPcm('/recordings/bad.hda')).rejects.toThrow(/pcm decode failed/i)
+    await expect(decodeRecordingPcm16k('/recordings/bad.hda')).rejects.toThrow(/pcm decode failed/i)
+  })
+
+  it('8. maxBuffer overflow (long recording) rejects with handled msg + preserves stderr', async () => {
+    // ~2.3 h of 16 kHz mono s16le (~32000 B/s) overflows the 256 MB cap; execFile
+    // rejects with a maxBuffer error. The message must be handled (not a crash)
+    // and surface the captured stderr so callers/diagnostics see the cause.
+    shared.execFileReject = { message: 'stdout maxBuffer exceeded', stderr: 'bad input' }
+    await expect(decodeRecordingPcm16k('/recordings/huge.hda')).rejects.toThrow(/pcm decode failed/i)
+    await expect(decodeRecordingPcm16k('/recordings/huge.hda')).rejects.toThrow(/bad input/)
   })
 })

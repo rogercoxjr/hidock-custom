@@ -12,33 +12,52 @@
  * operator log line, no toast; mapping still succeeds. AC4 covers both paths.
  */
 import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { resolveFfmpegPath } from './asr/audio-normalize'
 import type { Turn } from './asr/asr-provider'
 
-// Raw PCM is far larger than MP3; lift the stdout cap well above the default 1 MB.
+// promisify(execFile) — same primitive as the sibling ffmpeg service
+// (audio-normalize.ts) so the two ffmpeg call sites stay consistent. With
+// { encoding: 'buffer' } the resolved value is { stdout: Buffer; stderr: Buffer }
+// and a non-zero exit rejects with an Error carrying the captured `.stderr`.
+const execFileAsync = promisify(execFile)
+// Raw PCM is far larger than MP3 (~32000 bytes/s mono); lift the stdout cap well
+// above the default 1 MB. A ~2.3 h recording overflows even this 256 MB cap and
+// rejects with a "maxBuffer exceeded" error, which is handled like any decode
+// failure below.
 const PCM_MAX_BUFFER = 256 * 1024 * 1024
 
 /**
- * Decode the whole input to 16 kHz mono signed-16-bit little-endian PCM on
- * stdout (`pipe:1`). DISTINCT from the Whisper path's MP3 output (§6.7) — no
- * `-b:a`, format is pcm_s16le. Returns the raw PCM Buffer; throws on ffmpeg
- * failure so the caller can skip enrollment while keeping the mapping (§8).
- * Segment slicing by the label's turns is applied by the caller in PCM space
- * (16-bit samples → 32000 bytes/s), avoiding one ffmpeg call per turn.
+ * Decode the WHOLE recording to 16 kHz mono signed-16-bit little-endian PCM on
+ * stdout (`pipe:1`) and return it as a single raw `Buffer`. DISTINCT from the
+ * Whisper path's MP3 output (§6.7) — no `-b:a`, format is pcm_s16le.
+ *
+ * This decodes the entire file in ONE ffmpeg invocation; per-label slicing by
+ * turn time-ranges and the s16le→Float32 conversion sherpa wants both happen in
+ * the CALLER (D4-T5), operating in PCM space (16 kHz × 2 bytes/sample = 32000
+ * bytes/s) — that avoids one ffmpeg spawn per turn.
+ *
+ * Throws on ffmpeg failure (incl. maxBuffer overflow) so the caller can skip
+ * enrollment while keeping the speaker→contact mapping (§8). The thrown message
+ * preserves the captured stderr tail for diagnostics.
  */
-export async function decodeLabelPcm(filePath: string): Promise<Buffer> {
+export async function decodeRecordingPcm16k(filePath: string): Promise<Buffer> {
   const ffmpeg = resolveFfmpegPath()
   const args = ['-y', '-i', filePath, '-ar', '16000', '-ac', '1', '-f', 'pcm_s16le', 'pipe:1']
-  return new Promise<Buffer>((resolve, reject) => {
-    execFile(ffmpeg, args, { encoding: 'buffer', maxBuffer: PCM_MAX_BUFFER }, (err, stdout, _stderr) => {
-      if (err) {
-        const detail = String((err as { stderr?: string }).stderr ?? err.message).slice(-200)
-        reject(new Error(`pcm decode failed for ${filePath}: ${detail}`))
-        return
-      }
-      resolve(stdout as Buffer)
+  try {
+    const { stdout } = await execFileAsync(ffmpeg, args, {
+      encoding: 'buffer',
+      maxBuffer: PCM_MAX_BUFFER
     })
-  })
+    return stdout as Buffer
+  } catch (e) {
+    // Prefer the captured stderr (attached to the rejected error by execFile)
+    // over the generic message so diagnostics show WHY ffmpeg failed.
+    const err = e as { stderr?: string | Buffer; message?: string }
+    const stderr = err.stderr != null ? String(err.stderr) : undefined
+    const detail = (stderr ?? err.message ?? String(e)).slice(-200)
+    throw new Error(`pcm decode failed for ${filePath}: ${detail}`)
+  }
 }
 
 // The WeSpeaker model bundled in app resources (electron-builder asarUnpack).
