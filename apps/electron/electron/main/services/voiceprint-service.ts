@@ -80,13 +80,18 @@ export const VOICEPRINT_MODEL_ID = 'wespeaker_en_voxceleb_resnet34_LM'
 // require lives in a try/catch so a missing native addon (optionalDependencies
 // no-op, non-Windows, broken prebuild) degrades silently — one log line, no throw.
 // ---------------------------------------------------------------------------
+// sherpa-onnx-node's OnlineStream: acceptWaveform + inputFinished live HERE,
+// not on the extractor (verified against the real addon, 2026-06-18).
+type SherpaStream = {
+  acceptWaveform(wave: { sampleRate: number; samples: Float32Array }): void
+  inputFinished(): void
+}
 type SherpaModule = {
   SpeakerEmbeddingExtractor: new (config: unknown) => {
     dim: number
-    createStream(): unknown
-    acceptWaveform(stream: unknown, wave: { sampleRate: number; samples: Float32Array }): void
-    isReady(stream: unknown): boolean
-    compute(stream: unknown): Float32Array
+    createStream(): SherpaStream
+    isReady(stream: SherpaStream): boolean
+    compute(stream: SherpaStream): Float32Array
   }
 }
 
@@ -249,8 +254,12 @@ export async function captureVoiceprint(
   if (samples.length === 0) return { captured: false, reason: 'no usable samples after slicing' }
 
   try {
+    // sherpa-onnx-node API: acceptWaveform + inputFinished are methods on the
+    // STREAM (OnlineStream); isReady/compute are on the extractor and take the
+    // stream. inputFinished() is REQUIRED — without it isReady() never returns true.
     const stream = ext.createStream()
-    ext.acceptWaveform(stream, { sampleRate: 16000, samples })
+    stream.acceptWaveform({ sampleRate: 16000, samples })
+    stream.inputFinished()
     if (!ext.isReady(stream)) return { captured: false, reason: 'extractor not ready' }
     const embedding = ext.compute(stream)
 

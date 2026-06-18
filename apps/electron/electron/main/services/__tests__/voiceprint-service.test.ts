@@ -136,10 +136,11 @@ describe('voiceprint-service load (§6.7, AC4)', () => {
       if (request === 'sherpa-onnx-node') {
         class SpeakerEmbeddingExtractor {
           dim = 256
+          // Real sherpa API: acceptWaveform + inputFinished live on the STREAM
+          // (an OnlineStream), NOT on the extractor.
           createStream() {
-            return {}
+            return { acceptWaveform() { /* no-op */ }, inputFinished() { /* no-op */ } }
           }
-          acceptWaveform() { /* no-op stub */ }
           isReady() {
             return true
           }
@@ -162,11 +163,25 @@ describe('voiceprint-service load (§6.7, AC4)', () => {
   })
 
   it('2. isVoiceprintAvailable() is false when sherpa-onnx-node is missing', async () => {
-    // No stub: the addon is genuinely absent (installed in D4-T7). A fresh
-    // import makes the service's require() throw, which it must swallow.
-    vi.resetModules()
-    const { isVoiceprintAvailable } = await import('../voiceprint-service')
-    expect(isVoiceprintAvailable()).toBe(false)
+    // FORCE the addon to be unresolvable. The package may now be installed
+    // (it's an optionalDependency that activation installs), so we can't rely on
+    // genuine absence — stub Module._load to throw for it, mirroring a machine
+    // where the native addon isn't present. The service's require() must swallow it.
+    const realLoad = moduleInternals._load
+    moduleInternals._load = function (request: string, ...rest: unknown[]): unknown {
+      if (request === 'sherpa-onnx-node') {
+        throw new Error("Cannot find module 'sherpa-onnx-node'")
+      }
+      return realLoad.apply(this, [request, ...rest])
+    }
+    try {
+      vi.resetModules()
+      const { isVoiceprintAvailable } = await import('../voiceprint-service')
+      expect(isVoiceprintAvailable()).toBe(false)
+    } finally {
+      moduleInternals._load = realLoad
+      vi.resetModules()
+    }
   })
 })
 
@@ -326,12 +341,24 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
         const { extractorDim, computeResult } = shared
         class SpeakerEmbeddingExtractor {
           dim = extractorDim
+          // Real sherpa API: the STREAM owns acceptWaveform + inputFinished, and
+          // isReady() stays false until inputFinished() — so this stub fails the
+          // capture path unless the service uses stream.acceptWaveform() AND
+          // stream.inputFinished() (the live bug was ext.acceptWaveform + no finish).
           createStream() {
-            return {}
+            return {
+              wave: false,
+              finished: false,
+              acceptWaveform() {
+                this.wave = true
+              },
+              inputFinished() {
+                this.finished = true
+              },
+            }
           }
-          acceptWaveform() { /* no-op stub */ }
-          isReady() {
-            return true
+          isReady(stream: { wave?: boolean; finished?: boolean }) {
+            return !!(stream && stream.wave && stream.finished)
           }
           compute() {
             return computeResult
@@ -411,11 +438,19 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
           class SpeakerEmbeddingExtractor {
             dim = extractorDim
             createStream() {
-              return {}
+              return {
+                wave: false,
+                finished: false,
+                acceptWaveform() {
+                  this.wave = true
+                },
+                inputFinished() {
+                  this.finished = true
+                },
+              }
             }
-            acceptWaveform() { /* no-op stub */ }
-            isReady() {
-              return true
+            isReady(stream: { wave?: boolean; finished?: boolean }) {
+              return !!(stream && stream.wave && stream.finished)
             }
             compute() {
               return computeResult

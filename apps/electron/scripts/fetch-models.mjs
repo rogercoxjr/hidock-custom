@@ -33,12 +33,13 @@ const MODELS_DIR = join(__dirname, '..', 'resources', 'models')
 const MODELS = [
   {
     name: 'wespeaker_en_voxceleb_resnet34_LM.onnx',
-    // Official sherpa-onnx model release (k2-fsa/sherpa-onnx GitHub releases)
-    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recog-models/wespeaker_en_voxceleb_resnet34_LM.onnx',
-    // SHA-256 of the released file. null = not pinned yet: the script prints the
-    // computed hash after download so you can paste it here. Once pinned, every
-    // run verifies integrity and a mismatch fails (deletes the bad file).
-    sha256: null,
+    // Official sherpa-onnx model release. NOTE: the release tag is literally
+    // "speaker-recongition-models" — that misspelling ("recongition") is upstream's
+    // actual tag, not a typo here. Verified 2026-06-18 (HTTP 200).
+    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx',
+    // SHA-256 of the released file. Pinned 2026-06-18 from the verified download
+    // (26,530,550 bytes). On mismatch the script deletes the file and fails.
+    sha256: 'e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012',
   },
 ]
 
