@@ -97,6 +97,9 @@ export function SourceReader({
   const [metadataEdited, setMetadataEdited] = useState(false)
   const [showTranscribeWarning, setShowTranscribeWarning] = useState(false)
 
+  // D5 §6.6: "summary uses generic speaker labels" staleness badge.
+  const [summaryStale, setSummaryStale] = useState(false)
+
   // Speaker diarization (D3-T4): structured turns + speaker->contact name map.
   // SourceReader is the LIVE host of the diarization UI (SourceDetailDrawer is dead
   // code). Turns come from transcript.turns (JSON); names from speakers:getForRecording.
@@ -112,6 +115,22 @@ export function SourceReader({
     setMetadataEdited(false)
     setShowTranscribeWarning(false)
   }, [recording?.id])
+
+  // D5 §6.6: probe staleness whenever the recording or transcript changes. The
+  // badge appears once a speaker mapping post-dates the summary and clears after
+  // a successful resummarize (parent refreshes `transcript`, this re-runs).
+  useEffect(() => {
+    let cancelled = false
+    if (!recording || !transcript?.full_text) {
+      setSummaryStale(false)
+      return
+    }
+    window.electronAPI?.recordings
+      ?.isSummaryStale?.(recording.id)
+      ?.then((stale) => { if (!cancelled) setSummaryStale(stale) })
+      ?.catch(() => { if (!cancelled) setSummaryStale(false) })
+    return () => { cancelled = true }
+  }, [recording, transcript])
 
   /**
    * Re-fetch BOTH the recording's turns (transcripts:getByRecordingId) and its
@@ -602,6 +621,17 @@ export function SourceReader({
       <div className="flex-1 overflow-auto p-4">
         {transcript ? (
           <>
+            {summaryStale && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <span>Summary uses generic speaker labels — re-summarize to attribute names.</span>
+                {onResummarize && (
+                  <Button variant="link" size="sm" className="h-auto p-0" onClick={onResummarize}>
+                    Re-summarize
+                  </Button>
+                )}
+              </div>
+            )}
             {recording.transcriptionStatus === 'error' && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/30 px-3 py-2 text-sm">
                 <AlertCircle className="h-4 w-4 text-orange-600" />
