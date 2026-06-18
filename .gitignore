@@ -61,6 +61,9 @@ audio/
 *.avi
 *.ics
 
+# WeSpeaker ONNX model (26 MB binary — downloaded by scripts/fetch-models.mjs, not committed)
+apps/electron/resources/models/*.onnx
+
 # Database files and dumps
 *.sql
 *.dump

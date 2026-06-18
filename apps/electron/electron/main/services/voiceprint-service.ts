@@ -153,10 +153,15 @@ export interface CaptureResult {
 // first capture; ctor can throw on bad/missing model — degrades to "unavailable".
 type SherpaExtractor = InstanceType<SherpaModule['SpeakerEmbeddingExtractor']>
 let extractor: SherpaExtractor | null = null
+// D4-T7 carried fix: cache ctor failure so we NEVER retry the constructor after
+// it throws (e.g. model file missing at runtime). Without this flag every
+// captureVoiceprint call re-attempts construction and re-emits the warn log.
+let extractorFailed = false
 
 function getExtractor(): SherpaExtractor | null {
   if (!sherpa) return null
   if (extractor) return extractor
+  if (extractorFailed) return null // init already failed — don't retry
   try {
     const modelPath = app.isPackaged
       ? join(process.resourcesPath, 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
@@ -164,6 +169,7 @@ function getExtractor(): SherpaExtractor | null {
     extractor = new sherpa.SpeakerEmbeddingExtractor({ model: modelPath, numThreads: 1, debug: false })
     return extractor
   } catch (e) {
+    extractorFailed = true
     console.warn(`[Voiceprint] extractor init failed — capture disabled: ${(e as Error).message}`)
     return null
   }

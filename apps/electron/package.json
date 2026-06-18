@@ -62,6 +62,9 @@
     "zod": "^4.1.13",
     "zustand": "^5.0.1"
   },
+  "optionalDependencies": {
+    "sherpa-onnx-node": "1.13.3"
+  },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
     "@electron-toolkit/eslint-config-ts": "^3.1.0",

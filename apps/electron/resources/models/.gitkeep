@@ -1,0 +1,2 @@
+# This directory holds large ONNX model binaries that are NOT committed to git.
+# Run `node scripts/fetch-models.mjs` from apps/electron/ to download them.

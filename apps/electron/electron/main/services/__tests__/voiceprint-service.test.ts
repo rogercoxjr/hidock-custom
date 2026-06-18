@@ -434,3 +434,62 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// D4-T7 carried fix: getExtractor() caches init failure (extractorFailed flag).
+// Once the ctor throws, subsequent calls must return null WITHOUT re-attempting
+// construction or re-emitting the warn log — verifiable by counting ctor calls.
+// ---------------------------------------------------------------------------
+describe('getExtractor() init-failure caching (D4-T7 carried fix)', () => {
+  type LoadFnCf = (request: string, ...rest: unknown[]) => unknown
+  const modCf = Module as unknown as { _load: LoadFnCf }
+
+  it('9. ctor throws once → subsequent captureVoiceprint calls never re-attempt construction', async () => {
+    let ctorCalls = 0
+    const realLoadCf = modCf._load
+    modCf._load = function (request: string, ...rest: unknown[]): unknown {
+      if (request === 'sherpa-onnx-node') {
+        class SpeakerEmbeddingExtractor {
+          constructor() {
+            ctorCalls++
+            throw new Error('model file missing')
+          }
+          dim = 0
+          createStream() { return {} }
+          acceptWaveform() {}
+          isReady() { return false }
+          compute() { return new Float32Array(0) }
+        }
+        return { SpeakerEmbeddingExtractor }
+      }
+      return realLoadCf.apply(this, [request, ...rest])
+    }
+    vi.resetModules()
+
+    try {
+      vi.mocked(db.getRecordingById).mockReturnValue({ file_path: '/recordings/m.hda' } as never)
+      vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+        turns: JSON.stringify([{ speaker: 'A', startMs: 0, endMs: 12000, text: 'plenty' }]),
+      } as never)
+      // pcm mock: 12 s of silence
+      shared.execFileReject = null
+      shared.pcmStdout = Buffer.alloc(12000 * 32)
+
+      const { captureVoiceprint: cv } = await import('../voiceprint-service')
+
+      // First call: ctor throws, extractorFailed is set, returns { captured: false }
+      const r1 = await cv('rec_1', 'A', 'c_1')
+      expect(r1.captured).toBe(false)
+      expect(ctorCalls).toBe(1)
+
+      // Second call: extractorFailed is true → getExtractor returns null WITHOUT
+      // calling the ctor again. ctorCalls must still be 1.
+      const r2 = await cv('rec_1', 'A', 'c_1')
+      expect(r2.captured).toBe(false)
+      expect(ctorCalls).toBe(1) // not 2 — ctor was NOT retried
+    } finally {
+      modCf._load = realLoadCf
+      vi.resetModules()
+    }
+  })
+})
