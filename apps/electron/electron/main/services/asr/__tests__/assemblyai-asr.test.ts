@@ -44,6 +44,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.useFakeTimers() // poll waits run on fake timers — no real sleeps (suite stays fast)
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -51,6 +52,17 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
+
+/** Drive a transcribe() that submits with status 'queued' then resolves on the
+ *  first GET poll. The poll loop awaits setTimeout(POLL_INTERVAL_MS); advance fake
+ *  timers past one interval so the loop proceeds, then await the settled result. */
+const POLL_INTERVAL_MS = 3000
+const POLL_WALL_CLOCK_MS = 30 * 60 * 1000
+async function runWithPoll<T>(p: Promise<T>): Promise<T> {
+  // Flush the upload+submit microtasks, then release the single poll wait.
+  await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+  return p
+}
 
 describe('createAssemblyAiAsr — construction', () => {
   it('throws a loud canonical message when the key is missing (§8/AC9)', () => {
@@ -89,7 +101,7 @@ describe('createAssemblyAiAsr — happy path', () => {
 
   it('returns text + language + structured turns with SECONDS→ms ×1000 (AC1)', async () => {
     const asr = createAssemblyAiAsr(aaiConfig())
-    const result = await asr.transcribe('/recordings/a.hda', {})
+    const result = await runWithPoll(asr.transcribe('/recordings/a.hda', {}))
     expect(result.text).toBe('Hello there. General Kenobi.')
     expect(result.language).toBe('en')
     expect(result.turns).toHaveLength(2)
@@ -111,7 +123,7 @@ describe('createAssemblyAiAsr — happy path', () => {
 
   it('submit body uses speech_models ARRAY incl. universal-3-pro, global region, labels+sentiment, language_code; NEVER singular speech_model or word_boost (AC8)', async () => {
     const asr = createAssemblyAiAsr(aaiConfig())
-    await asr.transcribe('/recordings/a.hda', { meetingContext: 'Acme Corp; Project Phoenix' })
+    await runWithPoll(asr.transcribe('/recordings/a.hda', { meetingContext: 'Acme Corp; Project Phoenix' }))
 
     // call[0] = upload, call[1] = submit
     const [uploadUrl, uploadInit] = fetchMock.mock.calls[0] as [string, RequestInit]
@@ -136,11 +148,35 @@ describe('createAssemblyAiAsr — happy path', () => {
 
   it('builds keyterms_prompt from meetingContext (NOT word_boost)', async () => {
     const asr = createAssemblyAiAsr(aaiConfig())
-    await asr.transcribe('/recordings/a.hda', { meetingContext: 'Acme Corp; Project Phoenix' })
+    await runWithPoll(asr.transcribe('/recordings/a.hda', { meetingContext: 'Acme Corp; Project Phoenix' }))
     const body = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string)
     expect(Array.isArray(body.keyterms_prompt)).toBe(true)
     expect(body.keyterms_prompt).toContain('Acme Corp')
     expect(body.keyterms_prompt).toContain('Project Phoenix')
+  })
+
+  it('drops keyterms_prompt phrases longer than 6 words (plan line ~70)', async () => {
+    const asr = createAssemblyAiAsr(aaiConfig())
+    // 7-word phrase exceeds the ≤6-words rule → must NOT appear; 6-word phrase kept.
+    const tooLong = 'one two three four five six seven'
+    const sixWords = 'alpha beta gamma delta epsilon zeta'
+    await runWithPoll(asr.transcribe('/recordings/a.hda', { meetingContext: `${tooLong}; ${sixWords}; Acme Corp` }))
+    const body = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string)
+    expect(body.keyterms_prompt).not.toContain(tooLong)
+    expect(body.keyterms_prompt).toContain(sixWords)
+    expect(body.keyterms_prompt).toContain('Acme Corp')
+    // every retained phrase has ≤6 words
+    for (const phrase of body.keyterms_prompt as string[]) {
+      expect(phrase.split(/\s+/).length).toBeLessThanOrEqual(6)
+    }
+  })
+
+  it('sends keyterms_prompt and NEVER a sibling `prompt` field (mutually exclusive — plan line ~70)', async () => {
+    const asr = createAssemblyAiAsr(aaiConfig())
+    await runWithPoll(asr.transcribe('/recordings/a.hda', { meetingContext: 'Acme Corp; Project Phoenix' }))
+    const body = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string)
+    expect(body).toHaveProperty('keyterms_prompt')
+    expect(body).not.toHaveProperty('prompt')
   })
 })
 
@@ -172,8 +208,24 @@ describe('createAssemblyAiAsr — error classification (§8/AC7)', () => {
       .mockResolvedValueOnce(res({ jsonBody: { id: 'txn_1', status: 'queued' } }))
       .mockResolvedValueOnce(res({ jsonBody: { id: 'txn_1', status: 'error', error: 'transcoding failed' } }))
     const asr = createAssemblyAiAsr(aaiConfig())
-    const err = await asr.transcribe('/r/a.hda', {}).catch((e) => e)
+    const err = await runWithPoll(asr.transcribe('/r/a.hda', {}).catch((e) => e))
     expect((err as Error).message).toContain('AssemblyAI transcription failed')
     expect((err as Error).message).toContain('transcoding failed')
+  })
+
+  it('poll exceeding the wall-clock cap → "AssemblyAI poll timed out" Error (§8)', async () => {
+    // submit returns 'queued'; every GET poll stays 'processing' so the loop never
+    // completes — advancing past POLL_WALL_CLOCK_MS must trip the hard deadline.
+    fetchMock
+      .mockResolvedValueOnce(res({ jsonBody: { upload_url: 'u' } }))
+      .mockResolvedValueOnce(res({ jsonBody: { id: 'txn_1', status: 'queued' } }))
+      .mockResolvedValue(res({ jsonBody: { id: 'txn_1', status: 'processing' } }))
+    const asr = createAssemblyAiAsr(aaiConfig())
+    const promise = asr.transcribe('/r/a.hda', {}).catch((e) => e)
+    // Walk the clock past the wall-clock cap in interval-sized steps so each
+    // poll wait resolves and the next loop iteration re-checks the deadline.
+    await vi.advanceTimersByTimeAsync(POLL_WALL_CLOCK_MS + POLL_INTERVAL_MS)
+    const err = await promise
+    expect((err as Error).message).toContain('AssemblyAI poll timed out')
   })
 })

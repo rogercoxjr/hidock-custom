@@ -7,7 +7,8 @@ const BASE = 'https://api.assemblyai.com/v2'
 const HTTP_TIMEOUT_MS = 10 * 60 * 1000 // per-HTTP-call AbortController cap (AP-§7.4)
 const POLL_INTERVAL_MS = 3000          // bounded poll interval
 const POLL_WALL_CLOCK_MS = 30 * 60 * 1000 // hard cap so a hung job cannot run forever (§8)
-const KEYTERM_MAX = 1000               // keyterms_prompt cap (spec §2)
+const KEYTERM_MAX = 1000               // keyterms_prompt phrase cap (spec §2)
+const KEYTERM_MAX_WORDS = 6            // keyterms_prompt per-phrase word cap (plan Integration Corrections)
 
 /** Map seconds (AssemblyAI) → ms; null/undefined → 0. */
 function secToMs(s: number | undefined | null): number {
@@ -15,14 +16,17 @@ function secToMs(s: number | undefined | null): number {
 }
 
 /** Build keyterms_prompt from the worker's meetingContext: split on
- *  newlines/semicolons, trim, drop empties, cap to 1000 (spec §2). FREE; this
- *  is NOT word_boost (word_boost silently downgrades the job — spec §2). */
+ *  newlines/semicolons, trim, drop empties, drop phrases over 6 words, cap to
+ *  1000 (spec §2 + plan Integration Corrections). FREE; this is NOT word_boost
+ *  (word_boost silently downgrades the job — spec §2). keyterms_prompt is
+ *  mutually exclusive with `prompt`; we send ONLY keyterms_prompt, never `prompt`. */
 function buildKeyterms(meetingContext?: string): string[] {
   if (!meetingContext) return []
   return meetingContext
     .split(/[\n;]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
+    .filter((s) => s.split(/\s+/).length <= KEYTERM_MAX_WORDS) // ≤6 words per phrase; drop longer
     .slice(0, KEYTERM_MAX)
 }
 
