@@ -58,7 +58,9 @@ const shared = vi.hoisted(() => {
     // Captures the meta arg the worker hands the vector store at indexing time
     // (spec §5.2: the meeting-selection validator must scrub 'none'/hallucinated
     // ids out of the indexing fallback before they reach chunk metadata).
-    lastIndexMeta: undefined as { meetingId?: string; recordingId?: string } | undefined
+    lastIndexMeta: undefined as { meetingId?: string; recordingId?: string } | undefined,
+    // D5 §6.6: spy hook — called with the full prompt string on each text (analysis/actionables) call.
+    onTextCall: undefined as ((prompt: string) => void) | undefined
   }
 })
 
@@ -129,6 +131,7 @@ vi.mock('@google/generative-ai', () => {
     // when the transcript passes detectActionables' 100-word guard.
     // The '__LLM_THROW__' sentinel makes this call reject (transient LLM failure).
     shared.textCalls += 1
+    if (typeof arg === 'string') shared.onTextCall?.(arg)
     const next = shared.textResponses.shift() ?? '[]'
     if (next === '__LLM_THROW__') throw new Error('LLM transient failure')
     return { response: { text: () => next } }
@@ -191,6 +194,16 @@ function insertRecordingNoFile(id: string, opts?: { captureId?: string }): void 
       opts?.captureId ?? null,
       new Date().toISOString()
     ]
+  )
+}
+
+/** Insert a contacts row so attributed-summary mapping resolves. */
+function insertContact(id: string, name: string): void {
+  const now = new Date().toISOString()
+  run(
+    `INSERT OR IGNORE INTO contacts (id, name, type, first_seen_at, last_seen_at, created_at)
+     VALUES (?, ?, 'unknown', ?, ?, ?)`,
+    [id, name, now, now, now]
   )
 }
 
@@ -308,6 +321,7 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     shared.textCalls = 0
     shared.summarization = { provider: 'gemini', ollamaCloudApiKey: '', ollamaCloudModel: '' }
     shared.lastIndexMeta = undefined
+    shared.onTextCall = undefined
     vi.clearAllMocks()
     vi.unstubAllGlobals() // drop any per-test fetch stub
     await initializeDatabase()
@@ -650,6 +664,44 @@ describe('two-stage worker (auto-pipeline P1, spec §5.3)', () => {
     expect(queryOne<{ title: string }>("SELECT title FROM knowledge_captures WHERE id='capRS'")?.title).toBe(
       'First Title' // NOT re-renamed — title_suggestion was non-NULL before this run
     )
+  })
+
+  it('Stage-2 input is speaker-labeled when turns + mappings exist (spec §6.6 / AC5)', async () => {
+    insertRecordingWithFile('recAttr')
+    insertContact('cAttr', 'Dana')
+    // Stage 1 already wrote full_text + turns (simulate AssemblyAI output).
+    shared.audioResponse = 'flat asr text'
+    const turns = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'lets ship it' },
+      { speaker: 'B', startMs: 1000, endMs: 2000, text: 'agreed' }
+    ]
+    // Capture exactly what the analysis (text) call receives.
+    let analysisInput = ''
+    shared.onTextCall = (prompt: string) => { analysisInput = prompt }
+    shared.textResponses = [validAnalysisJson('Attributed')]
+
+    // Pre-seed Stage 1 with turns + one mapping (label A -> Dana), then run Stage 2 only.
+    upsertTranscriptStage1({
+      recording_id: 'recAttr',
+      full_text: 'lets ship it agreed',
+      language: 'en',
+      word_count: 4,
+      transcription_provider: 'assemblyai',
+      transcription_model: 'universal-3-pro'
+    })
+    run('UPDATE transcripts SET turns = ? WHERE recording_id = ?', [JSON.stringify(turns), 'recAttr'])
+    run(
+      `INSERT INTO recording_speakers (recording_id, file_label, contact_id, source, created_at)
+       VALUES ('recAttr', 'A', 'cAttr', 'user', ?)`,
+      [new Date().toISOString()]
+    )
+
+    await transcribeManually('recAttr')
+
+    // The analysis prompt embedded the attributed transcript: Dana mapped, B generic.
+    expect(analysisInput).toContain('Dana: lets ship it')
+    expect(analysisInput).toContain('Speaker B: agreed')
+    expect(shared.audioCalls).toBe(0) // Stage-2-only resume (full_text already present)
   })
 })
 

@@ -2605,6 +2605,47 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
   run('UPDATE transcripts SET summarization_provider = NULL, summarization_model = NULL WHERE recording_id = ?', [recordingId])
 }
 
+/** D5 §6.6: build the Stage-2 analysis input from structured turns, prefixing
+ *  each turn with the mapped contact NAME (via recording_speakers -> contacts)
+ *  when present, else the human "Speaker <label>" form. Falls back to the flat
+ *  full_text when turns is absent/empty (Whisper/Gemini / pre-migration / zero-
+ *  speaker rows) — the §10(c) regression path. Returns undefined when there is
+ *  no transcript row. */
+export function buildAttributedTranscript(recordingId: string): string | undefined {
+  const t = queryOne<{ full_text: string; turns: string | null }>(
+    'SELECT full_text, turns FROM transcripts WHERE recording_id = ?',
+    [recordingId]
+  )
+  if (!t) return undefined
+
+  let turns: Array<{ speaker: string; text: string }> = []
+  if (t.turns) {
+    try {
+      const parsed = JSON.parse(t.turns)
+      if (Array.isArray(parsed)) turns = parsed
+    } catch {
+      turns = []
+    }
+  }
+  if (turns.length === 0) return t.full_text
+
+  // label -> contact name (only for mapped labels)
+  const speakers = getRecordingSpeakers(recordingId)
+  const nameByLabel = new Map<string, string>()
+  for (const s of speakers) {
+    if (!s.contact_id) continue
+    const c = queryOne<{ name: string }>('SELECT name FROM contacts WHERE id = ?', [s.contact_id])
+    if (c?.name) nameByLabel.set(s.file_label, c.name)
+  }
+
+  return turns
+    .map((turn) => {
+      const label = nameByLabel.get(turn.speaker) ?? `Speaker ${turn.speaker}`
+      return `${label}: ${turn.text}`
+    })
+    .join('\n')
+}
+
 /**
  * Escape special LIKE pattern characters to prevent SQL injection via wildcards.
  * In SQLite LIKE, % matches any sequence and _ matches any single character.

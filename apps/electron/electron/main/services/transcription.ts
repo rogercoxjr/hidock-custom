@@ -25,7 +25,8 @@ import {
   acquireTranscriptionLock,
   releaseTranscriptionLock,
   clearStaleTranscriptionLock,
-  resetStuckTranscriptions
+  resetStuckTranscriptions,
+  buildAttributedTranscript
 } from './database'
 import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
@@ -536,6 +537,12 @@ ${candidateMeetings.map((m, i) => `   ${i + 1}. "${m.subject}" (ID: ${m.id})`).j
    "selection_reason": "why you selected or rejected this meeting"`
   }
 
+  // D5 §6.6: Stage 2 summarizes a SPEAKER-LABELED transcript when structured turns
+  // exist — each turn prefixed with the mapped contact name if available, else
+  // "Speaker <label>". Falls back to flat full_text for Whisper/Gemini / pre-
+  // migration / zero-speaker rows. The LLM call + JSON parse are unchanged.
+  const analysisInput = buildAttributedTranscript(recordingId) ?? fullText
+
   // Now analyze the transcription for summary, action items, etc.
   const analysisPrompt = `Analyze this meeting transcript and provide:
 1. A brief summary (2-3 sentences)
@@ -552,7 +559,7 @@ IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is 
 ${meetingSelectionSection}
 
 Transcript:
-${fullText}
+${analysisInput}
 
 Respond in JSON format:
 {
