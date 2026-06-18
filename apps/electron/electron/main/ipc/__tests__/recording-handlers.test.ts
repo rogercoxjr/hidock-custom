@@ -32,7 +32,10 @@ vi.mock('../../services/database', () => ({
   addToQueue: vi.fn(),
   updateQueueItem: vi.fn(),
   clearTranscriptStage2Marker: vi.fn(),
-  rependFailedItems: vi.fn().mockReturnValue(0)
+  clearTranscriptForRetranscribe: vi.fn(),
+  deleteRecordingSpeakersForRecording: vi.fn(),
+  rependFailedItems: vi.fn().mockReturnValue(0),
+  isSummaryStale: vi.fn().mockReturnValue(false)
 }))
 
 // Mock file-storage service
@@ -548,6 +551,58 @@ describe('Recording IPC Handlers', () => {
       await expect(
         handlers['recordings:transcribe'](null, 'bad-id')
       ).rejects.toThrow()
+    })
+
+    // D5-T4 §6.8 / AC6: re-transcribe on an ALREADY-transcribed recording must
+    // clear BOTH stage markers (so the worker short-circuit is defeated and a
+    // FRESH Stage 1 re-runs) AND drop prior speaker mappings — BEFORE enqueueing.
+    it('clears markers + drops prior speaker mappings when the recording already has a transcript (re-transcribe)', async () => {
+      const {
+        getTranscriptByRecordingId,
+        clearTranscriptForRetranscribe,
+        deleteRecordingSpeakersForRecording,
+        addToQueue
+      } = await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+      // Existing transcript: both stage markers set (full_text + summarization_provider).
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({
+        id: 't-1',
+        recording_id: recId,
+        full_text: 'PRIOR TRANSCRIPT',
+        summarization_provider: 'gemini'
+      } as any)
+
+      await handlers['recordings:transcribe'](null, recId)
+
+      // Markers cleared (defeats the worker short-circuit) BEFORE enqueueing.
+      expect(clearTranscriptForRetranscribe).toHaveBeenCalledWith(recId)
+      // Prior label->contact mappings dropped (a new ASR pass re-letters speakers).
+      expect(deleteRecordingSpeakersForRecording).toHaveBeenCalledWith(recId)
+      // Then enqueued + processed as usual.
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(processQueueManually).toHaveBeenCalled()
+    })
+
+    it('does NOT clear markers or drop mappings on a first-time transcribe (no transcript row)', async () => {
+      const {
+        getTranscriptByRecordingId,
+        clearTranscriptForRetranscribe,
+        deleteRecordingSpeakersForRecording,
+        addToQueue
+      } = await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue(undefined) // no transcript yet
+
+      await handlers['recordings:transcribe'](null, recId)
+
+      // First-time transcribe: nothing to clear or drop.
+      expect(clearTranscriptForRetranscribe).not.toHaveBeenCalled()
+      expect(deleteRecordingSpeakersForRecording).not.toHaveBeenCalled()
+      // Still enqueues + processes normally.
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(processQueueManually).toHaveBeenCalled()
     })
 
     it('should propagate errors from processQueueManually', async () => {

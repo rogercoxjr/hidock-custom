@@ -2606,6 +2606,30 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
   run('UPDATE transcripts SET summarization_provider = NULL, summarization_model = NULL WHERE recording_id = ?', [recordingId])
 }
 
+/** D5 §6.8: re-transcribe support — clears BOTH stage markers so the worker
+ *  short-circuit (`full_text && summarization_provider`) AND the Stage-2-only
+ *  resume rule (`full_text && !summarization_provider`) are both defeated, forcing
+ *  a FRESH Stage 1 (new ASR). full_text is set to '' rather than NULL because the
+ *  column is NOT NULL (schema line 243); '' is falsy, so it reads as "no Stage-1
+ *  text yet" to the worker's truthiness gates. The diarization columns (turns,
+ *  speakers, sentiment) are cleared too since a new ASR pass re-letters speakers.
+ *  No-op when there is no transcript row (a first-time transcribe clears nothing). */
+export function clearTranscriptForRetranscribe(recordingId: string): void {
+  const existing = queryOne<{ id: string }>('SELECT id FROM transcripts WHERE recording_id = ?', [recordingId])
+  if (!existing) return
+  run(
+    `UPDATE transcripts
+       SET full_text = '',
+           turns = NULL,
+           speakers = NULL,
+           sentiment = NULL,
+           summarization_provider = NULL,
+           summarization_model = NULL
+     WHERE recording_id = ?`,
+    [recordingId]
+  )
+}
+
 /** D5 §6.6: build the Stage-2 analysis input from structured turns, prefixing
  *  each turn with the mapped contact NAME (via recording_speakers -> contacts)
  *  when present, else the human "Speaker <label>" form. Falls back to the flat

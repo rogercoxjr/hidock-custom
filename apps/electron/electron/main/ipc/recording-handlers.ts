@@ -30,7 +30,16 @@ import {
   cancelAllTranscriptions,
   processQueueManually
 } from '../services/transcription'
-import { getQueueItems, addToQueue, updateQueueItem, clearTranscriptStage2Marker, rependFailedItems, isSummaryStale } from '../services/database'
+import {
+  getQueueItems,
+  addToQueue,
+  updateQueueItem,
+  clearTranscriptStage2Marker,
+  clearTranscriptForRetranscribe,
+  deleteRecordingSpeakersForRecording,
+  rependFailedItems,
+  isSummaryStale
+} from '../services/database'
 import { getConfig } from '../services/config'
 import {
   GetRecordingByIdSchema,
@@ -292,8 +301,25 @@ export function registerRecordingHandlers(): void {
         console.error('recordings:transcribe validation error:', result.error)
         throw new Error(result.error.issues[0]?.message || 'Invalid request')
       }
+      const id = result.data.recordingId
 
-      addToQueue(result.data.recordingId)
+      // D5 §6.8 / AC6: a re-transcribe on an ALREADY-transcribed recording must
+      // actually re-run FRESH ASR. The worker short-circuits when
+      // `full_text && summarization_provider` are both set (transcription.ts), and
+      // even with the marker NULL it would take the Stage-2-only resume path while
+      // full_text is present. So BEFORE enqueueing we clear both stage markers
+      // (full_text -> '', summarization_provider -> NULL, plus the diarization
+      // columns) to defeat both gates, and drop the prior speaker mappings — a new
+      // ASR pass re-letters speakers, so old label->contact maps no longer apply.
+      // A FIRST-TIME transcribe (no transcript row) skips both: clearTranscriptForRetranscribe
+      // is a no-op without a row, and we only drop mappings when re-transcribing.
+      const existingTranscript = getTranscriptByRecordingId(id)
+      if (existingTranscript?.full_text) {
+        clearTranscriptForRetranscribe(id)
+        deleteRecordingSpeakersForRecording(id)
+      }
+
+      addToQueue(id)
       await processQueueManually()
     } catch (error) {
       console.error('recordings:transcribe error:', error)
