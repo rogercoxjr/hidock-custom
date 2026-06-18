@@ -100,6 +100,9 @@ export function SourceReader({
   // D5 §6.6: "summary uses generic speaker labels" staleness badge.
   const [summaryStale, setSummaryStale] = useState(false)
 
+  // D5 §6.8: re-transcribe confirmation for an already-transcribed recording.
+  const [showRetranscribeConfirm, setShowRetranscribeConfirm] = useState(false)
+
   // Speaker diarization (D3-T4): structured turns + speaker->contact name map.
   // SourceReader is the LIVE host of the diarization UI (SourceDetailDrawer is dead
   // code). Turns come from transcript.turns (JSON); names from speakers:getForRecording.
@@ -588,6 +591,22 @@ export function SourceReader({
           </Button>
         )}
 
+        {/* D5 §6.8: Re-transcribe (re-runs ASR with speaker detection) — only for
+            an already-transcribed recording; gated behind a confirm dialog. */}
+        {transcript?.full_text && onTranscribe && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowRetranscribeConfirm(true)}
+            disabled={recording.transcriptionStatus === 'pending' || recording.transcriptionStatus === 'processing'}
+            className="gap-2"
+            title="Re-run transcription with speaker detection (replaces the current transcript)"
+          >
+            <Wand2 className="h-4 w-4" />
+            Re-transcribe
+          </Button>
+        )}
+
         {/* Delete Button - always available */}
         {onDelete && (
           <Button
@@ -716,6 +735,21 @@ export function SourceReader({
           onTranscribe?.()
           setMetadataEdited(false)
           setShowTranscribeWarning(false)
+        }}
+      />
+
+      {/* D5 §6.8 / AC6: confirm before re-transcribing — replaces transcript +
+          drops speaker mappings (server-side, D5-T4). */}
+      <ConfirmDialog
+        open={showRetranscribeConfirm}
+        onOpenChange={setShowRetranscribeConfirm}
+        title="Re-transcribe with speaker detection?"
+        description="This replaces the current transcript and its speaker mappings."
+        actionLabel="Re-transcribe"
+        variant="destructive"
+        onConfirm={() => {
+          setShowRetranscribeConfirm(false)
+          onTranscribe?.()
         }}
       />
     </div>
