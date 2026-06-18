@@ -10,9 +10,11 @@ const POLL_WALL_CLOCK_MS = 30 * 60 * 1000 // hard cap so a hung job cannot run f
 const KEYTERM_MAX = 1000               // keyterms_prompt phrase cap (spec §2)
 const KEYTERM_MAX_WORDS = 6            // keyterms_prompt per-phrase word cap (plan Integration Corrections)
 
-/** Map seconds (AssemblyAI) → ms; null/undefined → 0. */
-function secToMs(s: number | undefined | null): number {
-  return Math.round((s ?? 0) * 1000)
+/** AssemblyAI returns utterance/word start/end in MILLISECONDS already (confirmed
+ *  against the live API: a ~5s clip's only utterance ended at 1486). Pass the value
+ *  through unchanged — do NOT multiply by 1000. null/undefined → 0. */
+function msField(ms: number | undefined | null): number {
+  return Math.round(ms ?? 0)
 }
 
 /** Build keyterms_prompt from the worker's meetingContext: split on
@@ -95,11 +97,12 @@ export function createAssemblyAiAsr(config: AppConfig): AsrProvider {
       if (!uploadRes.ok) await throwForStatus(uploadRes, 'upload')
       const { upload_url } = (await uploadRes.json()) as { upload_url: string }
 
-      // 2. Submit. speech_models PLURAL; keyterms_prompt (NOT word_boost); model_region 'global'.
+      // 2. Submit. speech_models PLURAL; keyterms_prompt (NOT word_boost).
+      // NO model_region — the live API rejects it (400 "Invalid endpoint schema",
+      // confirmed by probe 2026-06-18); the account's default region applies.
       const submitBody = {
         audio_url: upload_url,
         speech_models: speechModels,
-        model_region: 'global', // spec §2 — dodge the 2026-07-01 in-region bump; US in-region swap is a future residency change
         speaker_labels: true,
         sentiment_analysis: true,
         keyterms_prompt: buildKeyterms(opts.meetingContext),
@@ -132,17 +135,17 @@ export function createAssemblyAiAsr(config: AppConfig): AsrProvider {
         throw new Error(`AssemblyAI transcription failed: ${txn.error ?? 'unknown error'}`)
       }
 
-      // 4. Map utterances → Turn[], converting SECONDS → ms ×1000 (spec §5/AC1).
+      // 4. Map utterances → Turn[]. AssemblyAI start/end are already MILLISECONDS — pass through (spec §5/AC1).
       const turns: Turn[] = (txn.utterances ?? []).map((u) => {
         const turn: Turn = {
           speaker: u.speaker,
-          startMs: secToMs(u.start),
-          endMs: secToMs(u.end),
+          startMs: msField(u.start),
+          endMs: msField(u.end),
           text: u.text
         }
         if (u.sentiment) turn.sentiment = u.sentiment
         if (u.words && u.words.length > 0) {
-          turn.words = u.words.map((w) => ({ text: w.text, startMs: secToMs(w.start), endMs: secToMs(w.end) }))
+          turn.words = u.words.map((w) => ({ text: w.text, startMs: msField(w.start), endMs: msField(w.end) }))
         }
         return turn
       })

@@ -202,14 +202,17 @@ describe('decodeRecordingPcm16k() — whole-file PCM decode (§6.7 step 3)', () 
     shared.capturedArgs = []
   })
 
-  it('6. decodes 16 kHz mono pcm_s16le to stdout (pipe:1), NOT mp3', async () => {
+  it('6. decodes 16 kHz mono s16le to stdout (pipe:1), NOT mp3', async () => {
     const buf = await decodeRecordingPcm16k('/recordings/m.hda')
     expect(shared.capturedArgs).toContain('-ar')
     expect(shared.capturedArgs).toContain('16000')
     expect(shared.capturedArgs).toContain('-ac')
     expect(shared.capturedArgs).toContain('1')
     expect(shared.capturedArgs).toContain('-f')
-    expect(shared.capturedArgs).toContain('pcm_s16le')
+    // `s16le` is the raw-PCM MUXER. `pcm_s16le` is the CODEC name and is NOT a valid
+    // output format — `-f pcm_s16le` errors "Requested output format is not known".
+    expect(shared.capturedArgs).toContain('s16le')
+    expect(shared.capturedArgs).not.toContain('pcm_s16le')
     expect(shared.capturedArgs).toContain('pipe:1')
     expect(shared.capturedArgs).not.toContain('-b:a') // never the MP3 bitrate flag
     expect(Buffer.isBuffer(buf)).toBe(true)

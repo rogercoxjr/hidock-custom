@@ -103,6 +103,13 @@ oauth2_tokens.json
 .hinotes.config
 **/.hinotes.config
 
+# AssemblyAI AC0 spike (throwaway): API key file + spike/probe scripts — NEVER commit the key
+.assemblyai-key
+**/.assemblyai-key
+apps/electron/scripts/diarization-spike.mjs
+apps/electron/scripts/aai-schema-probe.mjs
+apps/electron/scripts/aai-verify-body.mjs
+
 # Configuration files with API keys and user data
 hidock_config.json
 **/hidock_config.json

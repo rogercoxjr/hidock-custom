@@ -34,7 +34,7 @@ const PCM_MAX_BUFFER = 256 * 1024 * 1024
 /**
  * Decode the WHOLE recording to 16 kHz mono signed-16-bit little-endian PCM on
  * stdout (`pipe:1`) and return it as a single raw `Buffer`. DISTINCT from the
- * Whisper path's MP3 output (§6.7) — no `-b:a`, format is pcm_s16le.
+ * Whisper path's MP3 output (§6.7) — no `-b:a`; the raw-PCM muxer is `-f s16le`.
  *
  * This decodes the entire file in ONE ffmpeg invocation; per-label slicing by
  * turn time-ranges and the s16le→Float32 conversion sherpa wants both happen in
@@ -47,7 +47,9 @@ const PCM_MAX_BUFFER = 256 * 1024 * 1024
  */
 export async function decodeRecordingPcm16k(filePath: string): Promise<Buffer> {
   const ffmpeg = resolveFfmpegPath()
-  const args = ['-y', '-i', filePath, '-ar', '16000', '-ac', '1', '-f', 'pcm_s16le', 'pipe:1']
+  // `-f s16le` selects the raw-PCM MUXER. `pcm_s16le` is the CODEC name, NOT an output
+  // format — `-f pcm_s16le` errors "Requested output format 'pcm_s16le' is not known".
+  const args = ['-y', '-i', filePath, '-ar', '16000', '-ac', '1', '-f', 's16le', 'pipe:1']
   try {
     const { stdout } = await execFileAsync(ffmpeg, args, {
       encoding: 'buffer',

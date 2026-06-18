@@ -3,10 +3,11 @@
  *
  * Verifies the AssemblyAI provider: loud key-missing guard (§8/AC9), the
  * upload→submit→poll flow, the submit body (speech_models ARRAY incl.
- * universal-3-pro, model_region 'global', speaker_labels, sentiment_analysis,
- * keyterms_prompt, language_code 'en' — and NEVER singular speech_model,
- * NEVER word_boost — AC8), utterances→Turn[] with SECONDS→ms ×1000 (AC1),
- * roster, and 401/429/error/poll-timeout classification (§8/AC7).
+ * universal-3-pro, speaker_labels, sentiment_analysis, keyterms_prompt,
+ * language_code 'en' — and NEVER singular speech_model, NEVER word_boost,
+ * NEVER model_region (the live API rejects it with 400 — AC8),
+ * utterances→Turn[] with start/end passed through as MILLISECONDS (AssemblyAI
+ * already returns ms — AC1), and 401/429/error/poll-timeout classification (§8/AC7).
  *
  * fs.readFileSync is mocked (no real file). global fetch is stubbed.
  *
@@ -88,18 +89,21 @@ describe('createAssemblyAiAsr — happy path', () => {
             text: 'Hello there. General Kenobi.',
             language_code: 'en',
             speech_model_used: 'universal-3-pro',
+            // AssemblyAI returns start/end in MILLISECONDS (confirmed against the live API:
+            // a ~5s clip's only utterance ended at 1486). The provider must pass these
+            // through unchanged — NOT multiply by 1000.
             utterances: [
-              { speaker: 'A', start: 0, end: 1.5, text: 'Hello there.', sentiment: 'POSITIVE',
-                words: [{ text: 'Hello', start: 0, end: 0.5 }, { text: 'there.', start: 0.5, end: 1.5 }] },
-              { speaker: 'B', start: 2, end: 3.25, text: 'General Kenobi.', sentiment: 'NEUTRAL',
-                words: [{ text: 'General', start: 2, end: 2.6 }, { text: 'Kenobi.', start: 2.6, end: 3.25 }] }
+              { speaker: 'A', start: 0, end: 1500, text: 'Hello there.', sentiment: 'POSITIVE',
+                words: [{ text: 'Hello', start: 0, end: 500 }, { text: 'there.', start: 500, end: 1500 }] },
+              { speaker: 'B', start: 2000, end: 3250, text: 'General Kenobi.', sentiment: 'NEUTRAL',
+                words: [{ text: 'General', start: 2000, end: 2600 }, { text: 'Kenobi.', start: 2600, end: 3250 }] }
             ]
           }
         })
       )
   })
 
-  it('returns text + language + structured turns with SECONDS→ms ×1000 (AC1)', async () => {
+  it('returns text + language + structured turns with start/end passed through as ms (AC1)', async () => {
     const asr = createAssemblyAiAsr(aaiConfig())
     const result = await runWithPoll(asr.transcribe('/recordings/a.hda', {}))
     expect(result.text).toBe('Hello there. General Kenobi.')
@@ -121,7 +125,7 @@ describe('createAssemblyAiAsr — happy path', () => {
     expect(result.turns![1].sentiment).toBe('NEUTRAL')
   })
 
-  it('submit body uses speech_models ARRAY incl. universal-3-pro, global region, labels+sentiment, language_code; NEVER singular speech_model or word_boost (AC8)', async () => {
+  it('submit body uses speech_models ARRAY incl. universal-3-pro, labels+sentiment, language_code; NEVER singular speech_model, word_boost, or model_region (AC8)', async () => {
     const asr = createAssemblyAiAsr(aaiConfig())
     await runWithPoll(asr.transcribe('/recordings/a.hda', { meetingContext: 'Acme Corp; Project Phoenix' }))
 
@@ -137,13 +141,14 @@ describe('createAssemblyAiAsr — happy path', () => {
     expect(body.audio_url).toBe('https://cdn.assemblyai.com/up/abc')
     expect(Array.isArray(body.speech_models)).toBe(true)
     expect(body.speech_models).toEqual(['universal-3-pro', 'universal-2'])
-    expect(body.model_region).toBe('global')
     expect(body.speaker_labels).toBe(true)
     expect(body.sentiment_analysis).toBe(true)
     expect(body.language_code).toBe('en')
-    // forbidden keys — the rev-1 blocker + word_boost downgrade trap
+    // forbidden keys — singular speech_model (deprecated), word_boost (silent downgrade),
+    // and model_region (live API rejects it: 400 "Invalid endpoint schema" — AC8).
     expect(body).not.toHaveProperty('speech_model')
     expect(body).not.toHaveProperty('word_boost')
+    expect(body).not.toHaveProperty('model_region')
   })
 
   it('builds keyterms_prompt from meetingContext (NOT word_boost)', async () => {
