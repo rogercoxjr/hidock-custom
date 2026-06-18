@@ -14,6 +14,7 @@ import {
   getTranscriptByRecordingId,
   updateTranscriptTurns
 } from '../services/database'
+import { captureVoiceprint } from '../services/voiceprint-service'
 import type { Turn } from '../services/asr/asr-provider'
 import { success, error, Result } from '../types/api'
 import { z } from 'zod'
@@ -98,9 +99,13 @@ export function registerSpeakersHandlers(): void {
           source: 'user'
         })
 
-        // TODO(D4): fire voiceprint capture hook here
-        //   (voiceprint-service.captureVoiceprint(recordingId, fileLabel, contactId))
-        //   — capture-only; never throws into this handler; respects isVoiceprintAvailable().
+        // Fire-and-forget voiceprint capture (§6.7). NEVER block or fail the mapping:
+        // a slow/missing sherpa addon or short clean-speech must not affect assign.
+        void captureVoiceprint(recordingId, fileLabel, contactId)
+          .then((r) => {
+            if (!r.captured) console.log(`[Voiceprint] skipped (${recordingId}/${fileLabel}): ${r.reason}`)
+          })
+          .catch((e) => console.warn(`[Voiceprint] capture error (${recordingId}/${fileLabel}): ${(e as Error).message}`))
 
         return success({ recordingId, fileLabel, contactId })
       } catch (err) {
