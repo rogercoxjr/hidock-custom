@@ -2335,6 +2335,73 @@ export function getTranscriptsByRecordingIds(recordingIds: string[]): Map<string
   return results
 }
 
+// ---------------------------------------------------------------------------
+// recording_speakers — per-recording speaker label -> contact mapping (v26, §6.3)
+// v1 writes source='user' only. Powers the Speakers panel (D3) and the
+// voiceprint capture trigger (D4). Merge/reassign rewrite transcripts.turns in
+// D3; these are the row-level primitives.
+// ---------------------------------------------------------------------------
+
+export interface RecordingSpeaker {
+  recording_id: string
+  file_label: string
+  contact_id: string | null
+  confidence: number | null
+  source: 'user' | 'auto'
+  created_at: string
+}
+
+/** Insert or update (PK = recording_id, file_label) a speaker mapping. */
+export function upsertRecordingSpeaker(s: {
+  recording_id: string
+  file_label: string
+  contact_id?: string | null
+  confidence?: number | null
+  source?: 'user' | 'auto'
+}): void {
+  run(
+    `INSERT INTO recording_speakers (recording_id, file_label, contact_id, confidence, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(recording_id, file_label) DO UPDATE SET
+       contact_id = excluded.contact_id,
+       confidence = excluded.confidence,
+       source = excluded.source`,
+    [
+      s.recording_id,
+      s.file_label,
+      s.contact_id ?? null,
+      s.confidence ?? null,
+      s.source ?? 'user',
+      new Date().toISOString()
+    ]
+  )
+}
+
+/** All speaker rows for a recording (roster order = insertion order). */
+export function getRecordingSpeakers(recordingId: string): RecordingSpeaker[] {
+  return queryAll<RecordingSpeaker>(
+    'SELECT * FROM recording_speakers WHERE recording_id = ? ORDER BY created_at, file_label',
+    [recordingId]
+  )
+}
+
+/** Delete one label's mapping (merge support, §6.3). */
+export function deleteRecordingSpeaker(recordingId: string, fileLabel: string): void {
+  run('DELETE FROM recording_speakers WHERE recording_id = ? AND file_label = ?', [recordingId, fileLabel])
+}
+
+/** Drop all mappings for a recording (re-transcribe, §6.3/§6.8). Returns the
+ *  number of rows removed (counted before delete; run() resets sql.js's modified
+ *  counter on each statement, so getRowsModified() is unreliable here). */
+export function deleteRecordingSpeakersForRecording(recordingId: string): number {
+  const before = queryOne<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM recording_speakers WHERE recording_id = ?',
+    [recordingId]
+  )
+  run('DELETE FROM recording_speakers WHERE recording_id = ?', [recordingId])
+  return before?.n ?? 0
+}
+
 // NOTE (auto-pipeline P3, spec §5.3 single-writer rule / P1 carry-note #4):
 // the former `insertTranscript` (INSERT OR REPLACE on UNIQUE recording_id) was
 // removed. It silently clobbered the Stage-2 stage marker, so any future caller

@@ -85,7 +85,11 @@ import {
   queryAll,
   queryOne,
   run,
-  upsertTranscriptStage1
+  upsertTranscriptStage1,
+  upsertRecordingSpeaker,
+  getRecordingSpeakers,
+  deleteRecordingSpeaker,
+  deleteRecordingSpeakersForRecording
 } from '../database'
 
 // ---------------------------------------------------------------------------
@@ -347,5 +351,62 @@ describe('upsertTranscriptStage1 — turns/speakers/sentiment (spec §6.3, AC1)'
     expect(JSON.parse(row!.speakers)).toEqual(['A', 'B'])     // roster recomputed
     expect(row!.summary).toBe('S')                            // Stage-2 untouched
     expect(row!.summarization_provider).toBe('ollama-cloud')  // marker untouched
+  })
+})
+
+// ---------------------------------------------------------------------------
+// D2-T3: recording_speakers CRUD helpers (powers D3/D4)
+// ---------------------------------------------------------------------------
+
+describe('recording_speakers helpers (spec §6.3)', () => {
+  beforeEach(async () => {
+    fs.mkdirSync(shared.dataDir, { recursive: true })
+    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
+    await initializeDatabase()
+  })
+
+  afterEach(() => {
+    try {
+      closeDatabase()
+    } catch {
+      /* ignore */
+    }
+  })
+
+  it('upsertRecordingSpeaker inserts a row with default source=user and is read back by getRecordingSpeakers', () => {
+    insertTestRecording('rec_rs1')
+    upsertRecordingSpeaker({ recording_id: 'rec_rs1', file_label: 'A', contact_id: 'c1' })
+    const rows = getRecordingSpeakers('rec_rs1')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ recording_id: 'rec_rs1', file_label: 'A', contact_id: 'c1', source: 'user' })
+    expect(rows[0].created_at).toBeTruthy()
+  })
+
+  it('upsertRecordingSpeaker updates contact_id/confidence on the (recording_id,file_label) PK conflict', () => {
+    insertTestRecording('rec_rs2')
+    upsertRecordingSpeaker({ recording_id: 'rec_rs2', file_label: 'A', contact_id: 'c1' })
+    upsertRecordingSpeaker({ recording_id: 'rec_rs2', file_label: 'A', contact_id: 'c2', confidence: 0.9 })
+    const rows = getRecordingSpeakers('rec_rs2')
+    expect(rows).toHaveLength(1) // no duplicate — PK conflict updated in place
+    expect(rows[0].contact_id).toBe('c2')
+    expect(rows[0].confidence).toBe(0.9)
+  })
+
+  it('deleteRecordingSpeaker removes exactly one label (merge support, §6.3)', () => {
+    insertTestRecording('rec_rs3')
+    upsertRecordingSpeaker({ recording_id: 'rec_rs3', file_label: 'A', contact_id: 'c1' })
+    upsertRecordingSpeaker({ recording_id: 'rec_rs3', file_label: 'C', contact_id: 'c3' })
+    deleteRecordingSpeaker('rec_rs3', 'C')
+    const rows = getRecordingSpeakers('rec_rs3')
+    expect(rows.map(r => r.file_label)).toEqual(['A'])
+  })
+
+  it('deleteRecordingSpeakersForRecording clears all labels for the recording (re-transcribe, §6.3/§6.8)', () => {
+    insertTestRecording('rec_rs4')
+    upsertRecordingSpeaker({ recording_id: 'rec_rs4', file_label: 'A', contact_id: 'c1' })
+    upsertRecordingSpeaker({ recording_id: 'rec_rs4', file_label: 'B', contact_id: 'c2' })
+    const removed = deleteRecordingSpeakersForRecording('rec_rs4')
+    expect(removed).toBe(2)
+    expect(getRecordingSpeakers('rec_rs4')).toHaveLength(0)
   })
 })
