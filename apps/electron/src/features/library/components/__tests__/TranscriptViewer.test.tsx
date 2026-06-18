@@ -25,6 +25,8 @@ describe('TranscriptViewer — structured turns (AC3/AC8)', () => {
     // Speaker labels render as badges
     expect(screen.getByText('A')).toBeInTheDocument()
     expect(screen.getByText('B')).toBeInTheDocument()
+    // Structured mode renders dedicated speaker-badge elements (one per turn)
+    expect(screen.getAllByTestId('speaker-badge')).toHaveLength(2)
   })
 
   it('maps file_label to a contact name via speakerNames', () => {
@@ -54,6 +56,8 @@ describe('TranscriptViewer — structured turns (AC3/AC8)', () => {
     // legacy parser extracts "Alice"/"Bob" as text-prefix speakers
     expect(screen.getByText('Hello')).toBeInTheDocument()
     expect(screen.getByText('Hi')).toBeInTheDocument()
+    // NEGATIVE: no structured color-coded speaker-badge element renders without turns
+    expect(screen.queryAllByTestId('speaker-badge')).toHaveLength(0)
   })
 
   it('REGRESSION: plain text (no timestamps, no turns) renders as a single block (AC8)', () => {

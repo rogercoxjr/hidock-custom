@@ -11,6 +11,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { TranscriptViewer } from './TranscriptViewer'
+import { SpeakersPanel } from './SpeakersPanel'
+import type { Turn } from '../types/turns'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 import { Transcript, Meeting, parseJsonArray } from '@/types'
@@ -95,6 +97,13 @@ export function SourceReader({
   const [metadataEdited, setMetadataEdited] = useState(false)
   const [showTranscribeWarning, setShowTranscribeWarning] = useState(false)
 
+  // Speaker diarization (D3-T4): structured turns + speaker->contact name map.
+  // SourceReader is the LIVE host of the diarization UI (SourceDetailDrawer is dead
+  // code). Turns come from transcript.turns (JSON); names from speakers:getForRecording.
+  const recordingId = recording?.id
+  const [turns, setTurns] = useState<Turn[]>([])
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({})
+
   // Reset all state when recording changes
   useEffect(() => {
     setIsEditingTitle(false)
@@ -103,6 +112,55 @@ export function SourceReader({
     setMetadataEdited(false)
     setShowTranscribeWarning(false)
   }, [recording?.id])
+
+  /**
+   * Re-fetch BOTH the recording's turns (transcripts:getByRecordingId) and its
+   * speaker->contact-name map (speakers:getForRecording). Called on recording change
+   * and again whenever the SpeakersPanel reports an assign/merge/reassign, so the panel
+   * and the structured transcript reflect the new turns + names live.
+   */
+  const refreshSpeakers = useCallback(async () => {
+    if (!recordingId) {
+      setTurns([])
+      setSpeakerNames({})
+      return
+    }
+    const api = window.electronAPI
+    const [freshTranscript, speakerRes] = await Promise.all([
+      api.transcripts.getByRecordingId(recordingId),
+      api.speakers.getForRecording(recordingId),
+    ])
+
+    let parsedTurns: Turn[] = []
+    const rawTurns = (freshTranscript as { turns?: string | null } | null | undefined)?.turns
+    if (rawTurns) {
+      try { parsedTurns = JSON.parse(rawTurns) } catch { parsedTurns = [] }
+    }
+    setTurns(parsedTurns)
+
+    const names: Record<string, string> = {}
+    if (speakerRes?.success && speakerRes.data) {
+      for (const [label, entry] of Object.entries(speakerRes.data)) {
+        names[label] = (entry as { contactName: string }).contactName
+      }
+    }
+    setSpeakerNames(names)
+  }, [recordingId])
+
+  // Seed turns from the prop transcript immediately (so the panel renders before the
+  // async fetch resolves), then fetch fresh turns + assignment names.
+  const transcriptTurns = (transcript as { turns?: string | null } | undefined)?.turns
+  useEffect(() => {
+    let parsed: Turn[] = []
+    if (transcriptTurns) {
+      try { parsed = JSON.parse(transcriptTurns) } catch { parsed = [] }
+    }
+    setTurns(parsed)
+    setSpeakerNames({})
+    void refreshSpeakers()
+  }, [recordingId, transcriptTurns, refreshSpeakers])
+
+  const hasStructuredTurns = turns.length > 0
 
   const handleSaveTitle = useCallback(async () => {
     if (!recording?.knowledgeCaptureId) return
@@ -547,8 +605,22 @@ export function SourceReader({
                 )}
               </div>
             )}
+            {/* Speakers panel — structured turns only (hidden when no turns) */}
+            {hasStructuredTurns && (
+              <div className="mb-4">
+                <SpeakersPanel
+                  recordingId={recording.id}
+                  meetingId={meeting?.id}
+                  turns={turns}
+                  assignedNames={speakerNames}
+                  onChanged={() => { void refreshSpeakers() }}
+                />
+              </div>
+            )}
             <TranscriptViewer
               transcript={transcript.full_text}
+              turns={hasStructuredTurns ? turns : undefined}
+              speakerNames={speakerNames}
               currentTimeMs={currentTimeMs}
               onSeek={onSeek || (() => {})}
               showSummary={true}

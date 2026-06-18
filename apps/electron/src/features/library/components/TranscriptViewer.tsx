@@ -287,7 +287,10 @@ export function TranscriptViewer({
                       </TimeAnchor>
                       {segment.speaker && (
                         hasStructuredTurns ? (
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${speakerBadgeClass(segment.speaker)}`}>
+                          <span
+                            data-testid="speaker-badge"
+                            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${speakerBadgeClass(segment.speaker)}`}
+                          >
                             {speakerNames?.[segment.speaker] ?? segment.speaker}
                           </span>
                         ) : (
