@@ -294,7 +294,7 @@ export function registerRecordingHandlers(): void {
   // could double-bill metered ASR by racing the queue processor. Per-item
   // transcription failures surface via transcription:failed events, not this
   // promise — only infrastructure errors (lock/queue reads) reject it.
-  ipcMain.handle('recordings:transcribe', async (_, recordingId: unknown): Promise<void> => {
+  ipcMain.handle('recordings:transcribe', async (_, recordingId: unknown): Promise<string | false> => {
     try {
       const result = TranscribeRecordingSchema.safeParse({ recordingId })
       if (!result.success) {
@@ -319,8 +319,11 @@ export function registerRecordingHandlers(): void {
         deleteRecordingSpeakersForRecording(id)
       }
 
-      addToQueue(id)
+      // Return the queue-item id so the renderer (queueTranscription's forced
+      // re-transcribe branch) can feed the in-app queue panel, mirroring addToQueue.
+      const queueItemId = addToQueue(id)
       await processQueueManually()
+      return queueItemId
     } catch (error) {
       console.error('recordings:transcribe error:', error)
       throw error

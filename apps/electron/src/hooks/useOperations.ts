@@ -56,13 +56,21 @@ export function useOperations() {
 
     try {
       await window.electronAPI.recordings.updateStatus(recording.id, 'pending')
-      const queueItemId = await window.electronAPI.recordings.addToQueue(recording.id)
+      // A FORCED re-transcribe (D5 §6.8 / AC6) must route through recordings.transcribe —
+      // the ONLY IPC that clears the stage markers (full_text/summarization_provider + the
+      // diarization columns) and drops prior speaker mappings server-side BEFORE enqueueing.
+      // The bare addToQueue path skips that clear, so the worker sees a still-complete
+      // transcript and short-circuits ("already fully transcribed") — the live re-transcribe
+      // bug. Both IPCs return the queue-item id so the in-app queue panel updates either way.
+      const queueItemId = opts?.force
+        ? await window.electronAPI.recordings.transcribe(recording.id)
+        : await window.electronAPI.recordings.addToQueue(recording.id)
       if (!queueItemId) {
         toast({ title: 'Failed to queue transcription', description: 'Could not add to queue', variant: 'error' })
         return false
       }
       addToQueue(queueItemId, recording.id, recording.filename)
-      toast({ title: 'Transcription queued', description: recording.filename })
+      toast({ title: opts?.force ? 'Re-transcription queued' : 'Transcription queued', description: recording.filename })
       return true
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error'

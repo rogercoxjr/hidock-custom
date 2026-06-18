@@ -47,6 +47,9 @@ const mockQueueDownloads = vi.fn().mockResolvedValue(undefined)
 const mockCancelAllDownloads = vi.fn().mockResolvedValue(undefined)
 
 const mockAddToQueueIPC = vi.fn().mockResolvedValue('queue-item-1')
+// AC6 forced re-transcribe routes through recordings.transcribe (the clearing IPC),
+// which returns the queue-item id just like addToQueue.
+const mockTranscribeIPC = vi.fn().mockResolvedValue('queue-item-1')
 // spec §5.6: validateTranscriptionConfig replaces the hardcoded Gemini-key gates
 const mockValidateTranscriptionConfig = vi.fn().mockResolvedValue({ ok: true, problems: [] })
 
@@ -54,6 +57,7 @@ global.window.electronAPI = {
   recordings: {
     updateStatus: mockUpdateStatus,
     addToQueue: mockAddToQueueIPC,
+    transcribe: mockTranscribeIPC,
     cancelTranscription: mockCancelTranscription,
     cancelAllTranscriptions: mockCancelAllTranscriptions,
     validateTranscriptionConfig: mockValidateTranscriptionConfig
@@ -141,6 +145,8 @@ describe('useOperations', () => {
       expect(mockUpdateStatus).toHaveBeenCalledWith('rec-3', 'pending')
       expect(mockAddToQueueIPC).toHaveBeenCalledWith('rec-3')
       expect(mockAddToQueue).toHaveBeenCalledWith('queue-item-1', 'rec-3', 'eligible.wav')
+      // A first-time/non-forced transcribe must NOT use the re-transcribe clearing IPC.
+      expect(mockTranscribeIPC).not.toHaveBeenCalled()
     })
 
     it('returns false for a complete recording WITHOUT force (re-transcribe dead-path guard)', async () => {
@@ -168,7 +174,7 @@ describe('useOperations', () => {
       expect(mockAddToQueueIPC).not.toHaveBeenCalled()
     })
 
-    it('re-queues a complete recording WITH force:true (AC6 forced re-transcribe path)', async () => {
+    it('re-queues a complete recording WITH force:true via the CLEARING IPC, not bare addToQueue (AC6)', async () => {
       const { result } = renderHook(() => useOperations())
 
       const complete = {
@@ -190,7 +196,14 @@ describe('useOperations', () => {
 
       expect(success).toBe(true)
       expect(mockUpdateStatus).toHaveBeenCalledWith('rec-complete-2', 'pending')
-      expect(mockAddToQueueIPC).toHaveBeenCalledWith('rec-complete-2')
+      // AC6 / the live-run bug: a forced re-transcribe MUST route through
+      // recordings.transcribe — the ONLY path that clears the stage markers + drops
+      // prior speaker mappings server-side before enqueueing. The bare addToQueue path
+      // skips that clear, so the worker sees full_text+summarization_provider and
+      // short-circuits ("already fully transcribed") → re-transcribe silently no-ops.
+      expect(mockTranscribeIPC).toHaveBeenCalledWith('rec-complete-2')
+      expect(mockAddToQueueIPC).not.toHaveBeenCalled()
+      // The returned queue-item id still feeds the in-app queue panel.
       expect(mockAddToQueue).toHaveBeenCalledWith('queue-item-1', 'rec-complete-2', 'redo.wav')
     })
 

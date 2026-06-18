@@ -165,8 +165,9 @@ export interface ElectronAPI {
     // External file import
     addExternal: () => Promise<{ success: boolean; recording?: any; error?: string }>
     addExternalByPath: (filePath: string) => Promise<{ success: boolean; recording?: any; error?: string }>
-    // Transcription
-    transcribe: (recordingId: string) => Promise<void>
+    // Transcription. transcribe = forced/manual re-transcribe (clears markers + drops
+    // speaker mappings server-side, then enqueues); returns the queue-item id like addToQueue.
+    transcribe: (recordingId: string) => Promise<string | false>
     addToQueue: (recordingId: string) => Promise<string | false>
     processQueue: () => Promise<boolean>
     getTranscriptionStatus: () => Promise<{ isProcessing: boolean; pendingCount: number; processingCount: number }>

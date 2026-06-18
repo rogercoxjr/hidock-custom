@@ -540,11 +540,14 @@ describe('Recording IPC Handlers', () => {
       vi.mocked(addToQueue).mockReturnValue('queue-item-id')
       vi.mocked(processQueueManually).mockResolvedValue(undefined)
 
-      await handlers['recordings:transcribe'](null, recId)
+      const result = await handlers['recordings:transcribe'](null, recId)
 
       // spec §5.7: handler enqueues first, then triggers the queue processor
       expect(addToQueue).toHaveBeenCalledWith(recId)
       expect(processQueueManually).toHaveBeenCalled()
+      // AC6: returns the queue-item id so the renderer's forced re-transcribe can
+      // update the in-app queue panel (mirrors recordings:addToQueue).
+      expect(result).toBe('queue-item-id')
     })
 
     it('should throw on validation error for invalid ID', async () => {
