@@ -7,7 +7,7 @@ import { getDatabasePath } from './file-storage'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 25
+const SCHEMA_VERSION = 26
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS transcripts (
     key_points TEXT,
     sentiment TEXT,
     speakers TEXT,
+    turns TEXT,
     word_count INTEGER,
     transcription_provider TEXT,
     transcription_model TEXT,
@@ -256,6 +257,27 @@ CREATE TABLE IF NOT EXISTS transcripts (
     summarization_model TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (recording_id) REFERENCES recordings(id)
+);
+
+-- Per-recording speaker roster + contact mapping (spec 2026-06-17 §6.3, v26)
+CREATE TABLE IF NOT EXISTS recording_speakers (
+    recording_id TEXT NOT NULL,
+    file_label TEXT NOT NULL,
+    contact_id TEXT,
+    confidence REAL,
+    source TEXT NOT NULL CHECK(source IN ('user', 'auto')) DEFAULT 'user',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (recording_id, file_label)
+);
+
+-- Speaker voiceprint embeddings (capture-only in v1, read by nothing) (spec §6.3/§6.7, v26)
+CREATE TABLE IF NOT EXISTS voiceprints (
+    id TEXT PRIMARY KEY,
+    contact_id TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    dim INTEGER NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at TEXT NOT NULL
 );
 
 -- Embeddings for RAG
@@ -1408,6 +1430,57 @@ const MIGRATIONS: Record<number, () => void> = {
     `)
 
     console.log('Migration v25 complete')
+  },
+
+  26: () => {
+    // v26: Speaker diarization (spec 2026-06-17 §6.3) — structured turns column,
+    // the recording_speakers roster/mapping table, and the voiceprints capture table.
+    // Pattern mirrors MIGRATIONS[25] (AP-§5.8): try/catch-guarded ALTER for the new
+    // column (duplicate-column is expected on a fresh DB created from current SCHEMA),
+    // CREATE TABLE IF NOT EXISTS for the new tables. No data backfill — turns is
+    // populated going forward by upsertTranscriptStage1; pre-v26 rows keep turns NULL
+    // and render via the TranscriptViewer legacy text-prefix path (§6.5).
+    console.log('Running migration to schema v26: speaker diarization tables')
+    const database = getDatabase()
+
+    const columnsToAdd = ['ALTER TABLE transcripts ADD COLUMN turns TEXT']
+    for (const sql of columnsToAdd) {
+      try {
+        database.run(sql)
+      } catch (e) {
+        const msg = (e as Error).message
+        if (msg.includes('duplicate column name')) {
+          console.log(`Column already exists: ${sql}`)
+        } else {
+          console.warn(`[Migration v26] ALTER failed (${sql}):`, e)
+        }
+      }
+    }
+
+    database.run(`
+      CREATE TABLE IF NOT EXISTS recording_speakers (
+        recording_id TEXT NOT NULL,
+        file_label TEXT NOT NULL,
+        contact_id TEXT,
+        confidence REAL,
+        source TEXT NOT NULL CHECK(source IN ('user', 'auto')) DEFAULT 'user',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (recording_id, file_label)
+      )
+    `)
+
+    database.run(`
+      CREATE TABLE IF NOT EXISTS voiceprints (
+        id TEXT PRIMARY KEY,
+        contact_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        dim INTEGER NOT NULL,
+        embedding BLOB NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `)
+
+    console.log('Migration v26 complete')
   }
 
 }
