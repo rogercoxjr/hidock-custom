@@ -11,6 +11,7 @@
  * addon, optionalDependencies no-op — the feature is SILENTLY disabled: one
  * operator log line, no toast; mapping still succeeds. AC4 covers both paths.
  */
+import type { Turn } from './asr/asr-provider'
 
 // The WeSpeaker model bundled in app resources (electron-builder asarUnpack).
 // model_id is persisted on every voiceprints row so a future model swap can
@@ -51,4 +52,39 @@ try {
 /** True when the sherpa-onnx-node addon loaded; false → capture is a no-op. */
 export function isVoiceprintAvailable(): boolean {
   return sherpa !== null
+}
+
+/** §6.7: require ≥10 s of clean (non-overlapped) speech before enrolling. */
+export const MIN_CLEAN_SPEECH_MS = 10_000
+
+/**
+ * Sum the milliseconds of `label`'s turns that do NOT overlap any OTHER
+ * label's turn (overlap = intersecting time-ranges, §6.7 step 4). Overlapped
+ * sub-ranges are subtracted, not the whole turn — partial overlaps keep their
+ * clean remainder.
+ */
+export function collectCleanSpeechMs(turns: Turn[], label: string): number {
+  const mine = turns.filter((t) => t.speaker === label)
+  const others = turns.filter((t) => t.speaker !== label)
+  let cleanMs = 0
+  for (const turn of mine) {
+    // Build the set of [start,end) sub-ranges of this turn not covered by others.
+    let segments: Array<[number, number]> = [[turn.startMs, turn.endMs]]
+    for (const o of others) {
+      const next: Array<[number, number]> = []
+      for (const [s, e] of segments) {
+        const oStart = Math.max(s, o.startMs)
+        const oEnd = Math.min(e, o.endMs)
+        if (oStart >= oEnd) {
+          next.push([s, e]) // no intersection — keep whole
+          continue
+        }
+        if (s < oStart) next.push([s, oStart]) // clean left remainder
+        if (oEnd < e) next.push([oEnd, e]) // clean right remainder
+      }
+      segments = next
+    }
+    for (const [s, e] of segments) cleanMs += e - s
+  }
+  return cleanMs
 }

@@ -20,6 +20,8 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import Module from 'module'
+import { collectCleanSpeechMs, MIN_CLEAN_SPEECH_MS } from '../voiceprint-service'
+import type { Turn } from '../asr/asr-provider'
 
 type LoadFn = (request: string, ...rest: unknown[]) => unknown
 const moduleInternals = Module as unknown as { _load: LoadFn }
@@ -65,5 +67,30 @@ describe('voiceprint-service load (§6.7, AC4)', () => {
     vi.resetModules()
     const { isVoiceprintAvailable } = await import('../voiceprint-service')
     expect(isVoiceprintAvailable()).toBe(false)
+  })
+})
+
+describe('collectCleanSpeechMs() — ≥10 s clean-speech gate (§6.7)', () => {
+  it('3. sums non-overlapped turns for the target label', () => {
+    const turns: Turn[] = [
+      { speaker: 'A', startMs: 0, endMs: 4000, text: 'one' },
+      { speaker: 'B', startMs: 4000, endMs: 6000, text: 'two' },
+      { speaker: 'A', startMs: 6000, endMs: 13000, text: 'three' }
+    ]
+    // A: 4000 + 7000 = 11000 ms clean (no overlap with B)
+    expect(collectCleanSpeechMs(turns, 'A')).toBe(11000)
+  })
+
+  it('4. excludes the portion of a label turn that overlaps another label', () => {
+    const turns: Turn[] = [
+      { speaker: 'A', startMs: 0, endMs: 10000, text: 'a' },
+      { speaker: 'B', startMs: 5000, endMs: 7000, text: 'b' } // overlaps A in [5000,7000]
+    ]
+    // A keeps [0,5000] + [7000,10000] = 5000 + 3000 = 8000 ms clean.
+    expect(collectCleanSpeechMs(turns, 'A')).toBe(8000)
+  })
+
+  it('5. MIN_CLEAN_SPEECH_MS is 10 s', () => {
+    expect(MIN_CLEAN_SPEECH_MS).toBe(10_000)
   })
 })
