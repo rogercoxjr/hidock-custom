@@ -196,7 +196,9 @@ import {
   getTranscriptByRecordingId,
   getMeetingById,
   getMeetings,
-  getRecordingsForMeeting
+  getRecordingsForMeeting,
+  queryAll,
+  queryOne
 } from '../database'
 import { getDownloadService } from '../download-service'
 import { transcribeManually } from '../transcription'
@@ -249,6 +251,19 @@ describe('E2E knowledge pipeline smoke test (real services)', () => {
   it('connects+lists, syncs calendar, downloads, transcribes, and correlates — all via real DB', async () => {
     // --- Boot a fresh real sql.js database (db file does not exist) ---
     await initializeDatabase()
+
+    // --- v26 schema guard (spec 2026-06-17 §6.3): first-launch must carry the
+    //     diarization column + tables, proving the migration is wired into boot. ---
+    const transcriptCols = queryAll<{ name: string }>(
+      "SELECT name FROM pragma_table_info('transcripts')"
+    ).map(c => c.name)
+    expect(transcriptCols).toContain('turns')
+    expect(
+      queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='recording_speakers'")
+    ).toBeTruthy()
+    expect(
+      queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='voiceprints'")
+    ).toBeTruthy()
 
     // --- Stage 1: device connect + list -> persist recording ---------------
     // Represent the USB list boundary, then persist via the REAL database fn
