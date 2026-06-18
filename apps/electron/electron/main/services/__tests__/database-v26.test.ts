@@ -283,6 +283,24 @@ describe('upsertTranscriptStage1 — turns/speakers/sentiment (spec §6.3, AC1)'
     expect(JSON.parse(row!.sentiment)).toEqual({ A: 'POSITIVE' })
   })
 
+  it('breaks a sentiment tie deterministically: precedence holds regardless of turn order', () => {
+    insertTestRecording('rec_tie_order')
+    upsertTranscriptStage1({
+      recording_id: 'rec_tie_order',
+      full_text: 'a b',
+      transcription_provider: 'assemblyai',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 1, text: 'a', sentiment: 'NEGATIVE' },
+        { speaker: 'A', startMs: 1, endMs: 2, text: 'b', sentiment: 'POSITIVE' }
+      ]
+    })
+    const row = queryOne<{ sentiment: string }>(
+      "SELECT sentiment FROM transcripts WHERE recording_id='rec_tie_order'"
+    )
+    // NEGATIVE appears FIRST but POSITIVE still wins -> order-independent precedence
+    expect(JSON.parse(row!.sentiment)).toEqual({ A: 'POSITIVE' })
+  })
+
   it('REGRESSION: a provider with no turns leaves turns/speakers/sentiment NULL (Whisper/Gemini path)', () => {
     insertTestRecording('rec_legacy')
     upsertTranscriptStage1({
