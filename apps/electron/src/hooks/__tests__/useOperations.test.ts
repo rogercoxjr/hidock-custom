@@ -143,6 +143,82 @@ describe('useOperations', () => {
       expect(mockAddToQueue).toHaveBeenCalledWith('queue-item-1', 'rec-3', 'eligible.wav')
     })
 
+    it('returns false for a complete recording WITHOUT force (re-transcribe dead-path guard)', async () => {
+      const { result } = renderHook(() => useOperations())
+
+      const complete = {
+        id: 'rec-complete',
+        filename: 'done.wav',
+        location: 'local-only' as const,
+        localPath: '/path/done.wav',
+        syncStatus: 'synced' as const,
+        transcriptionStatus: 'complete' as const,
+        size: 1024,
+        duration: 60,
+        dateRecorded: new Date()
+      }
+
+      let success: boolean | undefined
+      await act(async () => {
+        success = await result.current.queueTranscription(complete as any)
+      })
+
+      expect(success).toBe(false)
+      expect(mockUpdateStatus).not.toHaveBeenCalled()
+      expect(mockAddToQueueIPC).not.toHaveBeenCalled()
+    })
+
+    it('re-queues a complete recording WITH force:true (AC6 forced re-transcribe path)', async () => {
+      const { result } = renderHook(() => useOperations())
+
+      const complete = {
+        id: 'rec-complete-2',
+        filename: 'redo.wav',
+        location: 'local-only' as const,
+        localPath: '/path/redo.wav',
+        syncStatus: 'synced' as const,
+        transcriptionStatus: 'complete' as const,
+        size: 1024,
+        duration: 60,
+        dateRecorded: new Date()
+      }
+
+      let success: boolean | undefined
+      await act(async () => {
+        success = await result.current.queueTranscription(complete as any, { force: true })
+      })
+
+      expect(success).toBe(true)
+      expect(mockUpdateStatus).toHaveBeenCalledWith('rec-complete-2', 'pending')
+      expect(mockAddToQueueIPC).toHaveBeenCalledWith('rec-complete-2')
+      expect(mockAddToQueue).toHaveBeenCalledWith('queue-item-1', 'rec-complete-2', 'redo.wav')
+    })
+
+    it('returns false for a processing recording EVEN WITH force:true (never double-queue)', async () => {
+      const { result } = renderHook(() => useOperations())
+
+      const processing = {
+        id: 'rec-processing-force',
+        filename: 'busy.wav',
+        location: 'local-only' as const,
+        localPath: '/path/busy.wav',
+        syncStatus: 'synced' as const,
+        transcriptionStatus: 'processing' as const,
+        size: 1024,
+        duration: 60,
+        dateRecorded: new Date()
+      }
+
+      let success: boolean | undefined
+      await act(async () => {
+        success = await result.current.queueTranscription(processing as any, { force: true })
+      })
+
+      expect(success).toBe(false)
+      expect(mockUpdateStatus).not.toHaveBeenCalled()
+      expect(mockAddToQueueIPC).not.toHaveBeenCalled()
+    })
+
     it('returns false and toasts provider name when validateTranscriptionConfig reports missing key (spec §5.6)', async () => {
       // spec §5.6: preflight is provider-aware — Whisper user gets "openai-whisper" in the toast
       mockValidateTranscriptionConfig.mockResolvedValueOnce({

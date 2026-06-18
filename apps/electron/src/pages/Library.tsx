@@ -1128,8 +1128,8 @@ export function Library() {
               onDownload={() => {
                 if (selectedRecording) handleDownloadCallback(selectedRecording)
               }}
-              onTranscribe={() => {
-                if (selectedRecording) queueTranscription(selectedRecording)
+              onTranscribe={(force?: boolean) => {
+                if (selectedRecording) queueTranscription(selectedRecording, { force })
               }}
               onResummarize={() => {
                 if (!selectedRecording) return

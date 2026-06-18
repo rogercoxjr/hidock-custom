@@ -47,7 +47,9 @@ interface SourceReaderProps {
   onSeek?: (startMs: number, endMs?: number) => void
   // Action button callbacks
   onDownload?: () => void
-  onTranscribe?: () => void
+  // `force` (D5 §6.8 / AC6) re-queues an already-transcribed recording, bypassing
+  // the parent's complete-guard so the server-side marker-clear + mapping-drop runs.
+  onTranscribe?: (force?: boolean) => void
   onResummarize?: () => void
   onDelete?: () => void
   // State for button enabling/disabling
@@ -271,7 +273,8 @@ export function SourceReader({
     if (metadataEdited) {
       setShowTranscribeWarning(true)
     } else {
-      onTranscribe?.()
+      // First-time transcribe (button only renders when there's no full_text) — not forced.
+      onTranscribe?.(false)
     }
   }, [metadataEdited, onTranscribe])
 
@@ -541,8 +544,10 @@ export function SourceReader({
           </Button>
         )}
 
-        {/* Transcribe Button - only for local recordings without transcript */}
-        {hasLocalPath(recording) && recording.transcriptionStatus !== 'complete' && onTranscribe && (
+        {/* Transcribe Button - first-time only: local recording with NO transcript yet.
+            Mutually exclusive with Re-transcribe (which owns the has-full_text case),
+            so the two never render together when full_text exists but status !== 'complete'. */}
+        {hasLocalPath(recording) && recording.transcriptionStatus !== 'complete' && !transcript?.full_text && onTranscribe && (
           <Button
             variant="outline"
             size="sm"
@@ -732,7 +737,9 @@ export function SourceReader({
         cancelLabel="Cancel"
         variant="default"
         onConfirm={() => {
-          onTranscribe?.()
+          // Metadata-edit warning only fires on the first-time Transcribe button
+          // (which renders only without full_text) — so this is never forced.
+          onTranscribe?.(false)
           setMetadataEdited(false)
           setShowTranscribeWarning(false)
         }}
@@ -749,7 +756,8 @@ export function SourceReader({
         variant="destructive"
         onConfirm={() => {
           setShowRetranscribeConfirm(false)
-          onTranscribe?.()
+          // Forced: bypass the parent's complete-guard so a re-queue actually runs.
+          onTranscribe?.(true)
         }}
       />
     </div>

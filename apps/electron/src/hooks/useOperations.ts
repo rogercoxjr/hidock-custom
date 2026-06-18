@@ -20,12 +20,18 @@ export function useOperations() {
 
   // ── Transcription ──────────────────────────────────────
 
-  const queueTranscription = useCallback(async (recording: UnifiedRecording) => {
+  const queueTranscription = useCallback(async (recording: UnifiedRecording, opts?: { force?: boolean }) => {
     if (!hasLocalPath(recording)) {
       toast({ title: 'Cannot transcribe', description: 'File not available locally. Download first.', variant: 'error' })
       return false
     }
-    if (recording.transcriptionStatus === 'processing' || recording.transcriptionStatus === 'complete') {
+    // Never double-queue an actively-processing recording.
+    if (recording.transcriptionStatus === 'processing') {
+      return false
+    }
+    // A COMPLETE recording is normally a no-op — but a forced re-transcribe (D5 §6.8 /
+    // AC6) must bypass this so the server-side marker-clear + speaker-mapping drop runs.
+    if (recording.transcriptionStatus === 'complete' && !opts?.force) {
       return false
     }
 

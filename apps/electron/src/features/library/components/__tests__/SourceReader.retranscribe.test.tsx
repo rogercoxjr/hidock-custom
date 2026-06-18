@@ -74,6 +74,9 @@ describe('SourceReader re-transcribe confirmation (spec §6.8 / AC6)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /confirm action/i }))
     expect(onTranscribe).toHaveBeenCalledTimes(1)
+    // AC6 live-wiring: confirm must force a re-queue so a COMPLETE recording
+    // bypasses queueTranscription's complete-guard and reaches recordings:transcribe.
+    expect(onTranscribe).toHaveBeenCalledWith(true)
   })
 
   it('cancel does nothing (onTranscribe not called)', async () => {
@@ -97,10 +100,29 @@ describe('SourceReader re-transcribe confirmation (spec §6.8 / AC6)', () => {
     } as unknown as UnifiedRecording
     render(<SourceReader recording={firstTimeRecording} transcript={undefined} onTranscribe={onTranscribe} onResummarize={vi.fn()} />)
 
-    // No Re-transcribe button — only the regular Transcribe button
+    // No Re-transcribe button — only the regular Transcribe button.
+    // Tight selector so it can't accidentally match "Re-transcribe".
     expect(screen.queryByRole('button', { name: /re-transcribe/i })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /transcribe/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^transcribe$/i }))
+    // First-time transcribe is NOT forced (no transcript to overwrite).
     expect(onTranscribe).toHaveBeenCalledTimes(1)
+    expect(onTranscribe).toHaveBeenCalledWith(false)
     expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument()
+  })
+
+  it('no double button: an already-transcribed recording shows Re-transcribe but NOT first-time Transcribe', () => {
+    const onTranscribe = vi.fn()
+    // full_text present but status not 'complete' (e.g. summary failed → 'error') —
+    // the prior overlap bug rendered BOTH buttons in this state.
+    const errored = {
+      id: 'rec-3', filename: 'rec-3.hda', title: 'Errored', location: 'local-only',
+      localPath: 'C:/recordings/rec-3.hda', transcriptionStatus: 'error',
+      dateRecorded: new Date('2026-06-17T09:00:00Z'), size: 1024, duration: 60
+    } as unknown as UnifiedRecording
+    render(<SourceReader recording={errored} transcript={transcript} onTranscribe={onTranscribe} onResummarize={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: /re-transcribe/i })).toBeInTheDocument()
+    // Exactly one transcribe-family button (Re-transcribe), no bare "Transcribe".
+    expect(screen.queryByRole('button', { name: /^transcribe$/i })).not.toBeInTheDocument()
   })
 })
