@@ -17,6 +17,8 @@ import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-re
 import { useLibraryStore } from '@/store/useLibraryStore'
 import { getRecoveryAction } from '@/features/library/utils/errorHandling'
 import { TranscriptionStatusBadge } from './TranscriptionStatusBadge'
+import { SpeakersPanel } from './SpeakersPanel'
+import type { Turn } from '../types/turns'
 
 interface Transcript {
   id: string
@@ -29,6 +31,7 @@ interface Transcript {
   key_points: string | null
   sentiment: string | null
   speakers: string | null
+  turns?: string | null
   word_count: number | null
   transcription_provider: string | null
   transcription_model: string | null
@@ -343,6 +346,23 @@ export function SourceDetailDrawer({
                   <p className="text-sm">{transcript.summary}</p>
                 </div>
               )}
+
+              {/* Speakers panel (structured turns only) */}
+              {(() => {
+                let parsedTurns: Turn[] = []
+                if (transcript.turns) {
+                  try { parsedTurns = JSON.parse(transcript.turns) } catch { parsedTurns = [] }
+                }
+                if (parsedTurns.length === 0) return null
+                return (
+                  <SpeakersPanel
+                    recordingId={transcript.recording_id}
+                    meetingId={meeting?.id}
+                    turns={parsedTurns}
+                    onChanged={() => { /* host refetch wired by caller via key/refresh */ }}
+                  />
+                )
+              })()}
 
               {/* Full transcript */}
               <div>
