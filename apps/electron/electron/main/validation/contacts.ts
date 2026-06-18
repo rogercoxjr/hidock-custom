@@ -47,6 +47,17 @@ export const DeleteContactRequestSchema = z.object({
 })
 
 /**
+ * Create contact request — name required; duplicate emails allowed (existing schema).
+ */
+export const CreateContactRequestSchema = z.object({
+  name: z.string().trim().min(1).max(500),
+  email: z.string().email().max(500).nullable().optional(),
+  type: z.enum(['team', 'candidate', 'customer', 'external', 'unknown']).optional(),
+  role: OptionalStringSchema,
+  company: OptionalStringSchema
+})
+
+/**
  * Contact role in a meeting
  */
 export const ContactRoleSchema = z.enum(['organizer', 'attendee'])
@@ -81,6 +92,7 @@ export type GetContactsRequest = z.infer<typeof GetContactsRequestSchema>
 export type GetContactByIdRequest = z.infer<typeof GetContactByIdRequestSchema>
 export type UpdateContactRequest = z.infer<typeof UpdateContactRequestSchema>
 export type DeleteContactRequest = z.infer<typeof DeleteContactRequestSchema>
+export type CreateContactRequest = z.infer<typeof CreateContactRequestSchema>
 export type ContactRole = z.infer<typeof ContactRoleSchema>
 export type MeetingContact = z.infer<typeof MeetingContactSchema>
 export type ContactCreate = z.infer<typeof ContactCreateSchema>

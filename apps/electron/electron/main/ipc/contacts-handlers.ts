@@ -12,6 +12,7 @@ import {
   deleteContact,
   getMeetingsForContact,
   getContactsForMeeting,
+  upsertContact,
   Contact
 } from '../services/database'
 import { success, error, Result } from '../types/api'
@@ -19,8 +20,10 @@ import {
   GetContactsRequestSchema,
   GetContactByIdRequestSchema,
   UpdateContactRequestSchema,
-  DeleteContactRequestSchema
+  DeleteContactRequestSchema,
+  CreateContactRequestSchema
 } from '../validation/contacts'
+import { randomUUID } from 'crypto'
 import type { Person } from '@/types/knowledge'
 import type { Meeting } from '@/types'
 
@@ -47,6 +50,41 @@ export function registerContactsHandlers(): void {
       } catch (err) {
         console.error('contacts:getAll error:', err)
         return error('DATABASE_ERROR', 'Failed to fetch contacts', err)
+      }
+    }
+  )
+
+  /**
+   * Create a new contact (wraps upsertContact). Name required; duplicate emails allowed.
+   */
+  ipcMain.handle(
+    'contacts:create',
+    async (_, request: unknown): Promise<Result<Person>> => {
+      try {
+        const parsed = CreateContactRequestSchema.safeParse(request)
+        if (!parsed.success) {
+          return error('VALIDATION_ERROR', 'Invalid create request', parsed.error.format())
+        }
+
+        const now = new Date().toISOString()
+        const created = upsertContact({
+          id: randomUUID(),
+          name: parsed.data.name,
+          email: parsed.data.email ?? null,
+          type: parsed.data.type ?? 'unknown',
+          role: parsed.data.role ?? null,
+          company: parsed.data.company ?? null,
+          notes: null,
+          tags: null,
+          first_seen_at: now,
+          last_seen_at: now,
+          meeting_count: 0
+        })
+
+        return success(mapToPerson(created))
+      } catch (err) {
+        console.error('contacts:create error:', err)
+        return error('DATABASE_ERROR', 'Failed to create contact', err)
       }
     }
   )

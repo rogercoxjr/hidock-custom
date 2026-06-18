@@ -22,6 +22,7 @@ vi.mock('../../services/database', () => ({
   deleteContact: vi.fn(),
   getMeetingsForContact: vi.fn(),
   getContactsForMeeting: vi.fn(),
+  upsertContact: vi.fn(),
   getDatabase: vi.fn(() => ({
     prepare: vi.fn(() => ({
       bind: vi.fn(),
@@ -149,5 +150,62 @@ describe('Contacts IPC Handlers', () => {
 
     expect(result.success).toBe(false)
     expect(result.error.code).toBe('NOT_FOUND')
+  })
+
+  it('should register contacts:create handler (AC2)', () => {
+    registerContactsHandlers()
+    expect(ipcMain.handle).toHaveBeenCalledWith('contacts:create', expect.any(Function))
+  })
+
+  it('creates a contact with a required name and returns a Person (AC2)', async () => {
+    const { upsertContact } = await import('../../services/database')
+    vi.mocked(upsertContact).mockImplementation((c: any) => ({
+      ...c,
+      type: c.type ?? 'unknown',
+      role: c.role ?? null,
+      company: c.company ?? null,
+      notes: c.notes ?? null,
+      created_at: '2026-06-17T00:00:00.000Z'
+    }))
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:create')?.[1]
+    const result = await handler?.({} as any, { name: 'Speaker A', email: 'a@example.com' }) as any
+
+    expect(result.success).toBe(true)
+    expect(result.data.name).toBe('Speaker A')
+    expect(result.data.email).toBe('a@example.com')
+    expect(typeof result.data.id).toBe('string')
+    expect(result.data.id.length).toBeGreaterThan(0)
+    expect(upsertContact).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Speaker A', email: 'a@example.com' })
+    )
+  })
+
+  it('rejects contacts:create with a missing/blank name (AC2)', async () => {
+    const { upsertContact } = await import('../../services/database')
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:create')?.[1]
+    const result = await handler?.({} as any, { name: '   ' }) as any
+
+    expect(result.success).toBe(false)
+    expect(result.error.code).toBe('VALIDATION_ERROR')
+    expect(upsertContact).not.toHaveBeenCalled()
+  })
+
+  it('allows duplicate emails on contacts:create (AC2)', async () => {
+    const { upsertContact } = await import('../../services/database')
+    vi.mocked(upsertContact).mockImplementation((c: any) => ({
+      ...c, type: 'unknown', role: null, company: null, notes: null, created_at: '2026-06-17T00:00:00.000Z'
+    }))
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:create')?.[1]
+    const r1 = await handler?.({} as any, { name: 'Alice', email: 'dup@example.com' }) as any
+    const r2 = await handler?.({} as any, { name: 'Alice (other)', email: 'dup@example.com' }) as any
+
+    expect(r1.success).toBe(true)
+    expect(r2.success).toBe(true)
+    expect(upsertContact).toHaveBeenCalledTimes(2)
   })
 })
