@@ -36,18 +36,16 @@ ships win-x64; the build targets x64).
    ```powershell
    npm run models:fetch
    ```
-   On first download it prints the file's SHA-256.
+   The SHA-256 is **already pinned** in `scripts/fetch-models.mjs`, so this downloads
+   and prints `verified … (sha256 ok)`. (If the run ever fails with a SHA mismatch, the
+   upstream release changed — update the pinned `sha256` to the newly printed hash.)
 
-3. **Pin the SHA-256** for integrity: copy the printed hash into the model's `sha256`
-   field in `scripts/fetch-models.mjs` (replace `sha256: null`). Re-run
-   `npm run models:fetch` — it should now print `verified … (sha256 ok)`.
-
-4. **Verify in dev**: `npm run dev`. On startup the main-process log should **no longer**
+3. **Verify in dev**: `npm run dev`. On startup the main-process log should **no longer**
    show `[Voiceprint] sherpa-onnx-node unavailable …`. Map a speaker to a Contact on a
    recording with ≥10 s of clean (non-overlapped) speech for that label; a row should
    appear in the `voiceprints` table (`model_id = wespeaker_en_voxceleb_resnet34_LM`).
 
-5. **Verify in a packaged build**:
+4. **Verify in a packaged build**:
    ```powershell
    npm run build:win
    ```
