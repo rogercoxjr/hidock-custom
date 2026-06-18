@@ -15,6 +15,10 @@ vi.mock('../../services/database', () => ({
   updateTranscriptTurns: vi.fn()
 }))
 
+vi.mock('../../services/voiceprint-service', () => ({
+  captureVoiceprint: vi.fn(async () => ({ captured: true }))
+}))
+
 describe('Speakers IPC Handlers (AC3/AC4)', () => {
   beforeEach(() => vi.clearAllMocks())
 
