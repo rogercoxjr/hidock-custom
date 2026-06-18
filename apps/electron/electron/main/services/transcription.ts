@@ -504,7 +504,10 @@ Meeting ${i + 1}: "${m.subject}"
       transcription_model:
         config.transcription.provider === 'openai-whisper'
           ? config.transcription.whisperModel
-          : config.transcription.geminiModel
+          : config.transcription.provider === 'assemblyai'
+            ? (config.transcription.assemblyaiModels ?? []).join(',') || 'universal-3-pro'
+            : config.transcription.geminiModel,
+      turns: asrResult.turns
     })
 
     // Genuine Stage-1-completed-this-run signal (spec §7.2): emitted ONLY after
