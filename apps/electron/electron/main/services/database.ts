@@ -2651,6 +2651,33 @@ export function getAllEmbeddings(): Embedding[] {
   return queryAll<Embedding>('SELECT * FROM embeddings')
 }
 
+// Voiceprint queries (speaker-diarization §6.3) — v1 CAPTURE ONLY; nothing
+// reads these for matching in v1 (matcher is Phase 2). BLOB is bound as a
+// Uint8Array exactly like insertEmbedding above.
+export interface Voiceprint {
+  id: string
+  contact_id: string
+  model_id: string
+  dim: number
+  embedding: Uint8Array
+  created_at: string
+}
+
+export function insertVoiceprint(vp: Omit<Voiceprint, 'created_at'>): void {
+  run(
+    `INSERT INTO voiceprints (id, contact_id, model_id, dim, embedding, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [vp.id, vp.contact_id, vp.model_id, vp.dim, vp.embedding, new Date().toISOString()]
+  )
+}
+
+export function getVoiceprintsByContactId(contactId: string): Voiceprint[] {
+  return queryAll<Voiceprint>(
+    'SELECT * FROM voiceprints WHERE contact_id = ? ORDER BY created_at',
+    [contactId]
+  )
+}
+
 // Queue queries
 export interface QueueItem {
   id: string
