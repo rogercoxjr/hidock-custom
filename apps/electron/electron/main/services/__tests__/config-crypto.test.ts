@@ -149,7 +149,7 @@ describe('config — openaiApiKey crypto (auto-pipeline P2)', () => {
     const { initializeConfig, getConfig } = await import('../config')
     await initializeConfig()
     const cfg = getConfig()
-    expect(cfg.transcription.provider).toBe('gemini')
+    expect(cfg.transcription.provider).toBe('assemblyai') // D1 §6.2 flipped the default
     expect(cfg.transcription.whisperModel).toBe('whisper-1')
     expect(cfg.transcription.openaiApiKey).toBe('')
   })

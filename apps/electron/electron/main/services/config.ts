@@ -40,6 +40,8 @@ export interface AppConfig {
     geminiModel: string
     openaiApiKey: string   // safeStorage-encrypted at rest (spec §5.4); decrypted in memory
     whisperModel: string   // fixed 'whisper-1' in v1 (spec §5.1; 4o-transcribe deferred §10)
+    assemblyaiApiKey: string   // NEW — safeStorage-encrypted at rest (spec §6.2); decrypted in memory
+    assemblyaiModels: string[] // NEW — priority-ordered speech_models (spec §5/§6.2)
     autoTranscribe: boolean
     language: string
   }
@@ -89,11 +91,13 @@ const DEFAULT_CONFIG: AppConfig = {
     lastSyncAt: null
   },
   transcription: {
-    provider: 'gemini',
+    provider: 'assemblyai', // spec §6.2 — diarization is the default ASR; missing key fails LOUD (no silent fallback)
     geminiApiKey: '',
     geminiModel: 'gemini-3-pro-preview', // Best model for audio transcription
     openaiApiKey: '',
     whisperModel: 'whisper-1',
+    assemblyaiApiKey: '',
+    assemblyaiModels: ['universal-3-pro', 'universal-2'], // PLURAL array; never singular speech_model (spec §5)
     autoTranscribe: true,
     language: 'en'
   },
@@ -154,6 +158,9 @@ export async function initializeConfig(): Promise<void> {
       if (savedConfig.transcription?.openaiApiKey) {
         savedConfig.transcription.openaiApiKey = decryptSensitive(savedConfig.transcription.openaiApiKey)
       }
+      if (savedConfig.transcription?.assemblyaiApiKey) {
+        savedConfig.transcription.assemblyaiApiKey = decryptSensitive(savedConfig.transcription.assemblyaiApiKey)
+      }
       if (savedConfig.summarization?.ollamaCloudApiKey) {
         savedConfig.summarization.ollamaCloudApiKey = decryptSensitive(savedConfig.summarization.ollamaCloudApiKey)
       }
@@ -192,7 +199,8 @@ export async function saveConfig(newConfig: Partial<AppConfig>): Promise<void> {
     },
     transcription: {
       ...config.transcription,
-      openaiApiKey: encryptSensitive(config.transcription.openaiApiKey)
+      openaiApiKey: encryptSensitive(config.transcription.openaiApiKey),
+      assemblyaiApiKey: encryptSensitive(config.transcription.assemblyaiApiKey)
     },
     summarization: {
       ...config.summarization,
