@@ -11,7 +11,35 @@
  * addon, optionalDependencies no-op — the feature is SILENTLY disabled: one
  * operator log line, no toast; mapping still succeeds. AC4 covers both paths.
  */
+import { execFile } from 'child_process'
+import { resolveFfmpegPath } from './asr/audio-normalize'
 import type { Turn } from './asr/asr-provider'
+
+// Raw PCM is far larger than MP3; lift the stdout cap well above the default 1 MB.
+const PCM_MAX_BUFFER = 256 * 1024 * 1024
+
+/**
+ * Decode the whole input to 16 kHz mono signed-16-bit little-endian PCM on
+ * stdout (`pipe:1`). DISTINCT from the Whisper path's MP3 output (§6.7) — no
+ * `-b:a`, format is pcm_s16le. Returns the raw PCM Buffer; throws on ffmpeg
+ * failure so the caller can skip enrollment while keeping the mapping (§8).
+ * Segment slicing by the label's turns is applied by the caller in PCM space
+ * (16-bit samples → 32000 bytes/s), avoiding one ffmpeg call per turn.
+ */
+export async function decodeLabelPcm(filePath: string): Promise<Buffer> {
+  const ffmpeg = resolveFfmpegPath()
+  const args = ['-y', '-i', filePath, '-ar', '16000', '-ac', '1', '-f', 'pcm_s16le', 'pipe:1']
+  return new Promise<Buffer>((resolve, reject) => {
+    execFile(ffmpeg, args, { encoding: 'buffer', maxBuffer: PCM_MAX_BUFFER }, (err, stdout, _stderr) => {
+      if (err) {
+        const detail = String((err as { stderr?: string }).stderr ?? err.message).slice(-200)
+        reject(new Error(`pcm decode failed for ${filePath}: ${detail}`))
+        return
+      }
+      resolve(stdout as Buffer)
+    })
+  })
+}
 
 // The WeSpeaker model bundled in app resources (electron-builder asarUnpack).
 // model_id is persisted on every voiceprints row so a future model swap can

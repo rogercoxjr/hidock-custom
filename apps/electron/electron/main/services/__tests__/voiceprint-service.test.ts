@@ -16,12 +16,48 @@
  * all: the addon genuinely is not installed yet (it arrives in D4-T7), so a
  * fresh import of the service hits a real "Cannot find module" and degrades.
  *
+ * D4-T4 addition: `decodeLabelPcm` uses an ESM `import { execFile }` so
+ * `vi.mock('child_process')` DOES intercept it (unlike the CJS require above).
+ * The mock factory captures args via the hoisted `shared` object so each test
+ * can assert the exact ffmpeg invocation without spawning a real process.
+ *
  * @vitest-environment node
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Module from 'module'
-import { collectCleanSpeechMs, MIN_CLEAN_SPEECH_MS } from '../voiceprint-service'
+import { collectCleanSpeechMs, MIN_CLEAN_SPEECH_MS, decodeLabelPcm } from '../voiceprint-service'
 import type { Turn } from '../asr/asr-provider'
+
+// ---------------------------------------------------------------------------
+// Shared state for child_process mock (vi.hoisted so the factory can close
+// over it before any imports are resolved).
+// ---------------------------------------------------------------------------
+const shared = vi.hoisted(() => ({
+  execFileReject: null as null | { message: string; stderr: string },
+  pcmStdout: Buffer.alloc(0) as Buffer,
+  capturedArgs: [] as string[],
+}))
+
+vi.mock('child_process', () => {
+  const execFile = vi.fn((...args: unknown[]) => {
+    const callback = args[args.length - 1] as (e: Error | null, stdout: Buffer, stderr: string) => void
+    shared.capturedArgs = args[1] as string[]
+    if (shared.execFileReject) {
+      const err = Object.assign(new Error(shared.execFileReject!.message), {
+        stderr: shared.execFileReject!.stderr,
+      })
+      callback(err, Buffer.alloc(0), shared.execFileReject!.stderr)
+    } else {
+      callback(null, shared.pcmStdout, '')
+    }
+    return { pid: 1 }
+  })
+  return { execFile }
+})
+
+vi.mock('../asr/audio-normalize', () => ({
+  resolveFfmpegPath: vi.fn(() => '/fake/ffmpeg'),
+}))
 
 type LoadFn = (request: string, ...rest: unknown[]) => unknown
 const moduleInternals = Module as unknown as { _load: LoadFn }
@@ -92,5 +128,32 @@ describe('collectCleanSpeechMs() — ≥10 s clean-speech gate (§6.7)', () => {
 
   it('5. MIN_CLEAN_SPEECH_MS is 10 s', () => {
     expect(MIN_CLEAN_SPEECH_MS).toBe(10_000)
+  })
+})
+
+describe('decodeLabelPcm() — distinct PCM invocation (§6.7 step 3)', () => {
+  beforeEach(() => {
+    shared.execFileReject = null
+    shared.pcmStdout = Buffer.from([0, 1, 0, 2]) // 2 s16le samples (4 bytes)
+    shared.capturedArgs = []
+  })
+
+  it('6. decodes 16 kHz mono pcm_s16le to stdout (pipe:1), NOT mp3', async () => {
+    const buf = await decodeLabelPcm('/recordings/m.hda')
+    expect(shared.capturedArgs).toContain('-ar')
+    expect(shared.capturedArgs).toContain('16000')
+    expect(shared.capturedArgs).toContain('-ac')
+    expect(shared.capturedArgs).toContain('1')
+    expect(shared.capturedArgs).toContain('-f')
+    expect(shared.capturedArgs).toContain('pcm_s16le')
+    expect(shared.capturedArgs).toContain('pipe:1')
+    expect(shared.capturedArgs).not.toContain('-b:a') // never the MP3 bitrate flag
+    expect(Buffer.isBuffer(buf)).toBe(true)
+    expect(buf.length).toBe(4)
+  })
+
+  it('7. ffmpeg decode failure throws (caller skips enrollment, keeps mapping)', async () => {
+    shared.execFileReject = { message: 'exit 1', stderr: 'bad input' }
+    await expect(decodeLabelPcm('/recordings/bad.hda')).rejects.toThrow(/pcm decode failed/i)
   })
 })
