@@ -139,7 +139,7 @@ describe('voiceprint-service load (§6.7, AC4)', () => {
           createStream() {
             return {}
           }
-          acceptWaveform() {}
+          acceptWaveform() { /* no-op stub */ }
           isReady() {
             return true
           }
@@ -326,7 +326,7 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
           createStream() {
             return {}
           }
-          acceptWaveform() {}
+          acceptWaveform() { /* no-op stub */ }
           isReady() {
             return true
           }
@@ -410,7 +410,7 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
             createStream() {
               return {}
             }
-            acceptWaveform() {}
+            acceptWaveform() { /* no-op stub */ }
             isReady() {
               return true
             }
@@ -456,7 +456,7 @@ describe('getExtractor() init-failure caching (D4-T7 carried fix)', () => {
           }
           dim = 0
           createStream() { return {} }
-          acceptWaveform() {}
+          acceptWaveform() { /* no-op stub */ }
           isReady() { return false }
           compute() { return new Float32Array(0) }
         }
