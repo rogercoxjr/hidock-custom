@@ -18,13 +18,13 @@
 export const VOICEPRINT_MODEL_ID = 'wespeaker_en_voxceleb_resnet34_LM'
 
 // ---------------------------------------------------------------------------
-// Module-level optional-dependency load. A failed import sets the addon to
+// Module-level optional-dependency load. A failed require sets the addon to
 // null; isVoiceprintAvailable() reports it. One log line, no throw (§6.7).
 //
-// Uses top-level await so the import completes before any caller reads the
-// availability flag. Dynamic import() is used rather than require() so that
-// Vitest's vi.mock can intercept it in tests (Vitest v4 patches ESM imports
-// but not CJS require() calls).
+// Synchronous require() (NOT top-level await): the Electron main process bundles
+// to CJS, where top-level await is invalid and Rollup would drop/break it. The
+// require lives in a try/catch so a missing native addon (optionalDependencies
+// no-op, non-Windows, broken prebuild) degrades silently — one log line, no throw.
 // ---------------------------------------------------------------------------
 type SherpaModule = {
   SpeakerEmbeddingExtractor: new (config: unknown) => {
@@ -39,8 +39,8 @@ type SherpaModule = {
 let sherpa: SherpaModule | null = null
 try {
   // @ts-ignore - sherpa-onnx-node is an optional native addon; added in D4-T7
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  sherpa = (await import('sherpa-onnx-node')) as SherpaModule
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/ban-ts-comment
+  sherpa = require('sherpa-onnx-node') as SherpaModule
 } catch (e) {
   console.warn(
     `[Voiceprint] sherpa-onnx-node unavailable — voiceprint capture disabled: ${(e as Error).message}`
