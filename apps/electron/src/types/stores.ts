@@ -303,7 +303,7 @@ export interface AppConfig {
     lastSyncAt: string | null
   }
   transcription: {
-    provider: 'gemini' | 'openai-whisper'
+    provider: 'gemini' | 'openai-whisper' | 'assemblyai'
     geminiApiKey: string
     geminiModel: string
     openaiApiKey: string   // safeStorage-encrypted at rest (spec §5.4); decrypted in memory

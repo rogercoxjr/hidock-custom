@@ -48,7 +48,7 @@ export function Settings() {
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [geminiModel, setGeminiModel] = useState('gemini-3-pro-preview')
   const [language, setLanguage] = useState('en')
-  const [asrProvider, setAsrProvider] = useState<'gemini' | 'openai-whisper'>('gemini')
+  const [asrProvider, setAsrProvider] = useState<'gemini' | 'openai-whisper' | 'assemblyai'>('gemini')
   const [openaiApiKey, setOpenaiApiKey] = useState('')
   const [showOpenaiKey, setShowOpenaiKey] = useState(false)
   const [chatProvider, setChatProvider] = useState<'gemini' | 'ollama'>('gemini')
