@@ -132,8 +132,6 @@ export function createAssemblyAiAsr(config: AppConfig): AsrProvider {
         throw new Error(`AssemblyAI transcription failed: ${txn.error ?? 'unknown error'}`)
       }
 
-      console.log(`[AssemblyAI] speech_model_used=${txn.speech_model_used ?? 'unknown'}`)
-
       // 4. Map utterances → Turn[], converting SECONDS → ms ×1000 (spec §5/AC1).
       const turns: Turn[] = (txn.utterances ?? []).map((u) => {
         const turn: Turn = {
