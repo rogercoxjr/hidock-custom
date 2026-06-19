@@ -17,17 +17,20 @@ function getExtractor(modelPath: string) {
   return ext
 }
 
-process.parentPort.on('message', (e: { data: { id: string; modelPath: string; sampleRate: number; samples: Float32Array } }) => {
+type EmbedRequest = { id: string; modelPath: string; sampleRate: number; samples: Float32Array }
+
+process.parentPort.on('message', (e: { data: EmbedRequest }) => {
   const { id, modelPath, sampleRate, samples } = e.data
   try {
     const ext = getExtractor(modelPath)
     const stream = ext.createStream()
     stream.acceptWaveform({ sampleRate, samples })
     stream.inputFinished()
-    if (!ext.isReady(stream)) { process.parentPort.postMessage({ id, ok: false, error: 'extractor not ready' }); return }
+    if (!ext.isReady(stream)) {
+      process.parentPort.postMessage({ id, ok: false, error: 'extractor not ready' })
+      return
+    }
     const emb = new Float32Array(ext.compute(stream, false)) // V8-owned copy
-    // Electron's ParentPort.postMessage takes a single argument (no transfer list) — the
-    // embedding is structured-cloned back to the parent. It's tiny (256 floats ≈ 1 KB).
     process.parentPort.postMessage({ id, ok: true, dim: ext.dim, embedding: emb })
   } catch (err) {
     process.parentPort.postMessage({ id, ok: false, error: (err as Error).message })

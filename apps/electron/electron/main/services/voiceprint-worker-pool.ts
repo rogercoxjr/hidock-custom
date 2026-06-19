@@ -1,7 +1,11 @@
 import { utilityProcess, app } from 'electron'
 import { join } from 'path'
 
-type Pending = { resolve: (v: Float32Array | null) => void }
+// A worker reply can be lost if the child stalls inside sherpa or dies without an 'exit'
+// event; without a deadline embedSamples would hang forever and stall the caller's loop.
+const EMBED_TIMEOUT_MS = 30_000
+
+type Pending = { resolve: (v: Float32Array | null) => void; timer: ReturnType<typeof setTimeout> }
 let child: ReturnType<typeof utilityProcess.fork> | null = null
 const pending = new Map<string, Pending>()
 let seq = 0
@@ -11,43 +15,42 @@ function workerPath(): string {
   return join(app.getAppPath(), 'out', 'main', 'voiceprint-worker.js')
 }
 
+function settle(id: string, value: Float32Array | null): void {
+  const p = pending.get(id)
+  if (!p) return
+  clearTimeout(p.timer)
+  pending.delete(id)
+  p.resolve(value)
+}
+
 function ensureChild() {
   if (child) return child
   child = utilityProcess.fork(workerPath())
   child.on('message', (m: { id: string; ok: boolean; embedding?: Float32Array }) => {
-    const p = pending.get(m.id)
-    if (!p) return
-    pending.delete(m.id)
-    p.resolve(m.ok && m.embedding ? new Float32Array(m.embedding) : null)
+    settle(m.id, m.ok && m.embedding ? new Float32Array(m.embedding) : null)
   })
   child.on('exit', () => {
-    for (const p of pending.values()) p.resolve(null)
-    pending.clear()
+    for (const id of [...pending.keys()]) settle(id, null)
     child = null // next call re-spawns
   })
   return child
 }
 
-/** Embed samples off the main thread. Resolves null on any failure (never throws). */
+/** Embed samples off the main thread. Resolves null on any failure or timeout (never throws). */
 export function embedSamples(modelPath: string, sampleRate: number, samples: Float32Array): Promise<Float32Array | null> {
   return new Promise((resolve) => {
+    const id = `vp_${++seq}`
+    const timer = setTimeout(() => settle(id, null), EMBED_TIMEOUT_MS)
+    pending.set(id, { resolve, timer })
     try {
-      const c = ensureChild()
-      const id = `vp_${++seq}`
-      pending.set(id, { resolve })
-      // Electron's UtilityProcess.postMessage transfer list is MessagePortMain[], not
-      // ArrayBuffer[] — it can't transfer the samples buffer the way Worker.postMessage
-      // does, so the message is structured-cloned (a copy). Bounded (≤60 s of 16 kHz
-      // mono ≈ 3.8 MB) so the clone cost is negligible.
-      c.postMessage({ id, modelPath, sampleRate, samples })
+      ensureChild().postMessage({ id, modelPath, sampleRate, samples })
     } catch {
-      resolve(null)
+      settle(id, null)
     }
   })
 }
 
 export function shutdownVoiceprintPool(): void {
   if (child) { try { child.kill() } catch { /* ignore */ } child = null }
-  for (const p of pending.values()) p.resolve(null)
-  pending.clear()
+  for (const id of [...pending.keys()]) settle(id, null)
 }
