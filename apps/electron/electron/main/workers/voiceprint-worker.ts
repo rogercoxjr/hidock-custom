@@ -1,6 +1,6 @@
 // utilityProcess child: isolates the native sherpa addon off the main process so the
 // synchronous embedding compute never blocks the UI. Receives { id, modelPath, sampleRate,
-// samples (Float32Array, transferred) } and replies { id, ok, embedding? , error? }.
+// samples (Float32Array, structured-cloned) } and replies { id, ok, embedding? , error? }.
 import process from 'node:process'
 
 let sherpa: any = null

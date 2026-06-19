@@ -4,7 +4,7 @@
  * v1 = CAPTURE ONLY. Nothing reads voiceprints in v1 (the matcher is Phase 2).
  * On every confirmed speaker→contact mapping (speakers:assign IPC) we pool the
  * label's clean speech, decode it to 16 kHz mono PCM with ffmpeg-static, embed
- * it with sherpa-onnx-node (WeSpeaker), and store a BLOB in `voiceprints`.
+ * it with sherpa-onnx-node (ERes2Net), and store a BLOB in `voiceprints`.
  *
  * Graceful degradation (§6.7): sherpa-onnx-node is an OPTIONAL dependency
  * (prebuilt Windows-x64 addon). If it fails to load — non-Windows, missing

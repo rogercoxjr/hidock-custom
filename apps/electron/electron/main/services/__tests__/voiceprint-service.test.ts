@@ -566,6 +566,27 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     }
   })
 
+  // Privacy gate — the master toggle also disables the auto-embed path:
+  // embedRecordingLabels is a no-op (never reaches insertLabelEmbedding) when
+  // enableVoiceprintCapture is false. Mirrors 8f's mock/teardown so it can't leak.
+  it('8g. privacy toggle disabled → embedRecordingLabels skipped, NO label embedding, no throw', async () => {
+    vi.mocked(db.insertLabelEmbedding).mockReset()
+    vi.resetModules()
+    vi.doMock('../config', () => ({
+      getConfig: () => ({
+        privacy: { enableVoiceprintCapture: false, excludeVoiceprintsFromBackup: true },
+      }),
+    }))
+    try {
+      const { embedRecordingLabels } = await import('../voiceprint-service')
+      await embedRecordingLabels('r1')
+      expect(vi.mocked(db.insertLabelEmbedding)).not.toHaveBeenCalled()
+    } finally {
+      vi.doUnmock('../config')
+      vi.resetModules()
+    }
+  })
+
   // -------------------------------------------------------------------------
   // Task 5: embedRecordingLabels — auto-embed every clean label, off-thread.
   // Reuses the suite's sherpa stub (isVoiceprintAvailable() true), the
