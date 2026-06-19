@@ -76,6 +76,10 @@ export interface AppConfig {
     hideEmptyMeetings: boolean
     showListView: boolean
   }
+  privacy: {
+    enableVoiceprintCapture: boolean       // master gate for the whole voice-library feature (spec §14)
+    excludeVoiceprintsFromBackup: boolean  // keep biometric prints out of sync/backups by default
+  }
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -131,6 +135,10 @@ const DEFAULT_CONFIG: AppConfig = {
     calendarView: 'week',
     hideEmptyMeetings: true,
     showListView: false
+  },
+  privacy: {
+    enableVoiceprintCapture: true,
+    excludeVoiceprintsFromBackup: true
   }
 }
 

@@ -19,6 +19,7 @@ import { app } from 'electron'
 import { resolveFfmpegPath } from './asr/audio-normalize'
 import { getRecordingById, getTranscriptByRecordingId, insertVoiceprint, insertLabelEmbedding } from './database'
 import { embedSamples } from './voiceprint-worker-pool'
+import { getConfig } from './config'
 import type { Turn } from './asr/asr-provider'
 
 // promisify(execFile) — same primitive as the sibling ffmpeg service
@@ -216,6 +217,7 @@ export async function captureVoiceprint(
   fileLabel: string,
   contactId: string,
 ): Promise<CaptureResult> {
+  if (!getConfig().privacy.enableVoiceprintCapture) return { captured: false, reason: 'voiceprint disabled' }
   if (!isVoiceprintAvailable()) return { captured: false, reason: 'voiceprint unavailable' }
 
   const recording = getRecordingById(recordingId)
@@ -267,6 +269,7 @@ export async function captureVoiceprint(
  *  recording_label_embeddings. Lazy/deferred caller (Phase 3 wires when the panel opens).
  *  Never throws; skips labels < MIN_CLEAN_SPEECH_MS. */
 export async function embedRecordingLabels(recordingId: string): Promise<void> {
+  if (!getConfig().privacy.enableVoiceprintCapture) return
   if (!isVoiceprintAvailable()) return
   const recording = getRecordingById(recordingId)
   if (!recording?.file_path) return

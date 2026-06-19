@@ -135,6 +135,9 @@ vi.mock('electron', () => ({
   app: {
     isPackaged: false,
     getAppPath: () => '/fake/app',
+    // Task 6: the service now imports ./config, whose DEFAULT_CONFIG calls
+    // app.getPath('home') at module load. Provide getPath so that import doesn't crash.
+    getPath: (name: string) => (name === 'userData' ? '/fake/userdata' : '/fake/home'),
   },
 }))
 
@@ -538,6 +541,29 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     const res = await cv('rec_1', 'A', 'c_1')
     expect(res.captured).toBe(false)
     expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
+  })
+
+  // Task 6: privacy gate — when enableVoiceprintCapture is false, captureVoiceprint
+  // is a no-op (master gate, spec §14) and never reaches DB/decode, even with sherpa
+  // available + ≥10 s clean speech. Mock ../config to flip the toggle off, then load a
+  // fresh service so its getConfig() honours the mock.
+  it('8f. privacy toggle disabled → capture skipped, NO voiceprint, no throw', async () => {
+    vi.resetModules()
+    vi.doMock('../config', () => ({
+      getConfig: () => ({
+        privacy: { enableVoiceprintCapture: false, excludeVoiceprintsFromBackup: true },
+      }),
+    }))
+    try {
+      const { captureVoiceprint: cv } = await import('../voiceprint-service')
+      const res = await cv('rec_1', 'A', 'c_1')
+      expect(res.captured).toBe(false)
+      expect(res.reason).toMatch(/disabled/i)
+      expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
+    } finally {
+      vi.doUnmock('../config')
+      vi.resetModules()
+    }
   })
 
   // -------------------------------------------------------------------------

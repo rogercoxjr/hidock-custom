@@ -52,4 +52,21 @@ describe('FIX-014: Config interface completeness', () => {
     expect(config.ui.hideEmptyMeetings).toBe(true)
     expect(config.ui.showListView).toBe(false)
   })
+
+  it('config has a privacy section with voiceprint defaults', async () => {
+    vi.doMock('electron', () => ({
+      app: {
+        getPath: vi.fn((name: string) => {
+          if (name === 'home') return '/tmp/test-home'
+          if (name === 'userData') return '/tmp/test-userdata'
+          return '/tmp'
+        })
+      }
+    }))
+
+    const { getConfig } = await import('../config')
+    const cfg = getConfig()
+    expect(cfg.privacy.enableVoiceprintCapture).toBe(true)
+    expect(cfg.privacy.excludeVoiceprintsFromBackup).toBe(true)
+  })
 })
