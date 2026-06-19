@@ -112,6 +112,19 @@ vi.mock('../database', () => ({
 }))
 
 // ---------------------------------------------------------------------------
+// D4 off-thread embedding: captureVoiceprint now routes the sliced samples to
+// embedSamples() in a utilityProcess worker (voiceprint-worker-pool), instead of
+// computing in-process. Mock the pool so the capture tests drive the embedding
+// outcome (a real Float32Array, or null for graceful failure) without spawning a
+// child or touching the native addon. The sherpa require stub below still drives
+// isVoiceprintAvailable() — the availability probe captureVoiceprint gates on.
+// ---------------------------------------------------------------------------
+import { embedSamples } from '../voiceprint-worker-pool'
+vi.mock('../voiceprint-worker-pool', () => ({
+  embedSamples: vi.fn(),
+}))
+
+// ---------------------------------------------------------------------------
 // D4-T5: electron mock — app is not available outside the real Electron main
 // process. Stub it so getExtractor()'s model-path computation doesn't crash.
 // The stub SpeakerEmbeddingExtractor (in Module._load) ignores the model path.
@@ -402,27 +415,45 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
       turns: JSON.stringify(longTurns),
     } as never)
     vi.mocked(db.insertVoiceprint).mockReset()
+    // Off-thread embedding: the pool resolves a deterministic 256-dim Float32Array by
+    // default; individual tests override it (e.g. null for graceful failure).
+    vi.mocked(embedSamples).mockReset()
+    vi.mocked(embedSamples).mockResolvedValue(new Float32Array(256).fill(0.5))
     shared.execFileReject = null
     shared.pcmStdout = TWELVE_SEC_PCM
     shared.extractorDim = 256
     shared.computeResult = new Float32Array(256).fill(0.5)
   })
 
-  it('8a. ≥10s clean speech → one voiceprints row with model_id + dim', async () => {
+  it('8a. ≥10s clean speech → one voiceprints row with model_id + dim (via worker pool)', async () => {
     const { captureVoiceprint: cv } = await import('../voiceprint-service')
     const res = await cv('rec_1', 'A', 'c_1')
     expect(res.captured).toBe(true)
+    // The embedding is computed OFF the main thread: captureVoiceprint must hand the
+    // sliced clean-speech samples to the worker pool at the resolved model path.
+    expect(vi.mocked(embedSamples)).toHaveBeenCalledTimes(1)
+    const [calledModelPath, calledSampleRate, calledSamples] = vi.mocked(embedSamples).mock.calls[0]
+    expect(calledModelPath).toMatch(/3dspeaker_eres2net_en_voxceleb\.onnx$/)
+    expect(calledSampleRate).toBe(16000)
+    expect(calledSamples).toBeInstanceOf(Float32Array)
     expect(vi.mocked(db.insertVoiceprint)).toHaveBeenCalledTimes(1)
     const row = vi.mocked(db.insertVoiceprint).mock.calls[0][0]
     expect(row.contact_id).toBe('c_1')
     expect(row.model_id).toBe(VOICEPRINT_MODEL_ID)
+    // dim is taken from the worker's returned embedding length.
     expect(row.dim).toBe(256)
     expect(row.embedding).toBeInstanceOf(Uint8Array)
-    // Regression (live "External buffers are not allowed"): sherpa's compute() can
-    // return a Float32Array backed by EXTERNAL native memory; under Electron, persisting
-    // a view over it throws when sql.js binds the BLOB. captureVoiceprint MUST copy into
-    // a V8-owned array first, so the stored blob must NOT alias compute()'s buffer.
-    expect(row.embedding.buffer).not.toBe(shared.computeResult.buffer)
+  })
+
+  it('8a-2. worker returns null → mapping kept, NO voiceprint, no throw', async () => {
+    // Graceful failure: any worker failure resolves null (never throws), so the
+    // speaker→contact mapping always succeeds and no voiceprint row is written.
+    vi.mocked(embedSamples).mockResolvedValue(null)
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(false)
+    expect(res.reason).toMatch(/worker/i)
+    expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
   })
 
   it('8b. <10s clean speech → mapping kept, NO voiceprint, no throw', async () => {
@@ -446,9 +477,16 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
   })
 
   it('8d. sherpa unavailable → no-op, no throw', async () => {
-    // This test loads a fresh module instance WITHOUT the stub so sherpa.require()
-    // hits a real "Cannot find module" and the service degrades gracefully.
-    mod8._load = realLoad8 // temporarily remove stub
+    // FORCE the addon to be unresolvable so isVoiceprintAvailable() is false — the
+    // package is now an installed optionalDependency, so genuine absence can't be
+    // relied on. Mirror test 2: stub Module._load to throw for it, then load a fresh
+    // module so its module-level require() swallows the failure and degrades.
+    mod8._load = function (request: string, ...rest: unknown[]): unknown {
+      if (request === 'sherpa-onnx-node') {
+        throw new Error("Cannot find module 'sherpa-onnx-node'")
+      }
+      return realLoad8.apply(this, [request, ...rest])
+    }
     vi.resetModules()
     try {
       const mod = await import('../voiceprint-service')
@@ -498,64 +536,5 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     const res = await cv('rec_1', 'A', 'c_1')
     expect(res.captured).toBe(false)
     expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// D4-T7 carried fix: getExtractor() caches init failure (extractorFailed flag).
-// Once the ctor throws, subsequent calls must return null WITHOUT re-attempting
-// construction or re-emitting the warn log — verifiable by counting ctor calls.
-// ---------------------------------------------------------------------------
-describe('getExtractor() init-failure caching (D4-T7 carried fix)', () => {
-  type LoadFnCf = (request: string, ...rest: unknown[]) => unknown
-  const modCf = Module as unknown as { _load: LoadFnCf }
-
-  it('9. ctor throws once → subsequent captureVoiceprint calls never re-attempt construction', async () => {
-    let ctorCalls = 0
-    const realLoadCf = modCf._load
-    modCf._load = function (request: string, ...rest: unknown[]): unknown {
-      if (request === 'sherpa-onnx-node') {
-        class SpeakerEmbeddingExtractor {
-          constructor() {
-            ctorCalls++
-            throw new Error('model file missing')
-          }
-          dim = 0
-          createStream() { return {} }
-          acceptWaveform() { /* no-op stub */ }
-          isReady() { return false }
-          compute() { return new Float32Array(0) }
-        }
-        return { SpeakerEmbeddingExtractor }
-      }
-      return realLoadCf.apply(this, [request, ...rest])
-    }
-    vi.resetModules()
-
-    try {
-      vi.mocked(db.getRecordingById).mockReturnValue({ file_path: '/recordings/m.hda' } as never)
-      vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
-        turns: JSON.stringify([{ speaker: 'A', startMs: 0, endMs: 12000, text: 'plenty' }]),
-      } as never)
-      // pcm mock: 12 s of silence
-      shared.execFileReject = null
-      shared.pcmStdout = Buffer.alloc(12000 * 32)
-
-      const { captureVoiceprint: cv } = await import('../voiceprint-service')
-
-      // First call: ctor throws, extractorFailed is set, returns { captured: false }
-      const r1 = await cv('rec_1', 'A', 'c_1')
-      expect(r1.captured).toBe(false)
-      expect(ctorCalls).toBe(1)
-
-      // Second call: extractorFailed is true → getExtractor returns null WITHOUT
-      // calling the ctor again. ctorCalls must still be 1.
-      const r2 = await cv('rec_1', 'A', 'c_1')
-      expect(r2.captured).toBe(false)
-      expect(ctorCalls).toBe(1) // not 2 — ctor was NOT retried
-    } finally {
-      modCf._load = realLoadCf
-      vi.resetModules()
-    }
   })
 })

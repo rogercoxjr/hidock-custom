@@ -18,6 +18,7 @@ import { join } from 'path'
 import { app } from 'electron'
 import { resolveFfmpegPath } from './asr/audio-normalize'
 import { getRecordingById, getTranscriptByRecordingId, insertVoiceprint } from './database'
+import { embedSamples } from './voiceprint-worker-pool'
 import type { Turn } from './asr/asr-provider'
 
 // promisify(execFile) — same primitive as the sibling ffmpeg service
@@ -26,10 +27,9 @@ import type { Turn } from './asr/asr-provider'
 // and a non-zero exit rejects with an Error carrying the captured `.stderr`.
 const execFileAsync = promisify(execFile)
 // Raw PCM is far larger than MP3 (~32000 bytes/s mono); lift the stdout cap well
-// above the default 1 MB. A ~2.3 h recording overflows even this 256 MB cap and
-// rejects with a "maxBuffer exceeded" error, which is handled like any decode
-// failure below.
-const PCM_MAX_BUFFER = 256 * 1024 * 1024
+// above the default 1 MB. A ffmpeg failure (incl. maxBuffer overflow) is handled
+// like any decode failure below.
+const PCM_MAX_BUFFER = 2 * 1024 * 1024 * 1024 // 2 GB: a ~2.3h cap silently dropped long Service recordings
 
 /**
  * Decode the WHOLE recording to 16 kHz mono signed-16-bit little-endian PCM on
@@ -163,31 +163,10 @@ export interface CaptureResult {
   reason?: string
 }
 
-// Lazy-init the extractor on first captureVoiceprint call (§6.7). null until
-// first capture; ctor can throw on bad/missing model — degrades to "unavailable".
-type SherpaExtractor = InstanceType<SherpaModule['SpeakerEmbeddingExtractor']>
-let extractor: SherpaExtractor | null = null
-// D4-T7 carried fix: cache ctor failure so we NEVER retry the constructor after
-// it throws (e.g. model file missing at runtime). Without this flag every
-// captureVoiceprint call re-attempts construction and re-emits the warn log.
-let extractorFailed = false
-
-function getExtractor(): SherpaExtractor | null {
-  if (!sherpa) return null
-  if (extractor) return extractor
-  if (extractorFailed) return null // init already failed — don't retry
-  try {
-    const modelPath = app.isPackaged
-      ? join(process.resourcesPath, 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
-      : join(app.getAppPath(), 'resources', 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
-    extractor = new sherpa.SpeakerEmbeddingExtractor({ model: modelPath, numThreads: 1, debug: false })
-    return extractor
-  } catch (e) {
-    extractorFailed = true
-    console.warn(`[Voiceprint] extractor init failed — capture disabled: ${(e as Error).message}`)
-    return null
-  }
-}
+// NOTE: the in-process extractor (getExtractor/compute) was removed when embedding
+// moved off-thread (see voiceprint-worker-pool). The sherpa require + isVoiceprintAvailable()
+// above stay as the availability probe; the actual compute now runs in the utilityProcess
+// worker, which loads sherpa itself from modelPath().
 
 /** Convert 16 kHz s16le mono PCM bytes to a Float32Array of the label's
  *  clean turn samples (32 bytes/ms = 16000 Hz × 2 bytes). Exported for tests. */
@@ -212,6 +191,14 @@ function embeddingToBlob(vec: Float32Array): Uint8Array {
   return new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength)
 }
 
+/** Resolve the on-disk model path the same way getExtractor() does — the
+ *  utilityProcess worker loads sherpa from this path off the main thread. */
+function modelPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
+    : join(app.getAppPath(), 'resources', 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
+}
+
 /**
  * Capture-only voiceprint hook (§6.7, AC4). Fired by the speakers:assign IPC
  * after the recording_speakers row is written. NEVER throws — every failure
@@ -229,8 +216,7 @@ export async function captureVoiceprint(
   fileLabel: string,
   contactId: string,
 ): Promise<CaptureResult> {
-  const ext = getExtractor()
-  if (!ext) return { captured: false, reason: 'voiceprint unavailable' }
+  if (!isVoiceprintAvailable()) return { captured: false, reason: 'voiceprint unavailable' }
 
   const recording = getRecordingById(recordingId)
   if (!recording?.file_path) return { captured: false, reason: 'audio file not downloaded' }
@@ -262,31 +248,17 @@ export async function captureVoiceprint(
   const samples = pcmToFloat32(pcm, turns, fileLabel)
   if (samples.length === 0) return { captured: false, reason: 'no usable samples after slicing' }
 
-  try {
-    // sherpa-onnx-node API: acceptWaveform + inputFinished are methods on the
-    // STREAM (OnlineStream); isReady/compute are on the extractor and take the
-    // stream. inputFinished() is REQUIRED — without it isReady() never returns true.
-    const stream = ext.createStream()
-    stream.acceptWaveform({ sampleRate: 16000, samples })
-    stream.inputFinished()
-    if (!ext.isReady(stream)) return { captured: false, reason: 'extractor not ready' }
-    // Pass enableExternalBuffer=false: the addon default (true) allocates an EXTERNAL
-    // ArrayBuffer that Electron's V8 Memory Cage rejects INSIDE compute() (verified in
-    // node_modules/sherpa-onnx-node/speaker-identification.js). false → V8-owned buffer.
-    // The new Float32Array(...) copy is now a harmless defensive copy (kept so the stored
-    // BLOB never aliases the addon's buffer; an existing test asserts this).
-    const embedding = new Float32Array(ext.compute(stream, false))
-
-    insertVoiceprint({
-      id: `vp_${randomUUID()}`,
-      contact_id: contactId,
-      model_id: VOICEPRINT_MODEL_ID,
-      dim: ext.dim,
-      embedding: embeddingToBlob(embedding),
-    })
-    return { captured: true }
-  } catch (e) {
-    console.warn(`[Voiceprint] embedding failed for recording ${recordingId}: ${(e as Error).message}`)
-    return { captured: false, reason: `embedding failed: ${(e as Error).message}` }
-  }
+  // Embed OFF the main thread in a utilityProcess (see voiceprint-worker-pool): the
+  // synchronous sherpa compute() can no longer block the UI. embedSamples never throws;
+  // it resolves null on any worker failure so the speaker→contact mapping always succeeds.
+  const embedding = await embedSamples(modelPath(), 16000, samples)
+  if (!embedding) return { captured: false, reason: 'embedding failed (worker)' }
+  insertVoiceprint({
+    id: `vp_${randomUUID()}`,
+    contact_id: contactId,
+    model_id: VOICEPRINT_MODEL_ID,
+    dim: embedding.length,
+    embedding: embeddingToBlob(embedding),
+  })
+  return { captured: true }
 }

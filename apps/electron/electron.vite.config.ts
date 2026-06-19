@@ -8,7 +8,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'electron/main/index.ts')
+          index: resolve(__dirname, 'electron/main/index.ts'),
+          'voiceprint-worker': resolve(__dirname, 'electron/main/workers/voiceprint-worker.ts')
         }
       }
     }
