@@ -18,9 +18,9 @@ describe('voiceprint bundle config (§6.7, §11)', () => {
     expect(pkg.optionalDependencies['sherpa-onnx-node']).toMatch(/^\d+\.\d+\.\d+/)
   })
 
-  it('2. electron-builder unpacks the WeSpeaker model + ships it in extraResources', () => {
+  it('2. electron-builder unpacks the ERes2Net model + ships it in extraResources', () => {
     const yml = readFileSync(join(root, 'electron-builder.yml'), 'utf-8')
-    expect(yml).toContain('wespeaker_en_voxceleb_resnet34_LM.onnx')
+    expect(yml).toContain('3dspeaker_eres2net_en_voxceleb.onnx')
     expect(yml).toContain('resources/models')
   })
 })
