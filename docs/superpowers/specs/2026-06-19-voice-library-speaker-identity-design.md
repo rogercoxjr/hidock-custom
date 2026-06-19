@@ -2,201 +2,176 @@
 
 **Date:** 2026-06-19
 **App:** `apps/electron` (universal knowledge hub)
-**Status:** Design (brainstormed; pending user review → implementation plan)
-**Builds on:** the shipped speaker-diarization feature (`2026-06-17-speaker-diarization-design.md`) — AssemblyAI Universal-3 Pro one-call ASR, `transcripts.turns`, `recording_speakers` + `voiceprints` tables, the Speakers panel in `SourceReader.tsx`, and the now-working on-device voiceprint engine (`voiceprint-service.ts`, WeSpeaker `wespeaker_en_voxceleb_resnet34_LM`, 256-dim, `compute(stream, false)`).
+**Status:** Design rev 2 (post adversarial-review + Phase-0 validation; pending user review → implementation plan)
+**Builds on:** the shipped speaker-diarization feature (`2026-06-17-speaker-diarization-design.md`) and the on-device voiceprint engine (`voiceprint-service.ts`, sherpa-onnx-node, `compute(stream, false)`).
+
+> **Rev 2 — what changed and why.** Rev 1 (infer recording *type* → set a high `min_speakers_expected` floor → diarize → embed → match/merge → backstop) was put through two independent adversarial reviews and a front-loaded Phase-0 validation spike. The reviews converged on one verdict: rev 1 steered the diarizer on speculative inference *before* proving the embedding foundation, reversed a prior shipped decision without rebutting it, and deferred all the hard accuracy proofs to "calibration" scheduled last. The Phase-0 spike then produced hard evidence that reshapes the design:
+> - **The embedding model was the binding constraint, and it's fixable.** WeSpeaker (current) gives ~26.8% cross-recording EER on real far-field P1 audio — unusable. **3D-Speaker ERes2Net** gives **~0.8% EER on clean labels (~9.5% with contaminated labels)** and cleanly separates same-person from different-people (medians 0.76 vs 0.10). TitaNet was middling (18.5%); CAM++ failed. **ERes2Net is adopted** (256-dim — same as WeSpeaker, no storage migration; 26 MB).
+> - **Recognition over enumeration is validated** with that model. The voice-library + merge core is now low-risk and evidence-backed.
+> - **The over-split floor / type-probe is demoted to a research-gated phase** (the cost reviewer showed the probe is likely net-negative; the lever's efficacy at separating merged people is still unproven and matters less now that matching + merge work).
+> - **Safety/hygiene is now first-class, not a footnote:** clean-speech quality gates, voiceprint provenance + delete/undo (none exists today), no training on provisional/auto labels, negative-feedback storage, a conflict hierarchy, a durable job state machine, a **Solo** type, and privacy/consent.
+> Rev 1's body is superseded; this is the authoritative design.
 
 ---
 
-## 1. Problem
+## 1. Problem & principle
 
-The HiDock P1 is a **standalone physical recorder**. Unlike a meeting app, there is **no calendar invite and no attendee list** to tell us how many people are in a recording — so the proven accuracy lever, AssemblyAI's `speaker_options.min_speakers_expected`, has no obvious source. Left to its defaults, AssemblyAI **under-counts**: it merges similar voices (e.g. a mother and daughter) into one label and absorbs short interjections into a neighbor's turn (confirmed on `2026Jun16-122033-Rec04.wav`: 3 labels found for 4 real people; a doctor's question and the user's answer collapsed into one turn).
+The P1 is a **standalone recorder** — no calendar invite, no attendee list. AssemblyAI under-counts speakers (merges similar voices, absorbs short interjections). Two asymmetries:
+- **Under-split is hard to recover; over-split is recoverable** — but *not free* (every over-split label is a merge the user must vet, plus embedding/UX/data work). **Principle: bias *against* under-splitting, but cap over-splitting aggressively, and treat both errors as costly** (failure budgets in §9).
+- **Recordings are personal and recurring** — the user is in nearly every one, and the other voices are largely repeat players (family, a few doctors), with some new/one-off voices.
 
-Two asymmetries drive the whole design:
+**The design recognizes people rather than counting them.** One engine — a per-label ERes2Net voice embedding — feeds confidence-ranked suggestions (identity match, over-split merge, unknown). Confirmations grow a local library, but only from clean, corroborated evidence.
 
-- **Under-split is unrecoverable; over-split is recoverable.** You cannot split one label into two people after the fact (the audio is already one labeled blob), but you *can* merge two labels that are really one person. So we must bias toward over-splitting.
-- **The recordings are personal and recurring.** The user is in **every** recording, and the other voices are largely **repeat players** (family, a handful of doctors) — though new/one-off voices appear regularly too.
+## 2. Evidence base (Phase-0 validation — done before this spec)
 
-## 2. Principle: recognition over enumeration
+Measured on the user's real P1 recordings (Rec97/02/04/05/06; medical appointments, far-field):
+- **Model trial (Rec04 separability):** ERes2Net & TitaNet open a wide gap between different-people and same-person over-splits; WeSpeaker & CAM++ do not.
+- **Cross-recording EER (5 recordings, labeled by the user):** ERes2Net **~0.8% (clean) / 9.5% (with 2 user-flagged mixed labels)**; TitaNet 18.5%; WeSpeaker 26.8%. Same-person cross-recording cosine 0.46–0.89 (median 0.76) vs different-people −0.11–0.46 (median 0.10); separating threshold ~0.42–0.45.
+- **Key learning:** the one near-miss positive was a 14-second clip → **enrollment quality/length gates are mandatory** (§6). The two contaminated labels were the user's "mostly-X" mixed labels → **mixed-label detection matters** (§7).
 
-We do not try to *count* speakers. We **recognize** them. A single engine — a per-label voice embedding (the existing 256-dim WeSpeaker model) — feeds three kinds of suggestion into the Speakers panel, and **every confirmation makes the system smarter** (active learning):
+These numbers are directional (small clean positive set, n≈7) but the distribution separation is unambiguous. Calibration (§11) re-confirms on a larger labeled set before auto-apply ships.
 
-1. **Identity match** — "This label is probably Robyn" (label embedding ≈ a known contact's voiceprint).
-2. **Over-split merge** — "Labels A and C are the same voice — merge?" (two labels' embeddings ≈ each other within one recording).
-3. **Unknown** — map it manually, which banks a new voiceprint for next time.
+## 3. Model: adopt ERes2Net
 
-The speaker *count* becomes almost irrelevant: match the knowns, over-split the rest, suggest merges, learn as you go.
+Replace `wespeaker_en_voxceleb_resnet34_LM` with **`3dspeaker_eres2net` (en VoxCeleb, 16k)** in `voiceprint-service.ts` / `fetch-models.mjs` / `electron-builder.yml` (same bundling pattern; pin SHA). 256-dim → **no `voiceprints` storage migration**. All stored embeddings carry a `model_id`/`model_version`; embeddings from different models are never compared (§8/§10). (Any pre-existing WeSpeaker prints are marked superseded, not compared.)
 
-## 3. User decisions (locked during brainstorming)
-
-| Decision | Choice |
-|---|---|
-| Scope | **One comprehensive spec** for the whole identity system (all 6 parts below) |
-| Common case | **Mostly recurring people + some new** → need both a voice library AND a clean unknown-handling fallback |
-| Bias | **Over-split, never under-split** — over-split is cleaned up for free by the merge-suggester |
-| How to know speaker scale | **Infer recording *type* from the transcript** (no per-recording tagging by the user) |
-| Type → floor | A **recording-type → `speaker_options` range** table (§5) |
-| Type detection | An **adaptive probe**: cheap incremental scout passes, escalate while the classifier is `UNCERTAIN`, capped (§6) |
-| Re-transcribe on detected under-count | **Suggest, one-tap to confirm** (no surprise spend on the metered tier) — used only as a backstop when the probe was fooled |
-| Auto-apply vs suggest | **Suggest, don't auto-apply** identity/merge — except the user's **own** enrolled voice, which is safe to auto-apply |
-| Self-enrollment | **"Mark a label as me"** the first time (no separate recording chore); auto-matched thereafter |
-| Calibration | Thresholds, probe params, and type ranges are **empirically calibrated on the user's real recordings** before being relied upon (§12) |
-
-## 4. Architecture & data flow
+## 4. Architecture & data flow (foundation-first)
 
 ```
 Recording synced
    │
    ▼
-(A) Adaptive type probe  ── clip next chunk (skip leading silence) → text-only transcribe →
-   │                         Ollama classifies {1:1|Appointment|Meeting|Service|UNCERTAIN};
-   │                         while UNCERTAIN and under cap: transcribe NEXT chunk, accumulate text, re-classify
+(B) Full pass  ── AssemblyAI transcribe with a CONSERVATIVE STATIC over-split range
+   │              (speaker_options, §9) — no type probe in v1. Labels + turns persist (existing Stage-1).
    ▼
-type → speaker_options { min, max }  (§5)
-   │
+(C) Embed labels  ── decode 16k mono → CLEAN segment selection (§6) → ERes2Net 256-dim, L2-normed.
+   │                  Runs in a worker/utilityProcess (NOT setImmediate — see §12), bounded; lazy where possible.
    ▼
-(B) Full pass  ── AssemblyAI transcribe the WHOLE file ONCE with that floor → labels + turns (existing Stage-1)
-   │
+(D) For each label embedding, compare against:
+   ├─ Voice library (self + recurring contacts; per-print + robust centroid, §10)  ──►  identity suggestion
+   ├─ Other labels in THIS recording                                                ──►  over-split MERGE suggestion (cluster-aware, §7)
+   └─ within-label window variance / two-contact match                              ──►  SUSPECTED MIXED-label flag (§7)
    ▼
-(C) Auto-embed every label  ── decode → ≤60 s clean slice per label → sherpa compute(…, false) → 256-dim
-   │                            (deferred off the main thread; skip labels with <10 s clean speech)
+(E) Speakers panel: confidence-ranked suggestions → confirm identity / confirm merge / map unknown.
+   │   Confirm writes recording_speakers; banks a voiceprint ONLY when clean+corroborated (§6/§10).
    ▼
-(D) Match each label embedding against:
-   ├─ Voice library (self + contacts' voiceprints)  ──►  identity suggestion ("probably Robyn")
-   └─ Other labels in THIS recording                 ──►  merge suggestion ("A = C, same voice")
-   │
-   ▼
-(E) Speakers panel: ranked suggestions → confirm identity / confirm merge / map unknown
-   │                  (confirm writes recording_speakers + banks/strengthens the contact's voiceprint)
-   ▼
-(F) Backstop: the full transcript's Ollama analysis re-checks type/under-count; if it contradicts the probe
-              (or finds a Q-and-its-answer in one label), surface one-tap "Re-transcribe as <Type>" (floor pre-filled)
+(F) Backstop: full-transcript analysis flags likely under-split (evidence-based, §7) → one-tap, user-confirmed
+              "Re-transcribe with more speakers" that RESTORES confirmed identities via library re-match (§7).
 ```
 
-## 5. Recording types → `speaker_options` ranges
+## 5. Scope: ship-now core vs research-gated
 
-Starting ranges (to be confirmed in calibration, §12; the Rec04 sweep already showed `min=4` correctly split the 4-person appointment while `min=8` shredded it):
+**Ship-now core (low-risk, evidence-backed — this spec's primary deliverable):** ERes2Net swap; instrumentation/diarization-run metadata; clean per-label embeddings with provenance/quality; manual identity assignment; **confirmed** identity suggestions; **cluster-aware** merge suggestions; suspected-mixed-label flag; negative-feedback (dismissal) storage; self-enrollment as a *suggestion*; a conservative **static** `speaker_options` range; privacy controls. Depends on no unproven lever.
 
-| Type | `min_speakers_expected` | `max_speakers_expected` |
-|---|---|---|
-| 1:1 | 2 | 3 |
-| Appointment | 2 | 6 |
-| Meeting | 6 | 12 |
-| Service | 8 | 15 |
-| (probe `UNCERTAIN` at cap) | 2 | 10 (neutral wide range; lean over, rely on merge-suggester + backstop) |
+**Research-gated (separate, each behind its own proof):** recording-type inference + adaptive probe + type→floor; **self auto-apply**; the re-transcribe backstop's automation. Explicitly deferred — see §13.
 
-`speaker_options` is sent on the AssemblyAI `/v2/transcript` request alongside the existing `speech_models`/`speaker_labels`/`keyterms_prompt`/`language_code` (and still **no** `model_region`, **no** `sentiment_analysis` — per the shipped corrections). It is a tolerant min/max *range*, not an exact count.
+## 6. Component C — clean label embeddings (quality is the whole game)
 
-## 6. Component A — Adaptive type probe
+- **Clean segment selection (§23 of the review; the spike's circularity caveat):** don't trust raw turns. Drop turns < `MIN_TURN_S` (default 3 s); trim `TRIM_S` (default 0.6 s) inward from each turn edge to avoid speaker-transition bleed; prefer longer turns; cap per-label at `MAX_EMBED_S` (60 s); skip a label entirely if < `MIN_CLEAN_S` (10 s) survives. (These exact gates produced the clean ERes2Net EER; the 14 s near-miss shows they matter.)
+- **Off the main thread for real:** the embedding pass runs in a **worker_thread or utilityProcess**, not `setImmediate` (which does not move synchronous native compute off the event loop — see §12). Embedding *N* labels is *N* bounded computes; never block the UI.
+- **Decode once**, slice all labels from one PCM buffer; **stream/raise the 256 MB cap** so long Service recordings (the multi-speaker target) aren't silently skipped (§12).
+- **Lazy/deferred:** embed after the final transcription pass (not before a possible re-transcribe), and prefer embedding on Speakers-panel open; most one-off voices never need an embedding.
+- **Persist** per-label embeddings with full provenance (§8).
 
-**Purpose:** infer the recording *type* (→ floor range) cheaply, before the full pass, with no user tagging.
+## 7. Component D/F — matching, cluster-aware merge, mixed-label detection, backstop
 
-**Algorithm:**
-1. Determine the probe start by **skipping leading non-speech** (first detected speech; ffmpeg silence-trim or a short VAD). The probe samples *speech*, not setup/silence.
-2. Clip the **next `PROBE_STEP_MS`** of audio (default **120 s**) with ffmpeg; transcribe it **text-only (no `speaker_labels`)** — cheaper and faster; classification needs words, not diarization.
-3. Append the chunk's text to the accumulated probe transcript. Ask Ollama (the local model already used for analysis) to classify into **`1:1 | Appointment | Meeting | Service | UNCERTAIN`** (a *category*, not a fuzzy probability — small models are unreliable at calibrated confidence).
-4. If the result is a concrete type → stop, map to the floor range (§5).
-5. If `UNCERTAIN` and total probed audio `< PROBE_CAP_MS` (default **~6 min**) → go to step 2 (transcribe the *next* chunk; never re-transcribe earlier audio).
-6. If `UNCERTAIN` at the cap → use the neutral `UNCERTAIN` range (§5) and rely on the merge-suggester + backstop.
+**Identity matching** (cosine, normalized): compare each label to the library (self + per-contact prints and a robust centroid of *high-quality confirmed* prints only, §10).
+- `≥ MATCH_AUTO` → strong. **Suggest** (pre-selected). Auto-apply is research-gated (§13) and even then only for self under guardrails.
+- `MATCH_SUGGEST ≤ s < MATCH_AUTO` → suggest top 1–2 with a **margin** requirement over the second-best contact.
+- below → unknown. Calibrated start (ERes2Net): `MATCH_SUGGEST ≈ 0.42`, `MATCH_AUTO ≈ 0.55` (§11).
 
-**Why this shape (rationale captured for implementers):**
-- **Incremental, not cumulative.** Transcribing `0–2, 2–4, 4–6` bills 6 min; `0–2, 0–4, 0–6` bills 12. Always transcribe only the new chunk and accumulate text.
-- **Escalate on uncertainty, not word count.** 2 min almost always has enough words; the real failures are *unrepresentative* openings — pre-meeting small talk (lots of words, reads like a 1:1) and music/announcement intros (few words). An "still can't name the type" trigger covers both; a word-count trigger covers only the second.
-- **Capped** so a genuinely ambiguous recording can't probe-transcribe half of itself and erase the savings.
+**Cluster-aware merge** (not pairwise): build connected components of labels above `MERGE_THRESHOLD`; suggest collapsing each cluster; cap visible suggestions (§9 budget); **suggest-only, never auto**. Guard: never suggest merging two labels that already high-confidence match two *different* contacts.
 
-**Tunable parameters (calibrated, §12):** `PROBE_STEP_MS` (default 120 000), `PROBE_CAP_MS` (default ~360 000), the leading-silence skip, and the type→range table.
+**Suspected-mixed-label detector (the missing bridge to under-split):** flag a label whose within-label window embeddings have high variance, or that matches two different contacts in different time-slices. This is what actually catches the original bug (one label = two people), far better than rev 1's circular "Q-and-answer in one turn" check (a single speaker asks+answers; transcripts lack truth) — that heuristic is dropped.
 
-## 7. Component B — Full pass with the inferred floor
+**Backstop:** present *evidence*, not just a type — "Label B looks like two voices / matches both Robyn and Tiffany." On confirm, re-transcribe with a higher floor. **Critical: re-transcribe must RESTORE prior confirmed identities** by re-matching the new labels against the now-banked voiceprints — today `recordings:transcribe` calls `deleteRecordingSpeakersForRecording`, which would wipe the user's mapping work; AC requires re-application, and the banner warns of re-lettering. User-confirmed only (no surprise spend).
 
-The existing two-stage worker runs unchanged except the AssemblyAI request body gains `speaker_options` from the probe's chosen range. One full transcription of the whole file. Turns/labels persist via the existing `upsertTranscriptStage1` path.
+## 8. Data model
 
-## 8. Component C — Auto-embed every label
-
-Today `captureVoiceprint` runs only when the user *maps* a label. This generalizes it to **embed every label automatically** after the full pass:
-
-- For each label, gather its turns, decode the recording to 16 kHz mono PCM (`-f s16le`), slice the label's clean (non-overlapped) speech capped at `MAX_EMBED_SPEECH_MS` (60 s), and compute a 256-dim embedding via `sherpa.compute(stream, false)` (the V8-cage-safe call).
-- **Off the main thread** — the embedding pass is deferred (the freeze fix). Embedding *N* labels is *N* bounded computes; run them sequentially in the deferred job so the UI never blocks.
-- **Skip** labels with `< MIN_CLEAN_SPEECH_MS` (10 s) clean speech — no reliable embedding; that label stays "unknown / manual" with no suggestion.
-- **Persist** per-label embeddings (new table, §11) so the panel can render suggestions without re-decoding.
-- Decode the recording **once** and slice all labels from the single PCM buffer (avoid one ffmpeg spawn per label).
-- Degrades exactly as today: if sherpa or a usable clip is missing, no embeddings are produced, no suggestions appear, and manual mapping still works.
-
-## 9. Component D — Matching & merge-suggester
-
-A new `voiceprint-matcher` module operating on cosine similarity of L2-normalized 256-dim embeddings.
-
-**Identity matching:** for each label embedding, find the best-matching library voiceprint (the user's own enrolled print + every contact's banked prints; compare to each print or a per-contact centroid).
-- similarity ≥ `MATCH_AUTO` → strong match. **Auto-apply only for the user's own voice** (safe, present every time); for others, **suggest** ("probably Robyn — confirm").
-- `MATCH_SUGGEST` ≤ similarity < `MATCH_AUTO` → **suggest** with the top one or two candidates.
-- below `MATCH_SUGGEST` → no identity suggestion (treat as unknown).
-
-**Merge-suggester (over-split cleanup):** within a single recording, compute pairwise similarity between label embeddings. Pairs ≥ `MERGE_THRESHOLD` → **suggest** merging ("A and C are the same voice").
-- **Suggest only, never auto-merge.** The one case where two labels are similar but must stay separate is genuinely-similar-but-distinct voices — a mother and daughter. Auto-merging would silently destroy the split we worked to get; a one-tap confirm lets the user decline that pair.
-- `MERGE_THRESHOLD` is set *higher* than `MATCH_SUGGEST` (same-person-same-recording embeddings are nearly identical; we want to surface over-splits without flagging the mother/daughter pair).
-
-All thresholds are calibrated (§12).
-
-## 10. Component E/F — Self-enrollment, suggestion UX, and the backstop
-
-**Self-enrollment (E):** the first time the user marks any label as "me" (a designated self contact / `is_self` voiceprint), that embedding is banked as the self print. From then on, the self voice is auto-matched in every recording (the one auto-apply case). No separate recording flow.
-
-**Suggestion UX (E):** the Speakers panel (in the live `SourceReader.tsx` host) renders, per label, the highest-ranked action:
-- **Identity suggestion** — "Robyn (likely) · Confirm · Change" (Change opens the existing contact picker / inline quick-add).
-- **Merge suggestion** — "A + C look like one person · Merge · Dismiss".
-- **Unknown** — the existing manual map control.
-Confirming an identity writes `recording_speakers` (with a non-`user` source marking it auto/confirmed) and **banks/strengthens** that contact's voiceprint (active learning). Confirming a merge collapses the labels via the existing `speakers:merge` path.
-
-**Backstop (F):** the full transcript's Ollama analysis (already running for the summary) also re-classifies the type and checks for under-count tells — most reliably *found-speaker-count < the classified type's min*, and as a bonus a single label containing both a question and its answer. On a hit, the panel surfaces a one-tap **"Re-transcribe as <Type>"** with the corrected floor pre-filled (a second billed pass, user-confirmed — never automatic).
-
-## 11. Data model
-
-Existing (from the diarization feature): `voiceprints(contact_id, model_id, dim, embedding, created_at)`, `recording_speakers(recording_id, file_label, contact_id, source, confidence?)`, `transcripts.turns/speakers`.
+Existing: `voiceprints`, `recording_speakers`, `transcripts.turns/speakers`.
 
 Additions:
-- **Self voiceprint** — a designated self contact, or an `is_self` flag on `voiceprints` (a contact representing the device owner). One per install.
-- **`recording_label_embeddings`** (new) — `recording_id, file_label, model_id, dim, embedding (BLOB), created_at`. Per-label embeddings from Component C, so suggestions render without re-decoding. Cleared/recomputed on re-transcribe.
-- **Recording type** — store the probe's classified type + the `speaker_options` range used, on the recording or transcript row (needed for display and for "re-transcribe as <type>").
-- **`recording_speakers.source`** — extend the vocabulary to distinguish `user` (manual), `auto` (self auto-applied), `confirmed` (a suggestion the user accepted). Used for analytics and to avoid re-suggesting.
+- **`recording_label_embeddings`** — `id, recording_id, transcript_id, diarization_run_id, file_label, model_id, model_version, dim, embedding(BLOB), normalized, clean_speech_ms, turn_count, quality_score, status, created_at, updated_at`. Invalidated/recomputed on re-transcribe **and on any label-mutating op** (merge, reassign) — tagged with the diarization-run/generation id so stale rows are detectable.
+- **`speaker_suggestions`** — `id, recording_id, transcript_id, kind(identity|merge|mixed|backstop), target_label, target_label_2, contact_id, score, rank, rationale, status(pending|accepted|dismissed|expired), created_at, resolved_at`. Makes dismissal-suppression and AC testing possible; **dismissed suggestions do not reappear for the same transcript version.**
+- **Voiceprint provenance** — extend `voiceprints` with `source_recording_id, source_label, clean_speech_ms, quality_score, model_id, model_version, created_from(manual|confirmed|self|import), disabled_at, superseded_by`. **A `deleteVoiceprint`/disable path is required** (none exists today; matching is centroid-able so one bad print must be excisable).
+- **Recording type/options** — store the `speaker_options` actually sent, the label count returned, and (when research-gated type inference ships) the classified type + classifier/prompt version.
+- **`recording_speakers.source`** — add `confirmed`/`self_auto`/`suggestion_confirmed`; the existing column has a `CHECK(source IN ('user','auto'))` constraint, so this is a **table-rebuild migration** (SQLite can't ALTER a CHECK), not a value add — call it out in the plan.
+- **`is_self`** — one self contact, enforced singleton (unique partial index).
 
-## 12. Calibration (required gate, like the diarization AC0)
+## 9. Failure budgets & conservative static floor (no probe in v1)
 
-The starting numbers in this spec are hypotheses. Before the system is relied upon, run a calibration pass against the user's **real recordings of each type** (medical appointment, church service, business meeting, 1:1) — the same empirical method as the Rec04 `speaker_options` sweep:
+- **Static `speaker_options`:** send a single conservative over-split-biased range (start ~`min 2 / max 8`, calibrated). Per §1, over-split is the safer error and the merge-suggester cleans it. **No type probe in v1** — the cost reviewer showed it's likely a net surcharge (text-only saves only ~9%, and the backstop is kept anyway), and it's the least-proven lever. Type inference is research-gated (§13).
+- **Failure budgets (new):** cap labels surfaced for action, cap merge suggestions shown (rank by relevance; collapse unmapped strangers into a quiet "N other speakers"), require `MIN_CLEAN_S` before a label participates in any suggestion, and offer a "done with this recording / dismiss all."
+- **Solo/Dictation (memo, dictation, a service where the user is silent):** the worry is fabricated speakers from forcing a floor onto one voice. Resolution in v1 *without* type detection: a solo recording that the static floor over-splits into 2 same-voice labels is collapsed back to one by the **merge-suggester** (same engine — ERes2Net rates two fragments of one voice ~0.9, well above `MERGE_THRESHOLD`), so the over-split is transient, not persistent (AC9). Crucially, fabricated labels **never poison the library** because banking is gated (clean + corroborated + not-mixed, §10) and a user won't map a fabricated label to a contact. Explicit solo *detection* (forcing `min 1` to skip the over-split entirely) is a research-gated nicety, not required for correctness.
 
-- **Type ranges (§5):** confirm each type's min/max produces correct separation without shredding.
-- **Probe (§6):** confirm `PROBE_STEP_MS` / `PROBE_CAP_MS` and the classifier reliably name the type from the opening; measure how often the probe is fooled (→ backstop rate).
-- **Thresholds (§9):** set `MATCH_AUTO`, `MATCH_SUGGEST`, `MERGE_THRESHOLD` so (a) the user's own voice auto-matches reliably, (b) over-split labels are flagged for merge, and (c) the mother/daughter pair is *not* auto-merged.
+## 10. Print vs centroid; self-enrollment
 
-Deliverable: the tuned constants, recorded in the implementation, with the calibration recordings/results noted.
+- **Hybrid:** keep individual prints (with quality + provenance); compute a per-contact **robust centroid from high-quality confirmed prints only**; match against centroid *and* top individual prints; require a margin over the second-best contact; down-weight low-quality/old prints; quarantine outliers.
+- **Bank conservatively:** a confirmation banks a print **only** if the source label passes the clean-speech gate **and** is not flagged suspected-mixed **and** the new print is consistent with the contact's existing prints. Distinguish **"accept this label for THIS recording"** (cheap, reversible, no bank) from **"remember this voice"** (banks, ideally after corroboration across ≥2 recordings). **Never train on provisional/auto labels.**
+- **Self-enrollment:** "mark a label as me" once → banks the self print (subject to the same gates). In v1 self is matched and **suggested** (pre-selected), not silently auto-applied (§13).
 
-## 13. Cost & degradation
+## 11. Calibration (front gate — Phase-0 already done; re-confirm before auto-apply)
 
-- **Passes per recording:** probe (a few cheap text-only minutes, incremental) + **one** full transcription. A second full pass happens only via the user-confirmed backstop. This is the minimum that still avoids under-counts.
-- **Metered tier:** AssemblyAI bills per audio-minute per pass; the probe adds a small fixed overhead and *saves* full re-transcribes on the heavy (church/business) cases. Re-transcribe is always user-confirmed.
-- **Graceful degradation:** sherpa or model missing → no embeddings → no suggestions, manual mapping intact (today's behavior). Probe/Ollama unavailable → skip type inference, use the neutral floor, rely on the backstop. None of these block transcription or mapping.
+Phase-0 established viability (ERes2Net ~0.8–9.5% EER). Before the research-gated auto-apply ships, re-calibrate on a larger labeled set spanning the real types (appointment, service, meeting, 1:1, **solo**, noisy, short, and a similar-voice pair like Robyn/Tiffany), measuring: identity top-1 / FAR / FRR / margin / unknown-rejection; self FAR (target **0%**); merge same-speaker recall vs different-speaker (and similar-voice) false-positive rate; suggestions-per-recording (UX budget). Ship auto-apply only if **self FAR = 0** and merge precision and suggestion-count budgets are met. Constants are **model-versioned config** (re-calibrate if the model id changes — the provider already changed behavior on us: model_region, sentiment).
 
-## 14. Non-goals (v1 of this system)
+## 12. Verified code-level fixes (from the reviews; must be in the plan)
 
-- **Cross-device / cloud voiceprint sharing** — the library is local to this install.
-- **Splitting a single under-segmented label into two people post-hoc** — impossible from labels alone; the floor + re-transcribe is the only remedy.
-- **Mid-utterance word-level speaker splitting** — AssemblyAI per-word speaker is still dropped (a separate future enhancement; v1 keeps one label per utterance).
-- **Server-side AssemblyAI Speaker Identification** (`known_values`) — evaluated; it only *names* labels the diarizer already produced, so it doesn't fix the under-count; deferred.
-- **Auto-merging** similar voices — always suggest, never auto (mother/daughter protection).
+- **`setImmediate` ≠ off-thread** (`speakers-handlers.ts`): the N-label embed must use a real worker/utilityProcess; `ext.compute` is a synchronous native call.
+- **256 MB PCM cap** (`voiceprint-service.ts`) silently rejects ~2.3 h+ recordings (long services) → stream the decode or raise/scope the cap.
+- **`recording_speakers.source` CHECK constraint** → table-rebuild migration (§8).
+- **Backstop wipes mappings** (`deleteRecordingSpeakersForRecording` on re-transcribe) → must restore via re-match (§7).
+- **No `deleteVoiceprint` path** exists → add it (§8).
 
-## 15. Acceptance criteria
+## 13. Research-gated (deferred; each needs its own go/no-go)
 
-- **AC1 (floor on request):** the AssemblyAI request carries `speaker_options { min_speakers_expected, max_speakers_expected }` derived from the inferred type; a recording with no type inferred uses the neutral range.
-- **AC2 (adaptive probe):** type detection runs as incremental text-only chunks, accumulates text, escalates only while the classifier returns `UNCERTAIN`, never re-transcribes earlier audio, and stops at the cap.
-- **AC3 (auto-embed):** after a full pass, every label with ≥10 s clean speech gets a persisted 256-dim embedding; embedding runs off the main thread (no UI freeze); missing sherpa/clip degrades to no-suggestion + manual mapping.
-- **AC4 (identity suggestions):** each embeddable label is matched against the library; the user's own voice auto-applies; other matches above threshold appear as one-tap suggestions; confirming banks/strengthens that contact's voiceprint.
-- **AC5 (merge suggestions):** within a recording, near-identical label pairs are surfaced as one-tap merge suggestions; merges are never auto-applied.
-- **AC6 (self-enrollment):** marking a label "me" once banks the self print and auto-matches it in later recordings.
-- **AC7 (backstop):** when the full transcript indicates an under-count for the classified type, the panel offers a one-tap "Re-transcribe as <Type>" with the floor pre-filled; it never re-transcribes without confirmation.
-- **AC8 (calibration):** type ranges, probe params, and thresholds are tuned against real recordings of each type and recorded.
+- **Recording-type inference + adaptive probe + type→floor range.** Deferred: likely net-negative cost; efficacy at *forcing* a merged-pair split is unproven; the conservative static floor + merge-suggester covers the common cases. If revisited: fold type classification into the existing full-transcript Ollama analysis (not a separate probe), and prove the floor actually separates a known merged pair before relying on it.
+- **Self auto-apply.** Only after calibration shows self FAR = 0, with ≥2 high-quality confirmed self prints, never on Solo/Service, never trained on its own auto-labels, always undoable and visibly distinct.
+- **Backstop automation** (auto re-transcribe) — v1 is suggest-and-confirm only.
 
-## 16. Suggested implementation phases
+## 14. Privacy & consent (voiceprints are biometric-ish; recordings are medical)
 
-The user chose one spec; these are *build* phases the implementation plan can sequence (each independently testable), not separate specs:
+Local-only by default; **no voiceprint upload**; **per-contact delete voiceprints**; a **"disable voice recognition"** toggle; **exclude voiceprints from cloud sync/backups** unless explicitly enabled; encryption-at-rest consistent with the app's existing secure-storage story; a clear in-UI explanation. Medical-appointment audio is sensitive — treat the library accordingly.
 
-1. **Floor on request + adaptive probe** (§5–7) — type inference drives `speaker_options`. Immediate accuracy win on the under-count bug.
-2. **Auto-embed every label** (§8) — the shared embedding foundation.
-3. **Matcher + merge-suggester + suggestion UX** (§9–10 E) — identity/merge suggestions, self-enrollment.
-4. **Backstop + calibration** (§10 F, §12) — re-transcribe-as-type and tuned constants.
+## 15. Conflict resolution hierarchy (deterministic)
+
+1. Manual user assignment wins over everything.
+2. Confirmed suggestion > auto/provisional.
+3. A merge involving two *different confirmed contacts* requires a high-friction warning (it collapses two identities) — never one-tap.
+4. Re-transcription creates a **new** diarization run; old assignments are not blindly reused — they are re-matched, not migrated by label name.
+5. Multiple labels matching self → suggest a self-merge, don't auto-apply to all.
+6. Auto-learning never consumes provisional/auto labels.
+
+## 16. Conceptual model (keep these distinct)
+
+**Label** (diarizer output, one transcript run) ≠ **speaker assignment** (label→person for one recording) ≠ **contact/person** (user-facing identity) ≠ **voiceprint** (one embedding sample) ≠ **centroid/profile** (aggregate). One contact has many prints; one label can contain multiple people; one person can be many labels.
+
+## 17. Non-goals (v1)
+
+Cross-device/cloud voiceprint sharing; post-hoc splitting of an under-segmented label from labels alone (only re-transcribe fixes it); mid-utterance word-level speaker splitting; server-side AssemblyAI Speaker Identification; auto-merge of similar voices.
+
+## 18. Acceptance criteria (failure-mode-shaped)
+
+- **AC1 (instrumentation):** every transcription stores the `speaker_options` sent, label count returned, transcript/run id, model id, timestamps.
+- **AC2 (clean embeddings):** label embeddings are produced only from segments passing `MIN_TURN_S`/`TRIM_S`/`MIN_CLEAN_S`; each stores model id/version, dim, clean-speech ms, quality, source label/run.
+- **AC3 (off-thread):** embedding the N labels of a long (≥2 h) recording does not stall the main thread (worker/utilityProcess; not `setImmediate`); long recordings are not silently skipped by the PCM cap.
+- **AC4 (model compatibility):** embeddings of differing model id/dim are never compared.
+- **AC5 (identity):** suggestions require threshold **and** margin over second-best; confirming banks a print only if clean + not suspected-mixed + consistent.
+- **AC6 (self):** self is **suggested** (pre-selected), not silently auto-applied, in v1; "mark me" once enrolls.
+- **AC7 (merge):** suggestions are cluster-aware, capped, dismissals persist for the transcript version; merging two different confirmed contacts requires explicit warning; merge invalidates/recomputes affected embeddings.
+- **AC8 (mixed-label):** a label containing two voices is flagged via within-label variance / two-contact match (not the Q&A heuristic).
+- **AC9 (solo):** a one-speaker recording is not forced to ≥2 persistent speakers.
+- **AC10 (similar voices):** the Robyn/Tiffany-type pair is neither auto-merged nor mis-assigned at the calibrated thresholds.
+- **AC11 (re-transcribe):** a new diarization run invalidates stale embeddings/suggestions; prior confirmed identities are restored by re-match, not wiped; the user is warned.
+- **AC12 (undo & delete):** auto/confirmed assignments are undoable; a wrong-match control un-banks the specific print it produced; `deleteVoiceprint` exists.
+- **AC13 (privacy):** per-contact voiceprint delete + a disable-recognition toggle exist; voiceprints are excluded from sync/backups by default.
+- **AC14 (calibration):** thresholds accepted only if self FAR = 0 and merge precision + suggestion-count budgets are met, on a labeled multi-type set.
+
+## 19. Implementation phases (re-sequenced: prove → store → suggest → steer)
+
+1. **ERes2Net swap + instrumentation/storage** — model swap (no migration), diarization-run metadata, per-label embeddings with provenance/quality, the new tables. No product magic yet.
+2. **Manual identity + voiceprint hygiene** — manual assign, conservative banking, delete/undo, privacy controls.
+3. **Read-only suggestions** — identity + cluster-merge + mixed-label, behind a low-risk surface; dismissal storage; no auto-apply.
+4. **User-confirmed suggestions + self-enroll (suggested)** — the Speakers-panel UX, conflict hierarchy.
+5. **Conservative static `speaker_options` + failure budgets + Solo handling.**
+6. **Backstop (suggest-and-confirm, identity-restoring re-transcribe).**
+7. **Research-gated** (separate go/no-go each): type inference/probe; self auto-apply; backstop automation.

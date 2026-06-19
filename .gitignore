@@ -109,6 +109,10 @@ oauth2_tokens.json
 apps/electron/scripts/diarization-spike.mjs
 apps/electron/scripts/aai-schema-probe.mjs
 apps/electron/scripts/aai-verify-body.mjs
+apps/electron/scripts/phase0-embedding-separability.mjs
+apps/electron/scripts/phase0-eer.mjs
+apps/electron/scripts/phase0-clips.mjs
+apps/electron/scripts/aai-diarization-tune.mjs
 
 # Configuration files with API keys and user data
 hidock_config.json
@@ -200,3 +204,6 @@ qa-artifacts/
 # System & Misc
 [Dd]esktop.ini
 nul
+
+# diarization tuning spike (throwaway)
+apps/electron/scripts/aai-diarization-tune.mjs
