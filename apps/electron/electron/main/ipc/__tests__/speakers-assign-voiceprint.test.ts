@@ -39,6 +39,17 @@ describe('speakers:assign → voiceprint capture (§6.7)', () => {
   it('1. invokes captureVoiceprint(recordingId, fileLabel, contactId) after assign', async () => {
     const fn = handlers.get('speakers:assign')!
     await fn({}, { recordingId: 'rec_1', fileLabel: 'A', contactId: 'c_1' })
+    await new Promise((r) => setImmediate(r)) // capture is deferred to a later tick
+    expect(vi.mocked(captureVoiceprint)).toHaveBeenCalledWith('rec_1', 'A', 'c_1')
+  })
+
+  it('6. defers capture to a later tick — not run on the synchronous assign IPC path', async () => {
+    const fn = handlers.get('speakers:assign')!
+    await fn({}, { recordingId: 'rec_1', fileLabel: 'A', contactId: 'c_1' })
+    // The IPC has returned but capture must NOT have run yet (it would block the
+    // main thread; it is scheduled for a later tick).
+    expect(vi.mocked(captureVoiceprint)).not.toHaveBeenCalled()
+    await new Promise((r) => setImmediate(r)) // let the deferred capture fire
     expect(vi.mocked(captureVoiceprint)).toHaveBeenCalledWith('rec_1', 'A', 'c_1')
   })
 
@@ -56,6 +67,7 @@ describe('speakers:assign → voiceprint capture (§6.7)', () => {
 
     const fn = handlers.get('speakers:assign')!
     const res = (await fn({}, { recordingId: 'rec_1', fileLabel: 'A', contactId: 'c_1' })) as { success: boolean }
+    await new Promise((r) => setImmediate(r)) // capture is deferred to a later tick
 
     expect(res.success).toBe(true)
     expect(callOrder.indexOf('upsert')).toBeLessThan(callOrder.indexOf('capture'))

@@ -99,13 +99,16 @@ export function registerSpeakersHandlers(): void {
           source: 'user'
         })
 
-        // Fire-and-forget voiceprint capture (§6.7). NEVER block or fail the mapping:
-        // a slow/missing sherpa addon or short clean-speech must not affect assign.
-        void captureVoiceprint(recordingId, fileLabel, contactId)
-          .then((r) => {
-            if (!r.captured) console.log(`[Voiceprint] skipped (${recordingId}/${fileLabel}): ${r.reason}`)
-          })
-          .catch((e) => console.warn(`[Voiceprint] capture error (${recordingId}/${fileLabel}): ${(e as Error).message}`))
+        // Voiceprint capture (§6.7): NEVER blocks or fails the mapping. Deferred to a
+        // later tick with setImmediate so the assign IPC returns and the UI updates
+        // before any (synchronous, bounded) embedding work runs on the main thread.
+        setImmediate(() => {
+          captureVoiceprint(recordingId, fileLabel, contactId)
+            .then((r) => {
+              if (!r.captured) console.log(`[Voiceprint] skipped (${recordingId}/${fileLabel}): ${r.reason}`)
+            })
+            .catch((e) => console.warn(`[Voiceprint] capture error (${recordingId}/${fileLabel}): ${(e as Error).message}`))
+        })
 
         return success({ recordingId, fileLabel, contactId })
       } catch (err) {
