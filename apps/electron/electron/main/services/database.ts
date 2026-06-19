@@ -2463,7 +2463,7 @@ export interface RecordingSpeaker {
   file_label: string
   contact_id: string | null
   confidence: number | null
-  source: 'user' | 'auto'
+  source: 'user' | 'auto' | 'confirmed' | 'self_auto' | 'suggestion_confirmed'
   created_at: string
 }
 
@@ -2473,7 +2473,7 @@ export function upsertRecordingSpeaker(s: {
   file_label: string
   contact_id?: string | null
   confidence?: number | null
-  source?: 'user' | 'auto'
+  source?: 'user' | 'auto' | 'confirmed' | 'self_auto' | 'suggestion_confirmed'
 }): void {
   run(
     `INSERT INTO recording_speakers (recording_id, file_label, contact_id, confidence, source, created_at)
