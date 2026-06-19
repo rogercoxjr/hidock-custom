@@ -261,7 +261,10 @@ export async function captureVoiceprint(
     stream.acceptWaveform({ sampleRate: 16000, samples })
     stream.inputFinished()
     if (!ext.isReady(stream)) return { captured: false, reason: 'extractor not ready' }
-    const embedding = ext.compute(stream)
+    // sherpa-onnx-node's compute() can return a Float32Array backed by EXTERNAL native
+    // memory. Under Electron's V8, persisting a view over it throws "External buffers are
+    // not allowed" when sql.js binds the BLOB. Copy into a V8-owned array first.
+    const embedding = new Float32Array(ext.compute(stream))
 
     insertVoiceprint({
       id: `vp_${randomUUID()}`,

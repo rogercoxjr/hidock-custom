@@ -398,6 +398,11 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     expect(row.model_id).toBe(VOICEPRINT_MODEL_ID)
     expect(row.dim).toBe(256)
     expect(row.embedding).toBeInstanceOf(Uint8Array)
+    // Regression (live "External buffers are not allowed"): sherpa's compute() can
+    // return a Float32Array backed by EXTERNAL native memory; under Electron, persisting
+    // a view over it throws when sql.js binds the BLOB. captureVoiceprint MUST copy into
+    // a V8-owned array first, so the stored blob must NOT alias compute()'s buffer.
+    expect(row.embedding.buffer).not.toBe(shared.computeResult.buffer)
   })
 
   it('8b. <10s clean speech → mapping kept, NO voiceprint, no throw', async () => {
