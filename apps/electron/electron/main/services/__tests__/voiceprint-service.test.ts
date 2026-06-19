@@ -309,6 +309,15 @@ describe('pcmToFloat32() — s16le slice + normalise (AC4-e)', () => {
     const turns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 0, text: 'x' }]
     expect(pcmToFloat32(pcm, turns, 'A').length).toBe(0)
   })
+
+  it('8e-4. caps output at MAX_EMBED_SPEECH_MS (60 s) of samples regardless of turn length', async () => {
+    const { pcmToFloat32: ptf, MAX_EMBED_SPEECH_MS } = await import('../voiceprint-service')
+    const capSamples = (MAX_EMBED_SPEECH_MS / 1000) * 16000 // 60 s × 16000 = 960000
+    // One 70 s clean turn for label A → 70 s × 32 bytes/ms × 1000 = 2,240,000 bytes.
+    const pcm = Buffer.alloc(70_000 * 32)
+    const turns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 70_000, text: 'long' }]
+    expect(ptf(pcm, turns, 'A').length).toBe(capSamples)
+  })
 })
 
 // ---------------------------------------------------------------------------

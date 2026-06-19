@@ -117,6 +117,11 @@ export function isVoiceprintAvailable(): boolean {
 /** §6.7: require ≥10 s of clean (non-overlapped) speech before enrolling. */
 export const MIN_CLEAN_SPEECH_MS = 10_000
 
+/** Cap the clean speech fed to the extractor. A speaker embedding saturates well
+ *  under a minute; 60 s bounds compute() time (and the slicing loop) so a long
+ *  recording can't freeze the main thread. Well above MIN_CLEAN_SPEECH_MS. */
+export const MAX_EMBED_SPEECH_MS = 60_000
+
 /**
  * Sum the milliseconds of `label`'s turns that do NOT overlap any OTHER
  * label's turn (overlap = intersecting time-ranges, §6.7 step 4). Overlapped
@@ -188,6 +193,7 @@ function getExtractor(): SherpaExtractor | null {
  *  clean turn samples (32 bytes/ms = 16000 Hz × 2 bytes). Exported for tests. */
 export function pcmToFloat32(pcm: Buffer, turns: Turn[], label: string): Float32Array {
   const BYTES_PER_MS = 32 // 16000 samples/s × 2 bytes/sample ÷ 1000 ms/s
+  const MAX_SAMPLES = (MAX_EMBED_SPEECH_MS / 1000) * 16000 // 60 s cap (see MAX_EMBED_SPEECH_MS)
   const out: number[] = []
   for (const t of turns) {
     if (t.speaker !== label) continue
@@ -195,6 +201,7 @@ export function pcmToFloat32(pcm: Buffer, turns: Turn[], label: string): Float32
     const end = Math.min(pcm.length, Math.floor(t.endMs * BYTES_PER_MS))
     for (let i = start; i + 1 < end; i += 2) {
       out.push(pcm.readInt16LE(i) / 32768)
+      if (out.length >= MAX_SAMPLES) return Float32Array.from(out) // stop once capped
     }
   }
   return Float32Array.from(out)
