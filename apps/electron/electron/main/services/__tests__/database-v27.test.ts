@@ -80,6 +80,12 @@ vi.mock('../vector-store', () => ({
 // Real service imports (resolved AFTER the mocks above)
 // ---------------------------------------------------------------------------
 import { initializeDatabase, closeDatabase, run, queryOne, queryAll } from '../database'
+import {
+  insertLabelEmbedding, getLabelEmbeddingsForRecording, deleteLabelEmbeddingsForRecording,
+  insertSuggestion, dismissSuggestion, getPendingSuggestions,
+  insertVoiceprint, getActiveVoiceprintsByContactId, deleteVoiceprint, disableVoiceprint,
+  setSelfContact, getSelfContactId
+} from '../database'
 
 beforeEach(async () => {
   fs.mkdirSync(shared.dataDir, { recursive: true })
@@ -119,5 +125,36 @@ describe('v27 voice-library foundation schema', () => {
   it('contacts has is_self', () => {
     run(`INSERT INTO contacts (id, name, is_self, first_seen_at, last_seen_at) VALUES ('me','Me',1,?,?)`, [new Date().toISOString(), new Date().toISOString()])
     expect(queryOne<{ is_self: number }>("SELECT is_self FROM contacts WHERE id='me'")!.is_self).toBe(1)
+  })
+})
+
+describe('v27 DB helpers', () => {
+  it('label embedding insert/get/delete round-trips', () => {
+    insertLabelEmbedding({ id: 'le1', recording_id: 'r1', transcript_id: 't1', diarization_run_id: 'run1', file_label: 'A', model_id: 'm', model_version: 1, dim: 256, embedding: new Uint8Array(1024), clean_speech_ms: 12000, turn_count: 4, quality_score: 0.9, status: 'ok' })
+    expect(getLabelEmbeddingsForRecording('r1')).toHaveLength(1)
+    deleteLabelEmbeddingsForRecording('r1')
+    expect(getLabelEmbeddingsForRecording('r1')).toHaveLength(0)
+  })
+  it('suggestions: insert, list pending, dismiss removes from pending', () => {
+    insertSuggestion({ id: 's1', recording_id: 'r1', transcript_id: 't1', kind: 'identity', target_label: 'A', contact_id: 'c1', score: 0.7, rank: 0 })
+    expect(getPendingSuggestions('r1')).toHaveLength(1)
+    dismissSuggestion('s1')
+    expect(getPendingSuggestions('r1')).toHaveLength(0)
+  })
+  it('voiceprint: active query excludes disabled; delete removes; disable hides', () => {
+    run(`INSERT INTO contacts (id, name, first_seen_at, last_seen_at) VALUES ('c1','X',?,?)`, [new Date().toISOString(), new Date().toISOString()])
+    insertVoiceprint({ id: 'vp1', contact_id: 'c1', model_id: 'm', dim: 256, embedding: new Uint8Array(1024) })
+    insertVoiceprint({ id: 'vp2', contact_id: 'c1', model_id: 'm', dim: 256, embedding: new Uint8Array(1024) })
+    expect(getActiveVoiceprintsByContactId('c1')).toHaveLength(2)
+    disableVoiceprint('vp1')
+    expect(getActiveVoiceprintsByContactId('c1')).toHaveLength(1)
+    deleteVoiceprint('vp2')
+    expect(getActiveVoiceprintsByContactId('c1')).toHaveLength(0)
+  })
+  it('self contact is a singleton', () => {
+    run(`INSERT INTO contacts (id, name, first_seen_at, last_seen_at) VALUES ('a','A',?,?),('b','B',?,?)`, [new Date().toISOString(), new Date().toISOString(), new Date().toISOString(), new Date().toISOString()])
+    setSelfContact('a'); expect(getSelfContactId()).toBe('a')
+    setSelfContact('b'); expect(getSelfContactId()).toBe('b') // moves; only one self
+    expect(queryAll('SELECT id FROM contacts WHERE is_self=1')).toHaveLength(1)
   })
 })

@@ -2879,6 +2879,64 @@ export function getVoiceprintsByContactId(contactId: string): Voiceprint[] {
   )
 }
 
+// v27 voice-library foundation (spec 2026-06-19 rev 2 §8) — DB helpers for the
+// new label-embedding/suggestion tables and voiceprint hygiene primitives.
+export interface LabelEmbedding {
+  id: string; recording_id: string; transcript_id?: string | null; diarization_run_id?: string | null
+  file_label: string; model_id: string; model_version?: number; dim: number; embedding: Uint8Array
+  clean_speech_ms?: number | null; turn_count?: number | null; quality_score?: number | null; status?: string | null
+}
+export function insertLabelEmbedding(e: LabelEmbedding): void {
+  run(`INSERT OR REPLACE INTO recording_label_embeddings
+    (id, recording_id, transcript_id, diarization_run_id, file_label, model_id, model_version, dim, embedding, clean_speech_ms, turn_count, quality_score, status, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [e.id, e.recording_id, e.transcript_id ?? null, e.diarization_run_id ?? null, e.file_label, e.model_id, e.model_version ?? 1, e.dim, e.embedding, e.clean_speech_ms ?? null, e.turn_count ?? null, e.quality_score ?? null, e.status ?? null, new Date().toISOString()])
+}
+export function getLabelEmbeddingsForRecording(recordingId: string): LabelEmbedding[] {
+  return queryAll<LabelEmbedding>('SELECT * FROM recording_label_embeddings WHERE recording_id = ?', [recordingId])
+}
+export function deleteLabelEmbeddingsForRecording(recordingId: string): void {
+  run('DELETE FROM recording_label_embeddings WHERE recording_id = ?', [recordingId])
+}
+
+export interface SpeakerSuggestion {
+  id: string; recording_id: string; transcript_id?: string | null; kind: 'identity' | 'merge' | 'mixed' | 'backstop'
+  target_label?: string | null; target_label_2?: string | null; contact_id?: string | null
+  score?: number | null; rank?: number | null; rationale?: string | null
+}
+export function insertSuggestion(s: SpeakerSuggestion): void {
+  run(`INSERT OR REPLACE INTO speaker_suggestions
+    (id, recording_id, transcript_id, kind, target_label, target_label_2, contact_id, score, rank, rationale, status, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?, 'pending', ?)`,
+    [s.id, s.recording_id, s.transcript_id ?? null, s.kind, s.target_label ?? null, s.target_label_2 ?? null, s.contact_id ?? null, s.score ?? null, s.rank ?? null, s.rationale ?? null, new Date().toISOString()])
+}
+export function dismissSuggestion(id: string): void {
+  run("UPDATE speaker_suggestions SET status='dismissed', resolved_at=? WHERE id=?", [new Date().toISOString(), id])
+}
+export function getPendingSuggestions(recordingId: string): SpeakerSuggestion[] {
+  return queryAll<SpeakerSuggestion>("SELECT * FROM speaker_suggestions WHERE recording_id=? AND status='pending' ORDER BY rank", [recordingId])
+}
+
+export function getActiveVoiceprintsByContactId(contactId: string): Voiceprint[] {
+  return queryAll<Voiceprint>('SELECT * FROM voiceprints WHERE contact_id=? AND disabled_at IS NULL ORDER BY created_at', [contactId])
+}
+export function disableVoiceprint(id: string): void {
+  run('UPDATE voiceprints SET disabled_at=? WHERE id=?', [new Date().toISOString(), id])
+}
+export function deleteVoiceprint(id: string): void {
+  run('DELETE FROM voiceprints WHERE id=?', [id])
+}
+
+export function getSelfContactId(): string | null {
+  return queryOne<{ id: string }>('SELECT id FROM contacts WHERE is_self=1 LIMIT 1')?.id ?? null
+}
+export function setSelfContact(contactId: string): void {
+  runInTransaction(() => {
+    runNoSave('UPDATE contacts SET is_self=0 WHERE is_self=1')
+    runNoSave('UPDATE contacts SET is_self=1 WHERE id=?', [contactId])
+  })
+}
+
 // Queue queries
 export interface QueueItem {
   id: string
