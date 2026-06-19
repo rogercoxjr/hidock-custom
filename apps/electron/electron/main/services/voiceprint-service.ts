@@ -17,7 +17,7 @@ import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
 import { resolveFfmpegPath } from './asr/audio-normalize'
-import { getRecordingById, getTranscriptByRecordingId, insertVoiceprint } from './database'
+import { getRecordingById, getTranscriptByRecordingId, insertVoiceprint, insertLabelEmbedding } from './database'
 import { embedSamples } from './voiceprint-worker-pool'
 import type { Turn } from './asr/asr-provider'
 
@@ -261,4 +261,36 @@ export async function captureVoiceprint(
     embedding: embeddingToBlob(embedding),
   })
   return { captured: true }
+}
+
+/** Embed EVERY label of a recording (clean-gated), off the main thread, persisting to
+ *  recording_label_embeddings. Lazy/deferred caller (Phase 3 wires when the panel opens).
+ *  Never throws; skips labels < MIN_CLEAN_SPEECH_MS. */
+export async function embedRecordingLabels(recordingId: string): Promise<void> {
+  if (!isVoiceprintAvailable()) return
+  const recording = getRecordingById(recordingId)
+  if (!recording?.file_path) return
+  const transcript = getTranscriptByRecordingId(recordingId)
+  let turns: Turn[] = []
+  try { turns = transcript?.turns ? (JSON.parse(transcript.turns) as Turn[]) : [] } catch { turns = [] }
+  if (turns.length === 0) return
+
+  let pcm: Buffer
+  try { pcm = await decodeRecordingPcm16k(recording.file_path) } catch (e) {
+    console.warn(`[Voiceprint] embedRecordingLabels decode failed (${recordingId}): ${(e as Error).message}`); return
+  }
+  const labels = [...new Set(turns.map((t) => t.speaker))]
+  for (const label of labels) {
+    if (collectCleanSpeechMs(turns, label) < MIN_CLEAN_SPEECH_MS) continue
+    const samples = pcmToFloat32(pcm, turns, label)
+    if (samples.length === 0) continue
+    const embedding = await embedSamples(modelPath(), 16000, samples)
+    if (!embedding) continue
+    insertLabelEmbedding({
+      id: `le_${randomUUID()}`, recording_id: recordingId, transcript_id: transcript?.id ?? null,
+      file_label: label, model_id: VOICEPRINT_MODEL_ID, model_version: 1, dim: embedding.length,
+      embedding: embeddingToBlob(embedding), clean_speech_ms: collectCleanSpeechMs(turns, label),
+      turn_count: turns.filter((t) => t.speaker === label).length, quality_score: null, status: 'ok'
+    })
+  }
 }

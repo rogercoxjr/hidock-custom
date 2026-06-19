@@ -109,6 +109,8 @@ vi.mock('../database', () => ({
   getRecordingById: vi.fn(),
   getTranscriptByRecordingId: vi.fn(),
   insertVoiceprint: vi.fn(),
+  insertLabelEmbedding: vi.fn(),
+  getLabelEmbeddingsForRecording: vi.fn(),
 }))
 
 // ---------------------------------------------------------------------------
@@ -536,5 +538,27 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     const res = await cv('rec_1', 'A', 'c_1')
     expect(res.captured).toBe(false)
     expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
+  })
+
+  // -------------------------------------------------------------------------
+  // Task 5: embedRecordingLabels — auto-embed every clean label, off-thread.
+  // Reuses the suite's sherpa stub (isVoiceprintAvailable() true), the
+  // beforeEach embedSamples mock (Float32Array(256)), and the child_process
+  // PCM-decode mock. Label A (12 s clean ≥ 10 s) is embedded once; label B
+  // (2 s clean < 10 s) is skipped — verified through the REAL
+  // collectCleanSpeechMs gate, not a weakened assertion.
+  // -------------------------------------------------------------------------
+  it('embedRecordingLabels embeds each ≥10s-clean label and persists, skips short labels', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ id: 'r1', file_path: '/r/r1.wav' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({ id: 't1', turns: JSON.stringify([
+      { speaker: 'A', startMs: 0, endMs: 12000, text: 'long' },
+      { speaker: 'B', startMs: 12000, endMs: 14000, text: 'short' } // 2s < 10s → skip
+    ]) } as never)
+    vi.mocked(db.insertLabelEmbedding).mockReset()
+    const { embedRecordingLabels } = await import('../voiceprint-service')
+    await embedRecordingLabels('r1')
+    expect(vi.mocked(db.insertLabelEmbedding)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(db.insertLabelEmbedding).mock.calls[0][0].file_label).toBe('A')
   })
 })
