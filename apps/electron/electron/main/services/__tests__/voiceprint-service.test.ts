@@ -360,7 +360,13 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
           isReady(stream: { wave?: boolean; finished?: boolean }) {
             return !!(stream && stream.wave && stream.finished)
           }
-          compute() {
+          compute(_stream: unknown, enableExternalBuffer?: boolean) {
+            // Simulate Electron's V8 Memory Cage: the addon default
+            // (enableExternalBuffer=true) allocates an EXTERNAL ArrayBuffer that the
+            // cage rejects INSIDE compute(). Only an explicit `false` is allowed.
+            if (enableExternalBuffer !== false) {
+              throw new Error('External buffers are not allowed')
+            }
             return computeResult
           }
         }
@@ -457,7 +463,10 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
             isReady(stream: { wave?: boolean; finished?: boolean }) {
               return !!(stream && stream.wave && stream.finished)
             }
-            compute() {
+            compute(_stream: unknown, enableExternalBuffer?: boolean) {
+              if (enableExternalBuffer !== false) {
+                throw new Error('External buffers are not allowed')
+              }
               return computeResult
             }
           }
