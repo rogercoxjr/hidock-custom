@@ -18,6 +18,7 @@ const USB_PRODUCT_IDS = [
   0x2041   // P1 Mini (alternate)
 ]
 import { initializeDatabase, closeDatabase } from './services/database'
+import { shutdownVoiceprintPool } from './services/voiceprint-worker-pool'
 import { initializeConfig } from './services/config'
 import { initializeFileStorage } from './services/file-storage'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -300,6 +301,7 @@ app.on('before-quit', () => {
   stopAutoSync() // B-CAL-002: Clean up calendar auto-sync interval
   stopRecordingWatcher()
   stopTranscriptionProcessor()
+  shutdownVoiceprintPool() // kill the forked voiceprint utilityProcess child gracefully
   closeDatabase()
   console.log('Cleanup complete')
 })
