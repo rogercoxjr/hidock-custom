@@ -8,7 +8,7 @@ import type { Turn } from './asr/asr-provider'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 26
+const SCHEMA_VERSION = 27
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -260,25 +260,69 @@ CREATE TABLE IF NOT EXISTS transcripts (
     FOREIGN KEY (recording_id) REFERENCES recordings(id)
 );
 
--- Per-recording speaker roster + contact mapping (spec 2026-06-17 §6.3, v26)
+-- Per-recording speaker roster + contact mapping (spec 2026-06-17 §6.3, v26 — CHECK widened v27)
 CREATE TABLE IF NOT EXISTS recording_speakers (
     recording_id TEXT NOT NULL,
     file_label TEXT NOT NULL,
     contact_id TEXT,
     confidence REAL,
-    source TEXT NOT NULL CHECK(source IN ('user', 'auto')) DEFAULT 'user',
+    source TEXT NOT NULL CHECK(source IN ('user', 'auto', 'confirmed', 'self_auto', 'suggestion_confirmed')) DEFAULT 'user',
     created_at TEXT NOT NULL,
     PRIMARY KEY (recording_id, file_label)
 );
 
--- Speaker voiceprint embeddings (capture-only in v1, read by nothing) (spec §6.3/§6.7, v26)
+-- Speaker voiceprint embeddings + provenance (spec §6.3/§6.7, v26 — provenance columns v27)
 CREATE TABLE IF NOT EXISTS voiceprints (
     id TEXT PRIMARY KEY,
     contact_id TEXT NOT NULL,
     model_id TEXT NOT NULL,
     dim INTEGER NOT NULL,
     embedding BLOB NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    source_recording_id TEXT,
+    source_label TEXT,
+    clean_speech_ms INTEGER,
+    quality_score REAL,
+    model_version INTEGER DEFAULT 1,
+    created_from TEXT CHECK(created_from IN ('manual','confirmed','self','import')) DEFAULT 'manual',
+    disabled_at TEXT,
+    superseded_by TEXT
+);
+
+-- Per-recording per-label averaged speaker embeddings for suggestions (spec 2026-06-19 §8, v27)
+CREATE TABLE IF NOT EXISTS recording_label_embeddings (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL,
+    transcript_id TEXT,
+    diarization_run_id TEXT,
+    file_label TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    model_version INTEGER DEFAULT 1,
+    dim INTEGER NOT NULL,
+    embedding BLOB NOT NULL,
+    clean_speech_ms INTEGER,
+    turn_count INTEGER,
+    quality_score REAL,
+    status TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+-- Pending speaker-identity / merge suggestions (spec 2026-06-19 §8, v27)
+CREATE TABLE IF NOT EXISTS speaker_suggestions (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL,
+    transcript_id TEXT,
+    kind TEXT NOT NULL CHECK(kind IN ('identity','merge','mixed','backstop')),
+    target_label TEXT,
+    target_label_2 TEXT,
+    contact_id TEXT,
+    score REAL,
+    rank INTEGER,
+    rationale TEXT,
+    status TEXT NOT NULL CHECK(status IN ('pending','accepted','dismissed','expired')) DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
 );
 
 -- Embeddings for RAG
@@ -406,6 +450,7 @@ CREATE TABLE IF NOT EXISTS contacts (
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
     meeting_count INTEGER DEFAULT 0,
+    is_self INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -1482,6 +1527,59 @@ const MIGRATIONS: Record<number, () => void> = {
     `)
 
     console.log('Migration v26 complete')
+  },
+
+  27: () => {
+    // v27: voice-library foundation (spec 2026-06-19 rev 2 §8). New tables, voiceprint
+    // provenance columns, recording_speakers.source CHECK widened (table-rebuild — sql.js
+    // can't ALTER a CHECK), and contacts.is_self.
+    console.log('Running migration to schema v27: voice-library foundation')
+    const database = getDatabase()
+
+    // (a) idempotent column adds (duplicate-column expected on a fresh v27 DB)
+    const columnsToAdd = [
+      'ALTER TABLE voiceprints ADD COLUMN source_recording_id TEXT',
+      'ALTER TABLE voiceprints ADD COLUMN source_label TEXT',
+      'ALTER TABLE voiceprints ADD COLUMN clean_speech_ms INTEGER',
+      'ALTER TABLE voiceprints ADD COLUMN quality_score REAL',
+      'ALTER TABLE voiceprints ADD COLUMN model_version INTEGER DEFAULT 1',
+      "ALTER TABLE voiceprints ADD COLUMN created_from TEXT DEFAULT 'manual'",
+      'ALTER TABLE voiceprints ADD COLUMN disabled_at TEXT',
+      'ALTER TABLE voiceprints ADD COLUMN superseded_by TEXT',
+      'ALTER TABLE contacts ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0'
+    ]
+    for (const sql of columnsToAdd) {
+      try { database.run(sql) } catch (e) {
+        const msg = (e as Error).message
+        if (msg.includes('duplicate column name')) console.log(`Column already exists: ${sql}`)
+        else console.warn(`[Migration v27] ALTER failed (${sql}):`, e)
+      }
+    }
+
+    // (b) new tables (idempotent)
+    database.run(`CREATE TABLE IF NOT EXISTS recording_label_embeddings (
+      id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, transcript_id TEXT, diarization_run_id TEXT,
+      file_label TEXT NOT NULL, model_id TEXT NOT NULL, model_version INTEGER DEFAULT 1, dim INTEGER NOT NULL,
+      embedding BLOB NOT NULL, clean_speech_ms INTEGER, turn_count INTEGER, quality_score REAL, status TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT)`)
+    database.run(`CREATE TABLE IF NOT EXISTS speaker_suggestions (
+      id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, transcript_id TEXT,
+      kind TEXT NOT NULL CHECK(kind IN ('identity','merge','mixed','backstop')),
+      target_label TEXT, target_label_2 TEXT, contact_id TEXT, score REAL, rank INTEGER, rationale TEXT,
+      status TEXT NOT NULL CHECK(status IN ('pending','accepted','dismissed','expired')) DEFAULT 'pending',
+      created_at TEXT NOT NULL, resolved_at TEXT)`)
+
+    // (c) recording_speakers.source CHECK rebuild (sql.js can't ALTER a CHECK — table-rebuild, cf. MIGRATIONS[24])
+    database.run(`CREATE TABLE IF NOT EXISTS recording_speakers_new (
+      recording_id TEXT NOT NULL, file_label TEXT NOT NULL, contact_id TEXT, confidence REAL,
+      source TEXT NOT NULL CHECK(source IN ('user','auto','confirmed','self_auto','suggestion_confirmed')) DEFAULT 'user',
+      created_at TEXT NOT NULL, PRIMARY KEY (recording_id, file_label))`)
+    database.run(`INSERT OR IGNORE INTO recording_speakers_new
+      SELECT recording_id, file_label, contact_id, confidence, source, created_at FROM recording_speakers`)
+    database.run('DROP TABLE IF EXISTS recording_speakers')
+    database.run('ALTER TABLE recording_speakers_new RENAME TO recording_speakers')
+
+    console.log('Migration v27 complete')
   }
 
 }
