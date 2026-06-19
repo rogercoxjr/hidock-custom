@@ -158,3 +158,26 @@ describe('v27 DB helpers', () => {
     expect(queryAll('SELECT id FROM contacts WHERE is_self=1')).toHaveLength(1)
   })
 })
+
+describe('v27 upgrade path (v26 -> v27 migration)', () => {
+  it('rebuilds voiceprints with the created_from CHECK and preserves existing rows', async () => {
+    // simulate a v26-shape voiceprints: 6 columns, NO provenance, NO created_from CHECK
+    run('DROP TABLE voiceprints')
+    run(`CREATE TABLE voiceprints (id TEXT PRIMARY KEY, contact_id TEXT NOT NULL, model_id TEXT NOT NULL,
+         dim INTEGER NOT NULL, embedding BLOB NOT NULL, created_at TEXT NOT NULL)`)
+    run(`INSERT INTO voiceprints (id, contact_id, model_id, dim, embedding, created_at)
+         VALUES ('vpOld','c1','m',256,?,?)`, [new Uint8Array(8), new Date().toISOString()])
+    // rewind the recorded schema version to 26 so re-init re-runs MIGRATIONS[27]
+    run('DELETE FROM schema_version WHERE version >= 27')
+    closeDatabase()
+    await initializeDatabase() // runs MIGRATIONS[27] -> voiceprints rebuild
+
+    expect(queryOne<{ id: string }>("SELECT id FROM voiceprints WHERE id='vpOld'")!.id).toBe('vpOld')
+    expect(() => run(`INSERT INTO voiceprints (id, contact_id, model_id, dim, embedding, created_at, created_from)
+         VALUES ('vpBad','c1','m',256,?,?, 'bogus')`, [new Uint8Array(8), new Date().toISOString()]))
+      .toThrow(/CHECK|constraint/i)
+    expect(() => run(`INSERT INTO voiceprints (id, contact_id, model_id, dim, embedding, created_at, created_from)
+         VALUES ('vpOk','c1','m',256,?,?, 'confirmed')`, [new Uint8Array(8), new Date().toISOString()]))
+      .not.toThrow()
+  })
+})

@@ -1538,14 +1538,6 @@ const MIGRATIONS: Record<number, () => void> = {
 
     // (a) idempotent column adds (duplicate-column expected on a fresh v27 DB)
     const columnsToAdd = [
-      'ALTER TABLE voiceprints ADD COLUMN source_recording_id TEXT',
-      'ALTER TABLE voiceprints ADD COLUMN source_label TEXT',
-      'ALTER TABLE voiceprints ADD COLUMN clean_speech_ms INTEGER',
-      'ALTER TABLE voiceprints ADD COLUMN quality_score REAL',
-      'ALTER TABLE voiceprints ADD COLUMN model_version INTEGER DEFAULT 1',
-      "ALTER TABLE voiceprints ADD COLUMN created_from TEXT DEFAULT 'manual'",
-      'ALTER TABLE voiceprints ADD COLUMN disabled_at TEXT',
-      'ALTER TABLE voiceprints ADD COLUMN superseded_by TEXT',
       'ALTER TABLE contacts ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0'
     ]
     for (const sql of columnsToAdd) {
@@ -1578,6 +1570,30 @@ const MIGRATIONS: Record<number, () => void> = {
       SELECT recording_id, file_label, contact_id, confidence, source, created_at FROM recording_speakers`)
     database.run('DROP TABLE IF EXISTS recording_speakers')
     database.run('ALTER TABLE recording_speakers_new RENAME TO recording_speakers')
+
+    // voiceprints created_from CHECK rebuild (sql.js can't ALTER-ADD a CHECK; make the upgraded
+    // shape identical to the fresh SCHEMA — cf. the recording_speakers rebuild above). No index
+    // on voiceprints, so none to recreate.
+    database.run(`CREATE TABLE IF NOT EXISTS voiceprints_new (
+      id TEXT PRIMARY KEY,
+      contact_id TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      dim INTEGER NOT NULL,
+      embedding BLOB NOT NULL,
+      created_at TEXT NOT NULL,
+      source_recording_id TEXT,
+      source_label TEXT,
+      clean_speech_ms INTEGER,
+      quality_score REAL,
+      model_version INTEGER DEFAULT 1,
+      created_from TEXT CHECK(created_from IN ('manual','confirmed','self','import')) DEFAULT 'manual',
+      disabled_at TEXT,
+      superseded_by TEXT)`)
+    database.run(`INSERT OR IGNORE INTO voiceprints_new
+      (id, contact_id, model_id, dim, embedding, created_at)
+      SELECT id, contact_id, model_id, dim, embedding, created_at FROM voiceprints`)
+    database.run('DROP TABLE IF EXISTS voiceprints')
+    database.run('ALTER TABLE voiceprints_new RENAME TO voiceprints')
 
     console.log('Migration v27 complete')
   }
