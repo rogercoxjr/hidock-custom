@@ -162,6 +162,11 @@ describe('voiceprint-service load (§6.7, AC4)', () => {
     }
   })
 
+  it('uses the ERes2Net model id (not the retired WeSpeaker)', () => {
+    expect(VOICEPRINT_MODEL_ID).toBe('3dspeaker_eres2net_en_voxceleb')
+    expect(VOICEPRINT_MODEL_ID).not.toMatch(/wespeaker/i)
+  })
+
   it('2. isVoiceprintAvailable() is false when sherpa-onnx-node is missing', async () => {
     // FORCE the addon to be unresolvable. The package may now be installed
     // (it's an optionalDependency that activation installs), so we can't rely on

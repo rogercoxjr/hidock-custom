@@ -32,14 +32,13 @@ const MODELS_DIR = join(__dirname, '..', 'resources', 'models')
 
 const MODELS = [
   {
-    name: 'wespeaker_en_voxceleb_resnet34_LM.onnx',
-    // Official sherpa-onnx model release. NOTE: the release tag is literally
-    // "speaker-recongition-models" — that misspelling ("recongition") is upstream's
-    // actual tag, not a typo here. Verified 2026-06-18 (HTTP 200).
-    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx',
-    // SHA-256 of the released file. Pinned 2026-06-18 from the verified download
-    // (26,530,550 bytes). On mismatch the script deletes the file and fails.
-    sha256: 'e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012',
+    name: '3dspeaker_eres2net_en_voxceleb.onnx',
+    // 3D-Speaker ERes2Net (en VoxCeleb 16k) from the k2-fsa/sherpa-onnx release tag
+    // "speaker-recongition-models" (upstream's real misspelling). Adopted rev 2.
+    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx',
+    // SHA-256 of the released file. Pinned 2026-06-19 from the verified download
+    // (26,485,263 bytes). On mismatch the script deletes the file and fails.
+    sha256: 'c59158379255ad66e161679cca6af8d52d51e389e3224ab7d7a7baae295c2db5',
   },
 ]
 

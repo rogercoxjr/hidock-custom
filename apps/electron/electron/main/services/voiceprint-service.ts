@@ -66,10 +66,10 @@ export async function decodeRecordingPcm16k(filePath: string): Promise<Buffer> {
   }
 }
 
-// The WeSpeaker model bundled in app resources (electron-builder asarUnpack).
-// model_id is persisted on every voiceprints row so a future model swap can
-// re-embed (spec §6.3).
-export const VOICEPRINT_MODEL_ID = 'wespeaker_en_voxceleb_resnet34_LM'
+// ERes2Net (3D-Speaker, en VoxCeleb, 16k) — adopted rev 2 (Phase-0: ~0.8% cross-recording
+// EER on real far-field P1 audio vs WeSpeaker's 26.8%). 256-dim → no voiceprints storage
+// migration. Per-voiceprint model_id makes a future swap re-embeddable.
+export const VOICEPRINT_MODEL_ID = '3dspeaker_eres2net_en_voxceleb'
 
 // ---------------------------------------------------------------------------
 // Module-level optional-dependency load. A failed require sets the addon to

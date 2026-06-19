@@ -14,10 +14,10 @@ asarUnpack:
   - '**/usb/**'
   - '**/ffmpeg-static/**'
   - '**/sherpa-onnx-node/**'
-  - 'resources/models/wespeaker_en_voxceleb_resnet34_LM.onnx'
+  - 'resources/models/3dspeaker_eres2net_en_voxceleb.onnx'
 extraResources:
-  - from: resources/models/wespeaker_en_voxceleb_resnet34_LM.onnx
-    to: models/wespeaker_en_voxceleb_resnet34_LM.onnx
+  - from: resources/models/3dspeaker_eres2net_en_voxceleb.onnx
+    to: models/3dspeaker_eres2net_en_voxceleb.onnx
 win:
   target:
     - target: nsis
