@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { SpeakersPanel } from '../SpeakersPanel'
+import type { SuggestionView } from '../SpeakersPanel'
+import { useConfigStore } from '@/store/domain/useConfigStore'
 import type { Turn } from '../../types/turns'
 
 vi.mock('@/components/ui/toaster', () => ({
@@ -8,11 +10,22 @@ vi.mock('@/components/ui/toaster', () => ({
 }))
 
 const mockAssign = vi.fn().mockResolvedValue({ success: true })
+const mockUnassign = vi.fn().mockResolvedValue({ success: true })
 const mockMerge = vi.fn().mockResolvedValue({ success: true })
+const mockDismissSuggestion = vi.fn().mockResolvedValue({ success: true })
+const mockAcceptSuggestion = vi.fn().mockResolvedValue({ success: true })
+const mockSetSelf = vi.fn().mockResolvedValue({ success: true, data: { selfAssigned: true, contactId: 'c-self' } })
 const mockUpdateTurns = vi.fn().mockResolvedValue({ success: true })
 const mockCreate = vi.fn()
 const mockGetForMeeting = vi.fn()
 const mockGetAll = vi.fn()
+const mockFindBySource = vi.fn().mockResolvedValue({ success: true, data: [] })
+const mockDelete = vi.fn().mockResolvedValue({ success: true })
+let voiceprintCaptureCallback: ((data: unknown) => void) | null = null
+const mockOnVoiceprintCaptured = vi.fn((cb: (data: unknown) => void) => {
+  voiceprintCaptureCallback = cb
+  return vi.fn()
+})
 
 function makeTurns(): Turn[] {
   return [
@@ -24,13 +37,25 @@ function makeTurns(): Turn[] {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  voiceprintCaptureCallback = null
+  useConfigStore.setState({ config: null })
   mockGetForMeeting.mockResolvedValue({ success: true, data: [{ id: 'c-att', name: 'Attendee Alice', email: 'alice@x.com' }] })
   mockGetAll.mockResolvedValue({ success: true, data: { contacts: [{ id: 'c-bob', name: 'Bob', email: 'bob@x.com' }], total: 1 } })
   Object.defineProperty(window, 'electronAPI', {
     value: {
       contacts: { getForMeeting: mockGetForMeeting, getAll: mockGetAll, create: mockCreate },
-      speakers: { assign: mockAssign, merge: mockMerge },
+      speakers: {
+        assign: mockAssign,
+        unassign: mockUnassign,
+        merge: mockMerge,
+        getSuggestions: vi.fn(),
+        dismissSuggestion: mockDismissSuggestion,
+        acceptSuggestion: mockAcceptSuggestion,
+        setSelf: mockSetSelf,
+      },
       transcripts: { updateTurns: mockUpdateTurns },
+      voiceprints: { findBySource: mockFindBySource, delete: mockDelete },
+      onVoiceprintCaptured: mockOnVoiceprintCaptured,
     },
     writable: true,
     configurable: true,
@@ -68,7 +93,7 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /assign contact/i })[0])
     fireEvent.click(await screen.findByText('Attendee Alice'))
     await waitFor(() =>
-      expect(mockAssign).toHaveBeenCalledWith({ recordingId: 'rec-1', fileLabel: 'A', contactId: 'c-att' })
+      expect(mockAssign).toHaveBeenCalledWith({ recordingId: 'rec-1', fileLabel: 'A', contactId: 'c-att', source: 'user' })
     )
     expect(onChanged).toHaveBeenCalled()
   })
@@ -82,7 +107,7 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /create contact "carol"/i }))
     await waitFor(() => expect(mockCreate).toHaveBeenCalledWith({ name: 'Carol' }))
     await waitFor(() =>
-      expect(mockAssign).toHaveBeenCalledWith({ recordingId: 'rec-1', fileLabel: 'A', contactId: 'c-new' })
+      expect(mockAssign).toHaveBeenCalledWith({ recordingId: 'rec-1', fileLabel: 'A', contactId: 'c-new', source: 'user' })
     )
   })
 
@@ -158,5 +183,295 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
     expect(await screen.findByText('A')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /reassign turn/i })).not.toBeInTheDocument()
+  })
+
+  describe('Phase 2A capture + un-bank', () => {
+    it('renders assigned speaker contact names and exposes inline un-bank (AC2)', async () => {
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          assignedSpeakers={{ A: { contactId: 'c-alice', contactName: 'Alice' } }}
+          onChanged={vi.fn()}
+        />
+      )
+      expect(await screen.findByText(/→ Alice/i)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /assign contact to a/i }))
+      expect(
+        await screen.findByRole('button', { name: /clear assignment for alice/i })
+      ).toBeInTheDocument()
+    })
+
+    it('shows capture feedback: success with clean speech, or human skip reason (AC2)', async () => {
+      render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={makeTurns()} onChanged={vi.fn()} />)
+      expect(await screen.findByRole('button', { name: /assign contact to a/i })).toBeInTheDocument()
+      expect(voiceprintCaptureCallback).not.toBeNull()
+
+      act(() =>
+        voiceprintCaptureCallback!({
+          recordingId: 'rec-1',
+          fileLabel: 'A',
+          captured: true,
+          cleanSpeechMs: 12000,
+        })
+      )
+      expect(await screen.findByText(/voice remembered/i)).toBeInTheDocument()
+      expect(screen.getByText(/00:00:12 clean speech/)).toBeInTheDocument()
+
+      act(() =>
+        voiceprintCaptureCallback!({
+          recordingId: 'rec-1',
+          fileLabel: 'B',
+          captured: false,
+          reason: 'insufficient-clean-speech',
+        })
+      )
+      expect(
+        await screen.findByText(/not enough clean speech to remember the voice/i)
+      ).toBeInTheDocument()
+    })
+
+    it('suppresses voice capture affordance and shows privacy hint when disabled (AC2)', async () => {
+      useConfigStore.setState({ config: { privacy: { enableVoiceprintCapture: false, excludeVoiceprintsFromBackup: false } } as unknown as import('@/types').AppConfig })
+      render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={makeTurns()} onChanged={vi.fn()} />)
+      expect(await screen.findByText(/voice memory is off/i)).toBeInTheDocument()
+      expect(mockOnVoiceprintCaptured).not.toHaveBeenCalled()
+    })
+
+    it('clear assignment un-banks discovered voiceprints after confirmation (AC2)', async () => {
+      mockFindBySource.mockResolvedValue({
+        success: true,
+        data: [
+          { id: 'vp-1', sourceRecordingId: 'rec-1', fileLabel: 'A', contactId: 'c-alice' },
+          { id: 'vp-2', sourceRecordingId: 'rec-1', fileLabel: 'A', contactId: 'c-alice' },
+        ],
+      })
+      const onChanged = vi.fn()
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          assignedSpeakers={{ A: { contactId: 'c-alice', contactName: 'Alice' } }}
+          onChanged={onChanged}
+        />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /assign contact to a/i }))
+      fireEvent.click(await screen.findByRole('button', { name: /clear assignment for alice/i }))
+
+      await waitFor(() =>
+        expect(mockUnassign).toHaveBeenCalledWith({ recordingId: 'rec-1', fileLabel: 'A' })
+      )
+      await waitFor(() =>
+        expect(mockFindBySource).toHaveBeenCalledWith('rec-1', 'A', 'c-alice')
+      )
+      expect(await screen.findByText(/remove banked voiceprints\?/i)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /remove 2 voiceprints/i }))
+      await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(2))
+      expect(mockDelete).toHaveBeenCalledWith('vp-1')
+      expect(mockDelete).toHaveBeenCalledWith('vp-2')
+    })
+
+    it('clear assignment with no matching voiceprints skips the remove dialog (AC2)', async () => {
+      mockFindBySource.mockResolvedValue({ success: true, data: [] })
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          assignedSpeakers={{ A: { contactId: 'c-alice', contactName: 'Alice' } }}
+          onChanged={vi.fn()}
+        />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /assign contact to a/i }))
+      fireEvent.click(await screen.findByRole('button', { name: /clear assignment for alice/i }))
+
+      await waitFor(() =>
+        expect(mockUnassign).toHaveBeenCalledWith({ recordingId: 'rec-1', fileLabel: 'A' })
+      )
+      await waitFor(() =>
+        expect(mockFindBySource).toHaveBeenCalledWith('rec-1', 'A', 'c-alice')
+      )
+      expect(screen.queryByText(/remove banked voiceprints\?/i)).not.toBeInTheDocument()
+      expect(mockDelete).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Phase 2B suggestion chips', () => {
+    function makeSuggestion(kind: SuggestionView['kind'], overrides: Partial<SuggestionView> = {}): SuggestionView {
+      const base: SuggestionView = {
+        id: 'sug-1',
+        kind,
+        targetLabel: 'A',
+        targetLabel2: null,
+        contactId: null,
+        contactName: null,
+        contactName2: null,
+        score: 0.65,
+        rank: 1,
+        rationale: 'likely',
+        requiresWarning: false,
+      }
+      return { ...base, ...overrides }
+    }
+
+    it('renders identity suggestion chip with confirm/dismiss', async () => {
+      const onChanged = vi.fn()
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          suggestions={[makeSuggestion('identity', { contactId: 'c-robyn', contactName: 'Robyn', rationale: 'strong' })]}
+          onChanged={onChanged}
+        />
+      )
+      expect(await screen.findByText(/Looks like Robyn \(Match\)/i)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+      await waitFor(() =>
+        expect(mockAssign).toHaveBeenCalledWith({
+          recordingId: 'rec-1',
+          fileLabel: 'A',
+          contactId: 'c-robyn',
+          source: 'suggestion_confirmed',
+        })
+      )
+      await waitFor(() => expect(mockAcceptSuggestion).toHaveBeenCalledWith('sug-1'))
+      expect(onChanged).toHaveBeenCalled()
+    })
+
+    it('dismisses an identity suggestion', async () => {
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          suggestions={[makeSuggestion('identity', { contactId: 'c-robyn', contactName: 'Robyn' })]}
+          onChanged={vi.fn()}
+        />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /^Dismiss$/i }))
+      await waitFor(() => expect(mockDismissSuggestion).toHaveBeenCalledWith('sug-1'))
+    })
+
+    it('confirms a merge suggestion and warns when required', async () => {
+      const onChanged = vi.fn()
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          suggestions={[
+            makeSuggestion('merge', {
+              id: 'sug-merge',
+              targetLabel2: 'B',
+              contactName: 'Robyn',
+              contactName2: 'Tiffany',
+              requiresWarning: true,
+            }),
+          ]}
+          onChanged={onChanged}
+        />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /confirm merge/i }))
+      expect(await screen.findByText(/Merge speakers across contacts\?/i)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /confirm merge$/i }))
+      await waitFor(() =>
+        expect(mockMerge).toHaveBeenCalledWith({ recordingId: 'rec-1', fromLabel: 'A', toLabel: 'B' })
+      )
+      await waitFor(() => expect(mockAcceptSuggestion).toHaveBeenCalledWith('sug-merge'))
+    })
+
+    it('mixed suggestion has only dismiss, no confirm', async () => {
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          suggestions={[makeSuggestion('mixed', { id: 'sug-mixed' })]}
+          onChanged={vi.fn()}
+        />
+      )
+      expect(await screen.findByText(/A may contain two voices/i)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /confirm/i })).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /^Dismiss$/i }))
+      await waitFor(() => expect(mockDismissSuggestion).toHaveBeenCalledWith('sug-mixed'))
+    })
+
+    it('self-enroll calls setSelf and refreshes', async () => {
+      const onChanged = vi.fn()
+      render(
+        <SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={makeTurns()} onChanged={onChanged} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /this label is me: a/i }))
+      await waitFor(() =>
+        expect(mockSetSelf).toHaveBeenCalledWith({ recordingId: 'rec-1', fileLabel: 'A' })
+      )
+      expect(onChanged).toHaveBeenCalled()
+    })
+
+    it('self-enroll with no self contact shows a hint instead of assigning', async () => {
+      mockSetSelf.mockResolvedValue({ success: true, data: { selfAssigned: false, needsSelfContact: true } })
+      render(
+        <SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={makeTurns()} onChanged={vi.fn()} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /this label is me: a/i }))
+      expect(await screen.findByTestId('self-hint')).toBeInTheDocument()
+    })
+
+    it('dismiss all suggestions dismisses every pending suggestion', async () => {
+      const onChanged = vi.fn()
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          suggestions={[
+            makeSuggestion('identity', { id: 'sug-1', contactId: 'c-1', contactName: 'One' }),
+            makeSuggestion('identity', { id: 'sug-2', targetLabel: 'B', contactId: 'c-2', contactName: 'Two' }),
+          ]}
+          onChanged={onChanged}
+        />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /dismiss all suggestions/i }))
+      await waitFor(() => expect(mockDismissSuggestion).toHaveBeenCalledWith('sug-1'))
+      await waitFor(() => expect(mockDismissSuggestion).toHaveBeenCalledWith('sug-2'))
+      expect(onChanged).toHaveBeenCalled()
+    })
+
+    it('caps identity chips to two per label', async () => {
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          suggestions={[
+            makeSuggestion('identity', { id: 's1', contactId: 'c-1', contactName: 'One' }),
+            makeSuggestion('identity', { id: 's2', contactId: 'c-2', contactName: 'Two' }),
+            makeSuggestion('identity', { id: 's3', contactId: 'c-3', contactName: 'Three' }),
+          ]}
+          onChanged={vi.fn()}
+        />
+      )
+      expect(await screen.findByText(/Looks like One/i)).toBeInTheDocument()
+      expect(screen.getByText(/Looks like Two/i)).toBeInTheDocument()
+      expect(screen.queryByText(/Looks like Three/i)).not.toBeInTheDocument()
+    })
+
+    it('renders suggestions even on a single-speaker recording', async () => {
+      const turns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 1000, text: 'solo' }]
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={turns}
+          suggestions={[makeSuggestion('identity', { contactId: 'c-me', contactName: 'Me' })]}
+          onChanged={vi.fn()}
+        />
+      )
+      expect(await screen.findByText(/Looks like Me/i)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /merge speaker/i })).not.toBeInTheDocument()
+    })
   })
 })

@@ -44,6 +44,7 @@ import {
   MIN_CLEAN_SPEECH_MS,
   decodeRecordingPcm16k,
   pcmToFloat32,
+  sliceLabelWindows,
   VOICEPRINT_MODEL_ID,
 } from '../voiceprint-service'
 import * as db from '../database'
@@ -110,7 +111,17 @@ vi.mock('../database', () => ({
   getTranscriptByRecordingId: vi.fn(),
   insertVoiceprint: vi.fn(),
   insertLabelEmbedding: vi.fn(),
-  getLabelEmbeddingsForRecording: vi.fn(),
+  getLabelEmbeddingsForRecording: vi.fn(() => []),
+  deleteLabelEmbeddingsForRecording: vi.fn(),
+  getActiveVoiceprintsByContactId: vi.fn(() => []),
+  getSuggestionsForRecording: vi.fn(() => []),
+  getVoiceprintsBySource: vi.fn(() => []),
+  getRecordingSpeaker: vi.fn((_recordingId: string, _fileLabel: string) => ({
+    recording_id: _recordingId,
+    file_label: _fileLabel,
+    contact_id: 'c_1',
+    source: 'user',
+  })),
 }))
 
 // ---------------------------------------------------------------------------
@@ -448,6 +459,15 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     // dim is taken from the worker's returned embedding length.
     expect(row.dim).toBe(256)
     expect(row.embedding).toBeInstanceOf(Uint8Array)
+    // Phase 2A provenance fields are persisted for traceability/quality.
+    expect(row.source_recording_id).toBe('rec_1')
+    expect(row.source_label).toBe('A')
+    expect(row.clean_speech_ms).toBe(12000)
+    expect(row.quality_score).toBeNull()
+    expect(row.model_version).toBe(1)
+    expect(row.created_from).toBe('manual')
+    expect(res.voiceprintId).toMatch(/^vp_/)
+    expect(res.cleanSpeechMs).toBe(12000)
   })
 
   it('8a-2. worker returns null → mapping kept, NO voiceprint, no throw', async () => {
@@ -457,7 +477,7 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     const { captureVoiceprint: cv } = await import('../voiceprint-service')
     const res = await cv('rec_1', 'A', 'c_1')
     expect(res.captured).toBe(false)
-    expect(res.reason).toMatch(/worker/i)
+    expect(res.reason).toMatch(/embedding-failed/i)
     expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
   })
 
@@ -468,7 +488,8 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     const { captureVoiceprint: cv } = await import('../voiceprint-service')
     const res = await cv('rec_1', 'A', 'c_1')
     expect(res.captured).toBe(false)
-    expect(res.reason).toMatch(/clean speech/i)
+    expect(res.reason).toBe('insufficient-clean-speech')
+    expect(res.cleanSpeechMs).toBe(3000)
     expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
   })
 
@@ -477,7 +498,8 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     const { captureVoiceprint: cv } = await import('../voiceprint-service')
     const res = await cv('rec_1', 'A', 'c_1')
     expect(res.captured).toBe(false)
-    expect(res.reason).toMatch(/decode/i)
+    expect(res.reason).toBe('decode-failed')
+    expect(res.cleanSpeechMs).toBe(12000)
     expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
   })
 
@@ -549,6 +571,7 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
   // fresh service so its getConfig() honours the mock.
   it('8f. privacy toggle disabled → capture skipped, NO voiceprint, no throw', async () => {
     vi.resetModules()
+    vi.mocked(db.getRecordingById).mockClear()
     vi.doMock('../config', () => ({
       getConfig: () => ({
         privacy: { enableVoiceprintCapture: false, excludeVoiceprintsFromBackup: true },
@@ -558,7 +581,9 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
       const { captureVoiceprint: cv } = await import('../voiceprint-service')
       const res = await cv('rec_1', 'A', 'c_1')
       expect(res.captured).toBe(false)
-      expect(res.reason).toMatch(/disabled/i)
+      expect(res.reason).toBe('voiceprint-disabled')
+      expect(vi.mocked(db.getRecordingById)).not.toHaveBeenCalled()
+      expect(vi.mocked(embedSamples)).not.toHaveBeenCalled()
       expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
     } finally {
       vi.doUnmock('../config')
@@ -607,5 +632,275 @@ describe('captureVoiceprint() — AC4 four outcomes (§6.7)', () => {
     await embedRecordingLabels('r1')
     expect(vi.mocked(db.insertLabelEmbedding)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(db.insertLabelEmbedding).mock.calls[0][0].file_label).toBe('A')
+  })
+
+  it('embedRecordingLabels is idempotent: existing rows short-circuit without re-embed', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ id: 'r1', file_path: '/r/r1.wav' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({ id: 't1', turns: JSON.stringify([
+      { speaker: 'A', startMs: 0, endMs: 12000, text: 'long' }
+    ]) } as never)
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue([
+      {
+        id: 'le_r1_drun_existing_A',
+        recording_id: 'r1',
+        transcript_id: 't1',
+        diarization_run_id: 'drun_existing',
+        file_label: 'A',
+        model_id: VOICEPRINT_MODEL_ID,
+        model_version: 1,
+        dim: 256,
+        embedding: new Uint8Array(256 * 4),
+        clean_speech_ms: 12000,
+      }
+    ] as never)
+    vi.mocked(db.insertLabelEmbedding).mockReset()
+    vi.mocked(embedSamples).mockClear()
+    const { embedRecordingLabels } = await import('../voiceprint-service')
+    await embedRecordingLabels('r1')
+    expect(vi.mocked(embedSamples)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.insertLabelEmbedding)).not.toHaveBeenCalled()
+  })
+
+  it('embedRecordingLabels mints a run id and writes deterministic ids when table is empty', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ id: 'r1', file_path: '/r/r1.wav' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({ id: 't1', turns: JSON.stringify([
+      { speaker: 'A', startMs: 0, endMs: 12000, text: 'long' }
+    ]) } as never)
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue([] as never)
+    vi.mocked(db.insertLabelEmbedding).mockReset()
+    const { embedRecordingLabels } = await import('../voiceprint-service')
+    await embedRecordingLabels('r1')
+    expect(vi.mocked(db.insertLabelEmbedding)).toHaveBeenCalledTimes(1)
+    const row = vi.mocked(db.insertLabelEmbedding).mock.calls[0][0]
+    expect(row.id).toMatch(/^le_r1_drun_[A-Za-z0-9\-_]+_A$/)
+    expect(row.diarization_run_id).toMatch(/^drun_/)
+  })
+
+  it('banking gate: skips capture when a mixed suggestion exists for the label', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ file_path: '/recordings/m.hda' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      turns: JSON.stringify(longTurns),
+    } as never)
+    vi.mocked(db.getSuggestionsForRecording).mockReturnValue([
+      { id: 's1', recording_id: 'rec_1', kind: 'mixed', target_label: 'A', status: 'pending' }
+    ] as never)
+    vi.mocked(db.insertVoiceprint).mockReset()
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(false)
+    expect(res.reason).toBe('label-suspected-mixed')
+    expect(res.cleanSpeechMs).toBe(12000)
+    expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
+  })
+
+  it('banking gate: flags low quality_score when new print is inconsistent with existing prints', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ file_path: '/recordings/m.hda' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      turns: JSON.stringify(longTurns),
+    } as never)
+    vi.mocked(db.getSuggestionsForRecording).mockReturnValue([] as never)
+    const inconsistent = new Float32Array(256).fill(-0.5)
+    vi.mocked(db.getActiveVoiceprintsByContactId).mockReturnValue([
+      {
+        id: 'vp_old',
+        contact_id: 'c_1',
+        model_id: VOICEPRINT_MODEL_ID,
+        dim: 256,
+        embedding: new Uint8Array(inconsistent.buffer, inconsistent.byteOffset, inconsistent.byteLength),
+        created_at: '2026-01-01T00:00:00.000Z',
+      }
+    ] as never)
+    vi.mocked(db.insertVoiceprint).mockReset()
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(true)
+    const row = vi.mocked(db.insertVoiceprint).mock.calls[0][0]
+    expect(row.quality_score).toBe(0.3)
+  })
+
+  it('banking gate: leaves quality_score null when new print is consistent with existing prints', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ file_path: '/recordings/m.hda' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      turns: JSON.stringify(longTurns),
+    } as never)
+    vi.mocked(db.getSuggestionsForRecording).mockReturnValue([] as never)
+    const consistent = new Float32Array(256).fill(0.5)
+    vi.mocked(db.getActiveVoiceprintsByContactId).mockReturnValue([
+      {
+        id: 'vp_old',
+        contact_id: 'c_1',
+        model_id: VOICEPRINT_MODEL_ID,
+        dim: 256,
+        embedding: new Uint8Array(consistent.buffer, consistent.byteOffset, consistent.byteLength),
+        created_at: '2026-01-01T00:00:00.000Z',
+      }
+    ] as never)
+    vi.mocked(db.insertVoiceprint).mockReset()
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(true)
+    const row = vi.mocked(db.insertVoiceprint).mock.calls[0][0]
+    expect(row.quality_score).toBeNull()
+  })
+
+  it('banking gate: created_from is confirmed when the 4th arg is passed, manual by default', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ file_path: '/recordings/m.hda' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      turns: JSON.stringify(longTurns),
+    } as never)
+    vi.mocked(db.getSuggestionsForRecording).mockReturnValue([] as never)
+    vi.mocked(db.getActiveVoiceprintsByContactId).mockReturnValue([] as never)
+    vi.mocked(db.insertVoiceprint).mockReset()
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    await cv('rec_1', 'A', 'c_1', 'confirmed')
+    expect(vi.mocked(db.insertVoiceprint).mock.calls[0][0].created_from).toBe('confirmed')
+    await cv('rec_1', 'A', 'c_1')
+    expect(vi.mocked(db.insertVoiceprint).mock.calls[1][0].created_from).toBe('manual')
+  })
+
+  it('superseded race guard: skips banking when the label is now assigned to a different contact', async () => {
+    vi.mocked(db.getRecordingSpeaker).mockReturnValue({
+      recording_id: 'rec_1',
+      file_label: 'A',
+      contact_id: 'c_other',
+      source: 'user',
+    } as never)
+    const { captureVoiceprint: cv } = await import('../voiceprint-service')
+    const res = await cv('rec_1', 'A', 'c_1')
+    expect(res.captured).toBe(false)
+    expect(res.reason).toBe('superseded')
+    expect(vi.mocked(db.insertVoiceprint)).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 2B: sliceLabelWindows / embedLabelWindows (pure + off-thread wrapper)
+// ---------------------------------------------------------------------------
+describe('sliceLabelWindows() — fixed-window label slicer (§3 unit 4)', () => {
+  // 16 kHz mono s16le: 1 ms = 32 bytes. Build 30 s of PCM with recognisable samples.
+  const THIRTY_SEC_PCM = Buffer.alloc(30_000 * 32)
+  for (let i = 0; i < THIRTY_SEC_PCM.length; i += 2) {
+    THIRTY_SEC_PCM.writeInt16LE((i % 4 === 0) ? 1000 : -1000, i)
+  }
+
+  const turns: Turn[] = [
+    { speaker: 'A', startMs: 0, endMs: 30_000, text: 'all A' }
+  ]
+
+  it('emits the expected number of fixed-length windows and drops a short tail', () => {
+    const windows = sliceLabelWindows(THIRTY_SEC_PCM, turns, 'A', 20_000, 10_000)
+    const windowSamples = (20_000 / 1000) * 16000
+    const minWindowSamples = windowSamples / 2
+    // 30 s source, 20 s windows, 10 s hop → windows at 0s, 10s, 20s; 20s-30s tail is kept.
+    expect(windows.length).toBe(3)
+    expect(windows[0].length).toBe(windowSamples)
+    expect(windows[1].length).toBe(windowSamples)
+    expect(windows[2].length).toBe(minWindowSamples)
+  })
+
+  it('caps total accumulated samples at MAX_EMBED_SPEECH_MS', async () => {
+    const { sliceLabelWindows: slw, MAX_EMBED_SPEECH_MS } = await import('../voiceprint-service')
+    const capSamples = (MAX_EMBED_SPEECH_MS / 1000) * 16000
+    const longPcm = Buffer.alloc(70_000 * 32)
+    const longTurns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 70_000, text: 'long' }]
+    // Non-overlapping 20 s windows: 70 s input capped to 60 s → exactly 3 windows.
+    const windows = slw(longPcm, longTurns, 'A', 20_000, 20_000)
+    expect(windows.reduce((sum, w) => sum + w.length, 0)).toBe(capSamples)
+  })
+
+  it('returns [] when total label samples are below half a window', () => {
+    const shortPcm = Buffer.alloc(3_000 * 32) // 3 s < 10 s min
+    const shortTurns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 3_000, text: 'short' }]
+    expect(sliceLabelWindows(shortPcm, shortTurns, 'A', 20_000, 10_000)).toEqual([])
+  })
+
+  it('returns correct sample values from a synthetic Buffer', () => {
+    // 2 s of PCM: sample pattern 0, 32767, 0, -32768 repeating.
+    const pcm = Buffer.alloc(2_000 * 32)
+    for (let i = 0; i < pcm.length; i += 4) {
+      pcm.writeInt16LE(0, i)
+      pcm.writeInt16LE(32767, i + 2)
+    }
+    for (let i = 4; i < pcm.length; i += 4) {
+      pcm.writeInt16LE(0, i)
+      pcm.writeInt16LE(-32768, i + 2)
+    }
+    // 500 ms windows / 500 ms hop on 2 s source → 4 equal-length windows.
+    const windows = sliceLabelWindows(pcm, [{ speaker: 'A', startMs: 0, endMs: 2_000, text: 'x' }], 'A', 500, 500)
+    expect(windows.length).toBe(4)
+    expect(windows[0][0]).toBeCloseTo(0, 5)
+    expect(windows[0][1]).toBeCloseTo(32767 / 32768, 4)
+    expect(windows[0][2]).toBeCloseTo(0, 5)
+    expect(windows[0][3]).toBeCloseTo(-32768 / 32768, 5)
+  })
+})
+
+describe('embedLabelWindows() — off-thread window embedder', () => {
+  it('never throws and returns a list even when decode is unavailable', async () => {
+    const db = await import('../database')
+    vi.mocked(db.getRecordingById).mockReturnValue({ file_path: null } as never)
+    const { embedLabelWindows: elw } = await import('../voiceprint-service')
+    const res = await elw('r1', 'A')
+    expect(Array.isArray(res)).toBe(true)
+    expect(res.length).toBe(0)
+  })
+})
+
+describe('embedRecordingLabels() — per-recording label embeddings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(db.getRecordingById).mockReturnValue({ id: 'rec_1', file_path: '/r/rec.wav' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({
+      id: 't_1',
+      turns: JSON.stringify([{ speaker: 'A', startMs: 0, endMs: 12_000, text: 'hello' }]),
+    } as never)
+    vi.mocked(embedSamples).mockResolvedValue(new Float32Array(256).fill(0.5))
+  })
+
+  it('deletes stale-model embeddings and re-embeds with the active model', async () => {
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue([
+      {
+        id: 'le_stale',
+        recording_id: 'rec_1',
+        file_label: 'A',
+        model_id: 'old_model',
+        model_version: 1,
+        dim: 256,
+        embedding: new Uint8Array(1024),
+        clean_speech_ms: 12_000,
+      }
+    ] as never)
+    const { embedRecordingLabels } = await import('../voiceprint-service')
+    await embedRecordingLabels('rec_1')
+    expect(vi.mocked(db.deleteLabelEmbeddingsForRecording)).toHaveBeenCalledWith('rec_1')
+    expect(vi.mocked(db.insertLabelEmbedding)).toHaveBeenCalledTimes(1)
+    const row = vi.mocked(db.insertLabelEmbedding).mock.calls[0][0]
+    expect(row.model_id).toBe(VOICEPRINT_MODEL_ID)
+    expect(row.file_label).toBe('A')
+  })
+
+  it('is idempotent when embeddings already use the active model', async () => {
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue([
+      {
+        id: 'le_ok',
+        recording_id: 'rec_1',
+        file_label: 'A',
+        model_id: VOICEPRINT_MODEL_ID,
+        model_version: 1,
+        dim: 256,
+        embedding: new Uint8Array(1024),
+        clean_speech_ms: 12_000,
+      }
+    ] as never)
+    const { embedRecordingLabels } = await import('../voiceprint-service')
+    await embedRecordingLabels('rec_1')
+    expect(vi.mocked(db.deleteLabelEmbeddingsForRecording)).not.toHaveBeenCalled()
+    expect(vi.mocked(db.insertLabelEmbedding)).not.toHaveBeenCalled()
   })
 })

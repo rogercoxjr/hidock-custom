@@ -39,6 +39,7 @@ import { getRAGService } from './services/rag'
 import { setMainWindowForEventBus } from './services/event-bus'
 import { getStoragePolicyService } from './services/storage-policy'
 import { setMainWindowForMigration } from './ipc/migration-handlers'
+import { setMainWindowForSpeakers } from './ipc/speakers-handlers'
 import { getIntegrityService } from './services/integrity-service'
 
 let mainWindow: BrowserWindow | null = null
@@ -268,6 +269,7 @@ app.whenReady().then(async () => {
     setMainWindowForTranscription(mainWindow)
     setMainWindowForEventBus(mainWindow)
     setMainWindowForMigration(mainWindow)
+    setMainWindowForSpeakers(mainWindow)
   }
 
   startRecordingWatcher()

@@ -295,6 +295,7 @@ export interface Person {
 
 
   createdAt: string
+  isSelf?: boolean
 
 
 
@@ -302,7 +303,7 @@ export interface Person {
 
 
 
-  
+
 
 
 

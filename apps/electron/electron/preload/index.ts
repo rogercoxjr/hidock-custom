@@ -67,7 +67,7 @@ import type {
   GenerateOutputRequest,
   GenerateOutputResponse
 } from '../main/types/api'
-import type { Contact, ContactWithMeetings, Project, ProjectWithMeetings } from '../main/types/database'
+import type { Contact, ContactWithMeetings, Project, ProjectWithMeetings, VoiceprintSummary } from '../main/types/database'
 import type { Person } from '../../src/types/knowledge'
 import type { MigrationAPI } from './migration-types'
 import type { 
@@ -76,6 +76,40 @@ import type {
   Conversation, 
   Message 
 } from '../../src/types/knowledge'
+
+/** Suggestion chip returned by speakers:getSuggestions. */
+interface SuggestionView {
+  id: string
+  kind: 'identity' | 'merge' | 'mixed'
+  targetLabel: string
+  targetLabel2?: string | null
+  contactId?: string | null
+  contactName?: string | null
+  contactName2?: string | null
+  score: number | null
+  rank: number | null
+  rationale: string | null
+  requiresWarning: boolean
+}
+
+/** Mirror of the main-process DiarizationRun row (Voice Library Phase 2C). */
+interface DiarizationRun {
+  id: string
+  recording_id: string
+  transcript_id?: string
+  provider: string
+  model?: string
+  options_min?: number
+  options_max?: number
+  options_sent_json?: string
+  label_count: number
+  is_solo: number
+  solo_reason?: string
+  failure_reason?: string
+  duration_ms?: number
+  policy_version?: number
+  created_at: string
+}
 
 // Type definitions for the API
 export interface ElectronAPI {
@@ -121,13 +155,37 @@ export interface ElectronAPI {
     update: (request: UpdateContactRequest) => Promise<Result<Contact>>
     delete: (id: string) => Promise<Result<void>>
     getForMeeting: (meetingId: string) => Promise<Result<Contact[]>>
+    setSelf: (request: { contactId: string | null }) => Promise<Result<Person | null>>
+    getSelf: () => Promise<Result<Person | null>>
+  }
+
+  // Voiceprints (speaker identity library)
+  voiceprints: {
+    listForContact: (contactId: string) => Promise<Result<VoiceprintSummary[]>>
+    disable: (id: string) => Promise<Result<void>>
+    enable: (id: string) => Promise<Result<void>>
+    delete: (id: string) => Promise<Result<void>>
+    clearAllForContact: (contactId: string) => Promise<Result<{ deleted: number }>>
+    clearAll: () => Promise<Result<{ deleted: number }>>
+    findBySource: (recordingId: string, fileLabel: string, contactId?: string) => Promise<Result<VoiceprintSummary[]>>
   }
 
   // Speakers (diarization — D3)
   speakers: {
-    assign: (request: { recordingId: string; fileLabel: string; contactId: string }) => Promise<Result<{ recordingId: string; fileLabel: string; contactId: string }>>
+    assign: (request: { recordingId: string; fileLabel: string; contactId: string; source?: 'user' | 'confirmed' | 'suggestion_confirmed' }) => Promise<Result<{ recordingId: string; fileLabel: string; contactId: string }>>
     merge: (request: { recordingId: string; fromLabel: string; toLabel: string }) => Promise<Result<{ recordingId: string; fromLabel: string; toLabel: string }>>
+    unassign: (request: { recordingId: string; fileLabel: string }) => Promise<Result<void>>
     getForRecording: (recordingId: string) => Promise<Result<Record<string, { contactId: string; contactName: string }>>>
+    getSuggestions: (recordingId: string) => Promise<Result<SuggestionView[]>>
+    dismissSuggestion: (id: string) => Promise<Result<{ id: string }>>
+    acceptSuggestion: (id: string) => Promise<Result<{ id: string }>>
+    setSelf: (request: { recordingId: string; fileLabel: string }) => Promise<Result<{ selfAssigned: boolean; needsSelfContact?: boolean; contactId?: string }>>
+  }
+
+  // Diarization-run instrumentation (Voice Library Phase 2C)
+  diarization: {
+    getLatestRun: (recordingId: string) => Promise<Result<DiarizationRun | null>>
+    getRunsForRecording: (recordingId: string) => Promise<Result<DiarizationRun[]>>
   }
 
   // Projects
@@ -531,6 +589,19 @@ export interface ElectronAPI {
 
   // Activity Log bridge — main process services (transcription, calendar, download) emit entries here
   onActivityLogEntry: (callback: (entry: { type: string; message: string; details?: string; timestamp: string }) => void) => () => void
+
+  // Voiceprint capture feedback — emitted after speakers:assign completes a deferred capture
+  onVoiceprintCaptured: (callback: (data: {
+    recordingId: string
+    fileLabel: string
+    contactId: string
+    captured: boolean
+    reason?: string
+    cleanSpeechMs?: number
+    voiceprintId?: string
+    purgedPriorContactId?: string
+    purgedCount?: number
+  }) => void) => () => void
 }
 
 // Expose the API to the renderer process
@@ -566,13 +637,35 @@ const electronAPI: ElectronAPI = {
     create: (request) => callIPC('contacts:create', request),
     update: (request) => callIPC('contacts:update', request),
     delete: (id) => callIPC('contacts:delete', id),
-    getForMeeting: (meetingId) => callIPC('contacts:getForMeeting', meetingId)
+    getForMeeting: (meetingId) => callIPC('contacts:getForMeeting', meetingId),
+    setSelf: (request) => callIPC('contacts:setSelf', request),
+    getSelf: () => callIPC('contacts:getSelf')
+  },
+
+  voiceprints: {
+    listForContact: (contactId) => callIPC('voiceprints:listForContact', { contactId }),
+    disable: (id) => callIPC('voiceprints:disable', { id }),
+    enable: (id) => callIPC('voiceprints:enable', { id }),
+    delete: (id) => callIPC('voiceprints:delete', { id }),
+    clearAllForContact: (contactId) => callIPC('voiceprints:clearAllForContact', { contactId }),
+    clearAll: () => callIPC('voiceprints:clearAll'),
+    findBySource: (recordingId, fileLabel, contactId) => callIPC('voiceprints:findBySource', { recordingId, fileLabel, contactId })
   },
 
   speakers: {
     assign: (request) => callIPC('speakers:assign', request),
     merge: (request) => callIPC('speakers:merge', request),
-    getForRecording: (recordingId) => callIPC('speakers:getForRecording', recordingId)
+    unassign: (request) => callIPC('speakers:unassign', request),
+    getForRecording: (recordingId) => callIPC('speakers:getForRecording', recordingId),
+    getSuggestions: (recordingId) => callIPC('speakers:getSuggestions', recordingId),
+    dismissSuggestion: (id) => callIPC('speakers:dismissSuggestion', id),
+    acceptSuggestion: (id) => callIPC('speakers:acceptSuggestion', id),
+    setSelf: (request) => callIPC('speakers:setSelf', request)
+  },
+
+  diarization: {
+    getLatestRun: (recordingId) => callIPC('diarization:getLatestRun', recordingId),
+    getRunsForRecording: (recordingId) => callIPC('diarization:getRunsForRecording', recordingId)
   },
 
   projects: {
@@ -962,6 +1055,24 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.on('activity-log:entry', handler)
     return () => {
       ipcRenderer.removeListener('activity-log:entry', handler)
+    }
+  },
+
+  onVoiceprintCaptured: (callback) => {
+    const handler = (_event: any, data: {
+      recordingId: string
+      fileLabel: string
+      contactId: string
+      captured: boolean
+      reason?: string
+      cleanSpeechMs?: number
+      voiceprintId?: string
+      purgedPriorContactId?: string
+      purgedCount?: number
+    }) => callback(data)
+    ipcRenderer.on('voiceprint:captured', handler)
+    return () => {
+      ipcRenderer.removeListener('voiceprint:captured', handler)
     }
   }
 }

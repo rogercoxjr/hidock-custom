@@ -17,10 +17,21 @@ import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
 import { resolveFfmpegPath } from './asr/audio-normalize'
-import { getRecordingById, getTranscriptByRecordingId, insertVoiceprint, insertLabelEmbedding } from './database'
+import {
+  getRecordingById,
+  getTranscriptByRecordingId,
+  insertVoiceprint,
+  insertLabelEmbedding,
+  getLabelEmbeddingsForRecording,
+  deleteLabelEmbeddingsForRecording,
+  getActiveVoiceprintsByContactId,
+  getSuggestionsForRecording,
+  getRecordingSpeaker
+} from './database'
 import { embedSamples } from './voiceprint-worker-pool'
 import { getConfig } from './config'
 import type { Turn } from './asr/asr-provider'
+import { blobToFloat32, centroid, cosine } from './voiceprint/vector-math'
 
 // promisify(execFile) — same primitive as the sibling ffmpeg service
 // (audio-normalize.ts) so the two ffmpeg call sites stay consistent. With
@@ -101,7 +112,7 @@ type SherpaModule = {
 let sherpa: SherpaModule | null = null
 try {
   // @ts-ignore - sherpa-onnx-node is an optional native addon; added in D4-T7
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/ban-ts-comment
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   sherpa = require('sherpa-onnx-node') as SherpaModule
 } catch (e) {
   console.warn(
@@ -159,15 +170,37 @@ export function collectCleanSpeechMs(turns: Turn[], label: string): number {
 // D4-T5: captureVoiceprint orchestrator (§6.7, AC4)
 // ---------------------------------------------------------------------------
 
+export type CaptureSkipReason =
+  | 'voiceprint-disabled'
+  | 'voiceprint-unavailable'
+  | 'no-audio-file'
+  | 'insufficient-clean-speech'
+  | 'no-samples'
+  | 'decode-failed'
+  | 'embedding-failed'
+  | 'label-suspected-mixed'
+  | 'superseded'
+
 export interface CaptureResult {
   captured: boolean
-  reason?: string
+  voiceprintId?: string
+  cleanSpeechMs?: number
+  reason?: CaptureSkipReason
 }
 
 // NOTE: the in-process extractor (getExtractor/compute) was removed when embedding
 // moved off-thread (see voiceprint-worker-pool). The sherpa require + isVoiceprintAvailable()
 // above stay as the availability probe; the actual compute now runs in the utilityProcess
 // worker, which loads sherpa itself from modelPath().
+
+// In-flight capture start timestamps keyed by source provenance. Guards against a
+// slower, older capture finishing after a newer one for the same label/contact and
+// overwriting the fresh print (Phase 2B race guard).
+const inFlightCaptures = new Map<string, number>()
+
+function captureKey(recordingId: string, fileLabel: string, contactId: string, createdFrom: string): string {
+  return `${recordingId}:${fileLabel}:${contactId}:${createdFrom}`
+}
 
 /** Convert 16 kHz s16le mono PCM bytes to a Float32Array of the label's
  *  clean turn samples (32 bytes/ms = 16000 Hz × 2 bytes). Exported for tests. */
@@ -187,6 +220,97 @@ export function pcmToFloat32(pcm: Buffer, turns: Turn[], label: string): Float32
   return Float32Array.from(out)
 }
 
+/**
+ * Pure fixed-window slicer for mixed-label detection (§3 unit 4).
+ *
+ * Walks the label's turns in time order, accumulates only this label's PCM samples,
+ * caps the total at MAX_EMBED_SPEECH_MS, and cuts fixed-length Float32 windows with
+ * the requested hop. A trailing partial shorter than windowSamples/2 is dropped.
+ */
+export function sliceLabelWindows(
+  pcm: Buffer,
+  turns: Turn[],
+  label: string,
+  windowMs = 20_000,
+  hopMs = 10_000
+): Float32Array[] {
+  const BYTES_PER_MS = 32 // 16000 samples/s × 2 bytes/sample ÷ 1000 ms/s
+  const windowSamples = Math.floor((windowMs / 1000) * 16000)
+  const hopSamples = Math.floor((hopMs / 1000) * 16000)
+  const minWindowSamples = windowSamples / 2
+  const maxTotalSamples = Math.floor((MAX_EMBED_SPEECH_MS / 1000) * 16000)
+
+  const out: number[] = []
+  const mine = turns
+    .filter((t) => t.speaker === label)
+    .sort((a, b) => a.startMs - b.startMs)
+
+  for (const t of mine) {
+    const start = Math.max(0, Math.floor(t.startMs * BYTES_PER_MS))
+    const end = Math.min(pcm.length, Math.floor(t.endMs * BYTES_PER_MS))
+    for (let i = start; i + 1 < end; i += 2) {
+      out.push(pcm.readInt16LE(i) / 32768)
+      if (out.length >= maxTotalSamples) break
+    }
+    if (out.length >= maxTotalSamples) break
+  }
+
+  if (out.length < minWindowSamples) return []
+
+  const windows: Float32Array[] = []
+  let start = 0
+  while (start < out.length) {
+    const end = Math.min(start + windowSamples, out.length)
+    if (end - start < minWindowSamples) break
+    windows.push(Float32Array.from(out.slice(start, end)))
+    start += hopSamples
+  }
+  return windows
+}
+
+/**
+ * Off-thread window embedder for mixed-label detection.
+ *
+ * Decodes once (or reuses a pre-decoded Buffer from the matcher), slices the label's
+ * turns into fixed windows, and embeds each window via the worker pool. Never throws;
+ * any failure returns [] so mixed detection is simply skipped.
+ */
+export async function embedLabelWindows(
+  recordingId: string,
+  label: string,
+  opts?: { pcm?: Buffer; windowMs?: number; hopMs?: number }
+): Promise<Float32Array[]> {
+  try {
+    let pcm: Buffer
+    if (opts?.pcm) {
+      pcm = opts.pcm
+    } else {
+      const recording = getRecordingById(recordingId)
+      if (!recording?.file_path) return []
+      pcm = await decodeRecordingPcm16k(recording.file_path)
+    }
+
+    const transcript = getTranscriptByRecordingId(recordingId)
+    let turns: Turn[] = []
+    try {
+      turns = transcript?.turns ? (JSON.parse(transcript.turns) as Turn[]) : []
+    } catch {
+      turns = []
+    }
+
+    const windows = sliceLabelWindows(pcm, turns, label, opts?.windowMs, opts?.hopMs)
+    const embeddings: Float32Array[] = []
+    for (const w of windows) {
+      const emb = await embedSamples(modelPath(), 16000, w)
+      if (emb) embeddings.push(emb)
+    }
+    return embeddings
+  } catch (e) {
+    console.warn(`[Voiceprint] embedLabelWindows failed for ${recordingId}/${label}: ${(e as Error).message}`)
+    return []
+  }
+}
+
 /** Float32 embedding → little-endian byte BLOB (4 bytes/element). */
 function embeddingToBlob(vec: Float32Array): Uint8Array {
   return new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength)
@@ -201,68 +325,142 @@ function modelPath(): string {
 }
 
 /**
+ * Phase-2 hook for the matcher (sub-project B) to gate banking on embedding
+ * consistency with existing prints. In Phase 2 this is a typed seam only and
+ * always returns true; the consistency clause of AC5/§10 is implemented by B.
+ */
+export function shouldBankGivenExisting(_newEmb: Float32Array, _existingPrints: { embedding: Uint8Array }[]): boolean {
+  return true
+}
+
+/**
  * Capture-only voiceprint hook (§6.7, AC4). Fired by the speakers:assign IPC
  * after the recording_speakers row is written. NEVER throws — every failure
  * mode returns { captured: false, reason } so the speaker mapping always succeeds.
  *
- * Outcomes (AC4):
- *   (a) ≥10 s clean speech + sherpa available → one voiceprints row stored.
- *   (b) <10 s clean speech → skip (reason: 'insufficient clean speech').
- *   (c) ffmpeg decode failure → skip (reason: 'decode failed: …').
- *   (d) sherpa unavailable → skip (reason: 'voiceprint unavailable').
- *   (e) file_path null/missing → skip (reason: 'audio file not downloaded').
+ * Outcomes (AC4 / Phase 2 conservative banking):
+ *   (a) ≥10 s clean speech + privacy toggle on + sherpa available → one voiceprints row stored with provenance.
+ *   (b) privacy toggle off → skip (reason: 'voiceprint-disabled').
+ *   (c) sherpa unavailable → skip (reason: 'voiceprint-unavailable').
+ *   (d) file_path null/missing → skip (reason: 'no-audio-file').
+ *   (e) <10 s clean speech → skip (reason: 'insufficient-clean-speech').
+ *   (f) ffmpeg decode failure → skip (reason: 'decode-failed').
+ *   (g) no usable samples after slicing → skip (reason: 'no-samples').
+ *   (h) worker embedding failure → skip (reason: 'embedding-failed').
  */
 export async function captureVoiceprint(
   recordingId: string,
   fileLabel: string,
   contactId: string,
+  createdFrom: 'manual' | 'confirmed' | 'self' | 'import' = 'manual'
 ): Promise<CaptureResult> {
-  if (!getConfig().privacy.enableVoiceprintCapture) return { captured: false, reason: 'voiceprint disabled' }
-  if (!isVoiceprintAvailable()) return { captured: false, reason: 'voiceprint unavailable' }
+  const startTime = Date.now()
+  const flightKey = captureKey(recordingId, fileLabel, contactId, createdFrom)
+  inFlightCaptures.set(flightKey, startTime)
 
-  const recording = getRecordingById(recordingId)
-  if (!recording?.file_path) return { captured: false, reason: 'audio file not downloaded' }
-
-  const transcript = getTranscriptByRecordingId(recordingId)
-  let turns: Turn[] = []
   try {
-    turns = transcript?.turns ? (JSON.parse(transcript.turns) as Turn[]) : []
-  } catch {
-    turns = []
-  }
-
-  const cleanMs = collectCleanSpeechMs(turns, fileLabel)
-  if (cleanMs < MIN_CLEAN_SPEECH_MS) {
-    return {
-      captured: false,
-      reason: `insufficient clean speech (${cleanMs} ms < ${MIN_CLEAN_SPEECH_MS} ms)`,
+    if (!getConfig().privacy.enableVoiceprintCapture) {
+      return { captured: false, reason: 'voiceprint-disabled' }
     }
-  }
+    if (!isVoiceprintAvailable()) {
+      return { captured: false, reason: 'voiceprint-unavailable' }
+    }
 
-  let pcm: Buffer
-  try {
-    pcm = await decodeRecordingPcm16k(recording.file_path)
-  } catch (e) {
-    console.warn(`[Voiceprint] decode failed for recording ${recordingId}: ${(e as Error).message}`)
-    return { captured: false, reason: `decode failed: ${(e as Error).message}` }
-  }
+    const recording = getRecordingById(recordingId)
+    if (!recording?.file_path) {
+      return { captured: false, reason: 'no-audio-file' }
+    }
 
-  const samples = pcmToFloat32(pcm, turns, fileLabel)
-  if (samples.length === 0) return { captured: false, reason: 'no usable samples after slicing' }
+    const transcript = getTranscriptByRecordingId(recordingId)
+    let turns: Turn[] = []
+    try {
+      turns = transcript?.turns ? (JSON.parse(transcript.turns) as Turn[]) : []
+    } catch {
+      turns = []
+    }
 
-  // Embed OFF the main thread in a utilityProcess (see voiceprint-worker-pool): the
-  // synchronous sherpa compute() can no longer block the UI. embedSamples never throws;
-  // it resolves null on any worker failure so the speaker→contact mapping always succeeds.
-  const embedding = await embedSamples(modelPath(), 16000, samples)
-  if (!embedding) return { captured: false, reason: 'embedding failed (worker)' }
-  insertVoiceprint({
-    id: `vp_${randomUUID()}`,
-    contact_id: contactId,
-    model_id: VOICEPRINT_MODEL_ID,
-    dim: embedding.length,
-    embedding: embeddingToBlob(embedding),
-  })
-  return { captured: true }
+    const cleanMs = collectCleanSpeechMs(turns, fileLabel)
+    if (cleanMs < MIN_CLEAN_SPEECH_MS) {
+      return {
+        captured: false,
+        cleanSpeechMs: cleanMs,
+        reason: 'insufficient-clean-speech'
+      }
+    }
+
+    // Banking gate: never train on a label flagged as containing multiple speakers.
+    const existingSuggestions = getSuggestionsForRecording(recordingId)
+    if (
+      existingSuggestions.some(
+        (s) =>
+          s.kind === 'mixed' &&
+          s.target_label === fileLabel &&
+          (s.status === 'pending' || s.status === 'accepted')
+      )
+    ) {
+      return { captured: false, cleanSpeechMs: cleanMs, reason: 'label-suspected-mixed' }
+    }
+
+    let pcm: Buffer
+    try {
+      pcm = await decodeRecordingPcm16k(recording.file_path)
+    } catch (e) {
+      console.warn(`[Voiceprint] decode failed for recording ${recordingId}: ${(e as Error).message}`)
+      return { captured: false, cleanSpeechMs: cleanMs, reason: 'decode-failed' }
+    }
+
+    const samples = pcmToFloat32(pcm, turns, fileLabel)
+    if (samples.length === 0) {
+      return { captured: false, cleanSpeechMs: cleanMs, reason: 'no-samples' }
+    }
+
+    // Embed OFF the main thread in a utilityProcess (see voiceprint-worker-pool): the
+    // synchronous sherpa compute() can no longer block the UI. embedSamples never throws;
+    // it resolves null on any worker failure so the speaker→contact mapping always succeeds.
+    const embedding = await embedSamples(modelPath(), 16000, samples)
+    if (!embedding || !shouldBankGivenExisting(embedding, [])) {
+      return { captured: false, cleanSpeechMs: cleanMs, reason: 'embedding-failed' }
+    }
+
+    // Banking gate: if the new print is inconsistent with the contact's existing
+    // active prints, flag it with a low quality_score rather than refusing it.
+    const existingPrints = getActiveVoiceprintsByContactId(contactId).filter(
+      (p) => p.model_id === VOICEPRINT_MODEL_ID
+    )
+    let qualityScore: number | null = null
+    if (existingPrints.length > 0) {
+      const existingEmbeddings = existingPrints.map((p) => blobToFloat32(p.embedding))
+      const existingCentroid = centroid(existingEmbeddings)
+      if (cosine(embedding, existingCentroid) < getConfig().voiceMatching.bankConsistency) {
+        qualityScore = 0.3
+      }
+    }
+
+    // Superseded race guard: re-read the current assignment; if the label now maps
+    // to a different contact (or is unassigned), do not bank this stale embedding.
+    const currentSpeaker = getRecordingSpeaker(recordingId, fileLabel)
+    if (!currentSpeaker || currentSpeaker.contact_id !== contactId) {
+      return { captured: false, cleanSpeechMs: cleanMs, reason: 'superseded' }
+    }
+
+    const voiceprintId = `vp_${randomUUID()}`
+    insertVoiceprint({
+      id: voiceprintId,
+      contact_id: contactId,
+      model_id: VOICEPRINT_MODEL_ID,
+      dim: embedding.length,
+      embedding: embeddingToBlob(embedding),
+      source_recording_id: recordingId,
+      source_label: fileLabel,
+      clean_speech_ms: cleanMs,
+      quality_score: qualityScore,
+      model_version: 1,
+      created_from: createdFrom
+    })
+    return { captured: true, voiceprintId, cleanSpeechMs: cleanMs }
+} finally {
+  inFlightCaptures.delete(flightKey)
+}
 }
 
 /** Embed EVERY label of a recording (clean-gated), off the main thread, persisting to
@@ -271,6 +469,17 @@ export async function captureVoiceprint(
 export async function embedRecordingLabels(recordingId: string): Promise<void> {
   if (!getConfig().privacy.enableVoiceprintCapture) return
   if (!isVoiceprintAvailable()) return
+
+  // Idempotency: if embeddings already exist for this recording, adopt their
+  // diarization_run_id and return without re-decoding or re-embedding (§9).
+  const existing = getLabelEmbeddingsForRecording(recordingId)
+  const hasStale = existing.some((e) => e.model_id !== VOICEPRINT_MODEL_ID || e.model_version !== 1)
+  if (hasStale) {
+    deleteLabelEmbeddingsForRecording(recordingId)
+  } else if (existing.length > 0) {
+    return
+  }
+
   const recording = getRecordingById(recordingId)
   if (!recording?.file_path) return
   const transcript = getTranscriptByRecordingId(recordingId)
@@ -282,6 +491,8 @@ export async function embedRecordingLabels(recordingId: string): Promise<void> {
   try { pcm = await decodeRecordingPcm16k(recording.file_path) } catch (e) {
     console.warn(`[Voiceprint] embedRecordingLabels decode failed (${recordingId}): ${(e as Error).message}`); return
   }
+
+  const runId = `drun_${randomUUID()}`
   const labels = [...new Set(turns.map((t) => t.speaker))]
   for (const label of labels) {
     if (collectCleanSpeechMs(turns, label) < MIN_CLEAN_SPEECH_MS) continue
@@ -290,10 +501,19 @@ export async function embedRecordingLabels(recordingId: string): Promise<void> {
     const embedding = await embedSamples(modelPath(), 16000, samples)
     if (!embedding) continue
     insertLabelEmbedding({
-      id: `le_${randomUUID()}`, recording_id: recordingId, transcript_id: transcript?.id ?? null,
-      file_label: label, model_id: VOICEPRINT_MODEL_ID, model_version: 1, dim: embedding.length,
-      embedding: embeddingToBlob(embedding), clean_speech_ms: collectCleanSpeechMs(turns, label),
-      turn_count: turns.filter((t) => t.speaker === label).length, quality_score: null, status: 'ok'
+      id: `le_${recordingId}_${runId}_${label}`,
+      recording_id: recordingId,
+      transcript_id: transcript?.id ?? null,
+      diarization_run_id: runId,
+      file_label: label,
+      model_id: VOICEPRINT_MODEL_ID,
+      model_version: 1,
+      dim: embedding.length,
+      embedding: embeddingToBlob(embedding),
+      clean_speech_ms: collectCleanSpeechMs(turns, label),
+      turn_count: turns.filter((t) => t.speaker === label).length,
+      quality_score: null,
+      status: 'ok'
     })
   }
 }

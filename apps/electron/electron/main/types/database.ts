@@ -157,6 +157,7 @@ export interface Contact {
   first_seen_at: string
   last_seen_at: string
   meeting_count: number
+  is_self: number
   created_at: string
 }
 
@@ -196,6 +197,23 @@ export interface MeetingProject {
 // =============================================================================
 // Composite Types (joins and aggregates)
 // =============================================================================
+
+/**
+ * Renderer-safe voiceprint projection. The raw embedding BLOB is intentionally
+ * omitted — privacy + payload size. See voiceprints-handlers.ts.
+ */
+export interface VoiceprintSummary {
+  id: string
+  contactId: string
+  modelId: string
+  createdAt: string
+  sourceRecordingId: string | null
+  sourceRecordingTitle: string | null
+  sourceLabel: string | null
+  cleanSpeechMs: number | null
+  createdFrom: 'manual' | 'confirmed' | 'self' | 'import' | null
+  disabledAt: string | null
+}
 
 /**
  * Recording with its transcript included
