@@ -20,6 +20,8 @@ import { registerMeetingsHandlers } from './meetings-handlers'
 import { registerJensenHandlers } from './jensen-handlers'
 import { registerSummarizationHandlers } from './summarization-handlers'
 import { registerSpeakersHandlers } from './speakers-handlers'
+import { registerVoiceprintsHandlers } from './voiceprints-handlers'
+import { registerDiarizationHandlers } from './diarization-handlers'
 
 export function registerIpcHandlers(): void {
   // Register all IPC handlers
@@ -45,6 +47,8 @@ export function registerIpcHandlers(): void {
   registerJensenHandlers()
   registerSummarizationHandlers()
   registerSpeakersHandlers()
+  registerVoiceprintsHandlers()
+  registerDiarizationHandlers()
 
   console.log('All IPC handlers registered')
 }

@@ -205,6 +205,10 @@ export interface AppConfig {
     officeHoursEnd: number
     workDays: number[]
   }
+  privacy: {
+    enableVoiceprintCapture: boolean
+    excludeVoiceprintsFromBackup: boolean
+  }
 }
 
 // =============================================================================

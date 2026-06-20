@@ -151,6 +151,27 @@ describe('createAssemblyAiAsr — happy path', () => {
     expect(body).not.toHaveProperty('word_boost')
     expect(body).not.toHaveProperty('model_region')
     expect(body).not.toHaveProperty('sentiment_analysis')
+    // Phase 5: never send the singular `speakers_expected` (mutually exclusive
+    // with `speaker_options`).
+    expect(body).not.toHaveProperty('speakers_expected')
+  })
+
+  it('sends speaker_options when opts.speakerOptions is provided', async () => {
+    const asr = createAssemblyAiAsr(aaiConfig())
+    await runWithPoll(
+      asr.transcribe('/recordings/a.hda', { speakerOptions: { min_speakers_expected: 1, max_speakers_expected: 8 } })
+    )
+    const body = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string)
+    expect(body.speaker_options).toEqual({ min_speakers_expected: 1, max_speakers_expected: 8 })
+    expect(body).not.toHaveProperty('speakers_expected')
+  })
+
+  it('omits speaker_options when opts.speakerOptions is absent', async () => {
+    const asr = createAssemblyAiAsr(aaiConfig())
+    await runWithPoll(asr.transcribe('/recordings/a.hda', {}))
+    const body = JSON.parse((fetchMock.mock.calls[1] as [string, RequestInit])[1].body as string)
+    expect(body).not.toHaveProperty('speaker_options')
+    expect(body).not.toHaveProperty('speakers_expected')
   })
 
   it('builds keyterms_prompt from meetingContext (NOT word_boost)', async () => {

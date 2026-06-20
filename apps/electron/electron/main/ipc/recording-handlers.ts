@@ -37,6 +37,8 @@ import {
   clearTranscriptStage2Marker,
   clearTranscriptForRetranscribe,
   deleteRecordingSpeakersForRecording,
+  deleteLabelEmbeddingsForRecording,
+  expireSuggestionsForRecording,
   rependFailedItems,
   isSummaryStale
 } from '../services/database'
@@ -317,6 +319,8 @@ export function registerRecordingHandlers(): void {
       if (existingTranscript?.full_text) {
         clearTranscriptForRetranscribe(id)
         deleteRecordingSpeakersForRecording(id)
+        deleteLabelEmbeddingsForRecording(id)
+        expireSuggestionsForRecording(id)
       }
 
       // Return the queue-item id so the renderer (queueTranscription's forced

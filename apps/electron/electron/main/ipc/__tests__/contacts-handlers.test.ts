@@ -23,6 +23,9 @@ vi.mock('../../services/database', () => ({
   getMeetingsForContact: vi.fn(),
   getContactsForMeeting: vi.fn(),
   upsertContact: vi.fn(),
+  setSelfContact: vi.fn(),
+  clearSelfContact: vi.fn(),
+  getSelfContactId: vi.fn(),
   getDatabase: vi.fn(() => ({
     prepare: vi.fn(() => ({
       bind: vi.fn(),
@@ -173,6 +176,7 @@ describe('Contacts IPC Handlers', () => {
       first_seen_at: '2026-06-17T00:00:00.000Z',
       last_seen_at: '2026-06-17T00:00:00.000Z',
       meeting_count: 0,
+      is_self: 0,
       created_at: '2026-06-17T00:00:00.000Z'
     }))
 
@@ -221,5 +225,112 @@ describe('Contacts IPC Handlers', () => {
     expect(r1.success).toBe(true)
     expect(r2.success).toBe(true)
     expect(upsertContact).toHaveBeenCalledTimes(2)
+  })
+
+  it('contacts:setSelf with a contact id calls setSelfContact and returns a Person with isSelf true', async () => {
+    const { setSelfContact, getContactById } = await import('../../services/database')
+    const mockContact = {
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      name: 'Me',
+      email: 'me@example.com',
+      type: 'team',
+      role: null,
+      company: null,
+      notes: null,
+      tags: null,
+      first_seen_at: '2025-01-01',
+      last_seen_at: '2025-01-02',
+      meeting_count: 0,
+      is_self: 1,
+      created_at: '2025-01-01'
+    }
+    vi.mocked(getContactById).mockReturnValue(mockContact as any)
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:setSelf')?.[1]
+    const result = await handler?.({} as any, { contactId: '550e8400-e29b-41d4-a716-446655440000' }) as any
+
+    expect(result.success).toBe(true)
+    expect(setSelfContact).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000')
+    expect(result.data.id).toBe('550e8400-e29b-41d4-a716-446655440000')
+    expect(result.data.isSelf).toBe(true)
+  })
+
+  it('contacts:setSelf with null calls clearSelfContact and returns success(null)', async () => {
+    const { clearSelfContact } = await import('../../services/database')
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:setSelf')?.[1]
+    const result = await handler?.({} as any, { contactId: null }) as any
+
+    expect(result.success).toBe(true)
+    expect(result.data).toBeNull()
+    expect(clearSelfContact).toHaveBeenCalled()
+  })
+
+  it('contacts:getSelf returns the mapped self Person or null when not set', async () => {
+    const { getSelfContactId, getContactById } = await import('../../services/database')
+    const selfId = '550e8400-e29b-41d4-a716-446655440000'
+    const mockContact = {
+      id: selfId,
+      name: 'Me',
+      email: 'me@example.com',
+      type: 'team',
+      role: null,
+      company: null,
+      notes: null,
+      tags: null,
+      first_seen_at: '2025-01-01',
+      last_seen_at: '2025-01-02',
+      meeting_count: 0,
+      is_self: 1,
+      created_at: '2025-01-01'
+    }
+    vi.mocked(getSelfContactId).mockReturnValue(selfId)
+    vi.mocked(getContactById).mockReturnValue(mockContact as any)
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:getSelf')?.[1]
+
+    const result = await handler?.({} as any) as any
+    expect(result.success).toBe(true)
+    expect(result.data).not.toBeNull()
+    expect(result.data.id).toBe(selfId)
+    expect(result.data.isSelf).toBe(true)
+
+    vi.mocked(getSelfContactId).mockReturnValue(null)
+    const emptyResult = await handler?.({} as any) as any
+    expect(emptyResult.success).toBe(true)
+    expect(emptyResult.data).toBeNull()
+  })
+
+  it('mapToPerson maps a contact with is_self=1 to isSelf:true', async () => {
+    const { getContacts } = await import('../../services/database')
+    const mockRow = {
+      id: 'p1',
+      name: 'Me',
+      email: 'me@example.com',
+      type: 'team',
+      role: null,
+      company: null,
+      notes: null,
+      tags: null,
+      first_seen_at: '2025-01-01',
+      last_seen_at: '2025-01-02',
+      meeting_count: 0,
+      is_self: 1,
+      created_at: '2025-01-01'
+    }
+
+    vi.mocked(getContacts).mockReturnValue({
+      contacts: [mockRow as any],
+      total: 1
+    })
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:getAll')?.[1]
+    const result = await handler?.({} as any, {}) as any
+
+    expect(result.data.contacts[0].isSelf).toBe(true)
   })
 })

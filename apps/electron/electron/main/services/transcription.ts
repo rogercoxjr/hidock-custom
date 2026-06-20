@@ -1,4 +1,5 @@
 import { existsSync } from 'fs'
+import { randomUUID } from 'crypto'
 import { getConfig } from './config'
 import {
   getRecordingById,
@@ -27,8 +28,13 @@ import {
   clearStaleTranscriptionLock,
   resetStuckTranscriptions,
   buildAttributedTranscript,
-  deleteRecordingSpeakersForRecording
+  deleteRecordingSpeakersForRecording,
+  deleteLabelEmbeddingsForRecording,
+  expireSuggestionsForRecording,
+  insertDiarizationRun
 } from './database'
+import { computeSpeakerOptions } from './asr/speaker-options-policy'
+import { classifyRunOutcome } from './asr/solo-detection'
 import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
 import { ProviderRateLimitError } from './provider-errors'
@@ -472,6 +478,8 @@ async function transcribeRecording(
     // this branch, so their mappings survive. Voiceprints are per-contact and
     // are NOT dropped.
     deleteRecordingSpeakersForRecording(recordingId)
+    deleteLabelEmbeddingsForRecording(recordingId)
+    expireSuggestionsForRecording(recordingId)
 
     // Build meeting context for better transcription
     let meetingContext = ''
@@ -490,8 +498,74 @@ Meeting ${i + 1}: "${m.subject}"
 
     // Stage-1 key check: getAsrProvider throws the canonical key-missing string.
     const asr = getAsrProvider(config)
-    const asrResult = await asr.transcribe(recording.file_path, { meetingContext })
+
+    // Conservative static speaker_options hint (Voice Library Phase 2C).
+    const durationMs =
+      recording.duration_seconds != null ? Math.round(recording.duration_seconds * 1000) : null
+    const speakerOptions = computeSpeakerOptions(durationMs, config.transcription.diarization)
+    const asrModel =
+      config.transcription.provider === 'openai-whisper'
+        ? config.transcription.whisperModel
+        : config.transcription.provider === 'assemblyai'
+          ? (config.transcription.assemblyaiModels ?? []).join(',') || 'universal-3-pro'
+          : config.transcription.geminiModel
+
+    const asrResult = await asr.transcribe(recording.file_path, {
+      meetingContext,
+      speakerOptions: speakerOptions ?? undefined
+    })
     fullText = asrResult.text
+
+    // Diarization-run instrumentation (Voice Library Phase 2C): only when the
+    // provider returned a structured turns array (i.e., a diarizing ASR path).
+    let diarizationRunId: string | undefined
+    if (asrResult.turns !== undefined) {
+      const outcome = classifyRunOutcome(asrResult.turns, speakerOptions, durationMs)
+      diarizationRunId = `diar_${randomUUID()}`
+      try {
+        insertDiarizationRun({
+          id: diarizationRunId,
+          recording_id: recordingId,
+          transcript_id: `trans_${recordingId}`,
+          provider: config.transcription.provider,
+          model: asrModel,
+          options_min: speakerOptions?.min_speakers_expected ?? undefined,
+          options_max: speakerOptions?.max_speakers_expected ?? undefined,
+          options_sent_json: speakerOptions ? JSON.stringify(speakerOptions) : undefined,
+          label_count: outcome.labelCount,
+          is_solo: outcome.isSolo ? 1 : 0,
+          solo_reason: outcome.soloReason ?? undefined,
+          failure_reason: outcome.failure ?? undefined,
+          duration_ms: durationMs ?? undefined,
+          policy_version: config.transcription.diarization?.policyVersion ?? undefined,
+          created_at: new Date().toISOString()
+        })
+
+        const { emitActivityLog } = await import('./activity-log')
+        if (outcome.isSolo) {
+          emitActivityLog(
+            'info',
+            'Solo speaker detected',
+            `${recording.filename}: ${outcome.soloReason ?? 'solo'} (labels=${outcome.labelCount})`
+          )
+        } else if (outcome.failure) {
+          emitActivityLog(
+            'warning',
+            `Diarization ${outcome.failure}`,
+            `${recording.filename}: labels=${outcome.labelCount}, max=${speakerOptions?.max_speakers_expected ?? 'none'}`
+          )
+        } else {
+          emitActivityLog(
+            'info',
+            'Diarization complete',
+            `${recording.filename}: ${outcome.labelCount} speaker${outcome.labelCount === 1 ? '' : 's'}`
+          )
+        }
+      } catch (e) {
+        // Best-effort instrumentation: never fail the transcription.
+        console.warn('[Transcription] Failed to instrument diarization run:', e)
+      }
+    }
 
     // Stage-1 write: never touches Stage-2 columns (spec §5.3).
     const stage1WordCount = fullText.split(/\s+/).filter((w) => w.length > 0).length
@@ -501,13 +575,9 @@ Meeting ${i + 1}: "${m.subject}"
       language: asrResult.language,
       word_count: stage1WordCount,
       transcription_provider: config.transcription.provider,
-      transcription_model:
-        config.transcription.provider === 'openai-whisper'
-          ? config.transcription.whisperModel
-          : config.transcription.provider === 'assemblyai'
-            ? (config.transcription.assemblyaiModels ?? []).join(',') || 'universal-3-pro'
-            : config.transcription.geminiModel,
-      turns: asrResult.turns
+      transcription_model: asrModel,
+      turns: asrResult.turns,
+      diarization_run_id: diarizationRunId
     })
 
     // Genuine Stage-1-completed-this-run signal (spec §7.2): emitted ONLY after

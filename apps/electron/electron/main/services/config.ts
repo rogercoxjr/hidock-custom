@@ -1,6 +1,8 @@
 import { app, safeStorage } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { DEFAULT_SPEAKER_OPTIONS_POLICY } from './asr/speaker-options-policy'
+import type { MatchThresholds } from './voiceprint/identity-matcher'
 
 // CS-007: Encrypt sensitive config values (ICS URL, openaiApiKey) at rest using Electron safeStorage
 export function encryptSensitive(value: string): string {
@@ -44,6 +46,13 @@ export interface AppConfig {
     assemblyaiModels: string[] // NEW — priority-ordered speech_models (spec §5/§6.2)
     autoTranscribe: boolean
     language: string
+    diarization: {
+      speakerOptionsEnabled: boolean
+      minSpeakers: number
+      maxSpeakers: number
+      minDurationMsForHint: number
+      policyVersion: number
+    }
   }
   embeddings: {
     provider: 'ollama' | 'openai'
@@ -80,6 +89,12 @@ export interface AppConfig {
     enableVoiceprintCapture: boolean       // master gate for the whole voice-library feature (spec §14)
     excludeVoiceprintsFromBackup: boolean  // keep biometric prints out of sync/backups by default
   }
+  voiceMatching: VoiceMatchingConfig
+}
+
+export interface VoiceMatchingConfig extends MatchThresholds {
+  modelId: string      // must equal the active VOICEPRINT_MODEL_ID to use these thresholds
+  calibrated: boolean  // false until a calibration harness validates the constants
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -103,7 +118,8 @@ const DEFAULT_CONFIG: AppConfig = {
     assemblyaiApiKey: '',
     assemblyaiModels: ['universal-3-pro', 'universal-2'], // PLURAL array; never singular speech_model (spec §5)
     autoTranscribe: true,
-    language: 'en'
+    language: 'en',
+    diarization: DEFAULT_SPEAKER_OPTIONS_POLICY
   },
   embeddings: {
     provider: 'openai',
@@ -139,6 +155,18 @@ const DEFAULT_CONFIG: AppConfig = {
   privacy: {
     enableVoiceprintCapture: true,
     excludeVoiceprintsFromBackup: true
+  },
+  voiceMatching: {
+    matchSuggest: 0.42,
+    matchAuto: 0.55,
+    matchMargin: 0.06,
+    mergeThreshold: 0.62,
+    mixedDispersion: 0.35,
+    centroidOutlier: 0.25,
+    bankConsistency: 0.35,
+    maxMergeSuggestions: 5,
+    calibrated: false,
+    modelId: '3dspeaker_eres2net_en_voxceleb'
   }
 }
 

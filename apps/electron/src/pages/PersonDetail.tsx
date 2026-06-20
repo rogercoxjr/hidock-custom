@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -14,10 +14,12 @@ import {
   Bot,
   Check,
   X,
-  Trash2
+  Trash2,
+  User,
+  Volume2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,11 +30,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, formatDuration } from '@/lib/utils'
 import type { Person, PersonType } from '@/types/knowledge'
 import type { Meeting } from '@/types'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
+import { useConfigStore } from '@/store/domain/useConfigStore'
+import type { VoiceprintSummary } from '../../electron/main/types/database'
 
 export function PersonDetail() {
   const { id } = useParams<{ id: string }>()
@@ -40,12 +44,21 @@ export function PersonDetail() {
   const [person, setPerson] = useState<Person | null>(null)
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'timeline' | 'knowledge'>('timeline')
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState<{ name: string; email: string; role: string; company: string; notes: string }>({
     name: '', email: '', role: '', company: '', notes: ''
   })
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  // Voice Library (Phase 2) state
+  const [activeTab, setActiveTab] = useState<'timeline' | 'knowledge' | 'voices'>('timeline')
+  const [voiceprints, setVoiceprints] = useState<VoiceprintSummary[]>([])
+  const [loadingVoiceprints, setLoadingVoiceprints] = useState(false)
+  const [deleteRowVp, setDeleteRowVp] = useState<VoiceprintSummary | null>(null)
+  const [markSelfDialogOpen, setMarkSelfDialogOpen] = useState(false)
+  const [priorSelf, setPriorSelf] = useState<Person | null>(null)
+  const [forgetVoiceDialogOpen, setForgetVoiceDialogOpen] = useState(false)
+  const { config } = useConfigStore()
 
   // B-PPL-002: Wrapped in useCallback to satisfy dependency arrays
   const loadDetails = useCallback(async () => {
@@ -64,6 +77,7 @@ export function PersonDetail() {
           firstSeenAt: c.first_seen_at || c.firstSeenAt,
           lastSeenAt: c.last_seen_at || c.lastSeenAt,
           interactionCount: c.meeting_count || c.interactionCount || 0,
+          isSelf: c.is_self === 1 || c.isSelf === true,
           createdAt: c.created_at || c.createdAt || new Date().toISOString()
         }
         setPerson(personData)
@@ -166,9 +180,142 @@ export function PersonDetail() {
     setDeleteDialogOpen(false)
   }
 
+  // Voice Library (Phase 2): "This is me" control
+  const handleAskMarkSelf = async () => {
+    if (!person || !id) return
+    if (person.isSelf) {
+      try {
+        const result = await window.electronAPI.contacts.setSelf({ contactId: null })
+        if (result.success) {
+          toast.success('Unset self', 'This contact is no longer marked as you.')
+          await loadDetails()
+        } else {
+          toast.error('Failed to unset self', (result as any).error?.message || 'Unknown error')
+        }
+      } catch (err) {
+        console.error('Failed to unset self:', err)
+        toast.error('Failed to unset self', err instanceof Error ? err.message : 'Unknown error')
+      }
+      return
+    }
+
+    try {
+      const selfResult = await window.electronAPI.contacts.getSelf()
+      const prior = selfResult.success ? (selfResult.data as Person | null) : null
+      if (prior && prior.id !== id) {
+        setPriorSelf(prior)
+        setMarkSelfDialogOpen(true)
+      } else {
+        await handleConfirmMarkSelf()
+      }
+    } catch (err) {
+      console.error('Failed to fetch self contact:', err)
+      await handleConfirmMarkSelf()
+    }
+  }
+
+  const handleConfirmMarkSelf = async () => {
+    if (!id) return
+    try {
+      const result = await window.electronAPI.contacts.setSelf({ contactId: id })
+      if (result.success) {
+        toast.success('Marked as you', 'This contact is now marked as you.')
+        setMarkSelfDialogOpen(false)
+        setPriorSelf(null)
+        await loadDetails()
+      } else {
+        toast.error('Failed to mark as you', (result as any).error?.message || 'Unknown error')
+      }
+    } catch (err) {
+      console.error('Failed to mark as self:', err)
+      toast.error('Failed to mark as you', err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
+  // Voice Library (Phase 2): voiceprint actions
+  const handleToggleVoiceprint = async (vp: VoiceprintSummary, enable: boolean) => {
+    const api = enable ? window.electronAPI.voiceprints.enable : window.electronAPI.voiceprints.disable
+    try {
+      const result = await api(vp.id)
+      if (result.success) {
+        toast.success(enable ? 'Voiceprint enabled' : 'Voiceprint disabled')
+        await loadVoiceprints()
+      } else {
+        toast.error('Failed to update voiceprint', (result as any).error?.message || 'Unknown error')
+      }
+    } catch (err) {
+      console.error('Failed to toggle voiceprint:', err)
+      toast.error('Failed to update voiceprint', err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
+  const handleDeleteVoiceprint = async (vp: VoiceprintSummary) => {
+    try {
+      const result = await window.electronAPI.voiceprints.delete(vp.id)
+      if (result.success) {
+        toast.success('Voiceprint deleted')
+        await loadVoiceprints()
+      } else {
+        toast.error('Failed to delete voiceprint', (result as any).error?.message || 'Unknown error')
+      }
+    } catch (err) {
+      console.error('Failed to delete voiceprint:', err)
+      toast.error('Failed to delete voiceprint', err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
+  const handleForgetVoice = async () => {
+    if (!id) return
+    try {
+      const result = await window.electronAPI.voiceprints.clearAllForContact(id)
+      if (result.success && result.data) {
+        const deleted = result.data.deleted
+        if (deleted > 0) {
+          toast.success('Voice forgotten', `Removed ${deleted} voiceprint${deleted === 1 ? '' : 's'}.`)
+        } else {
+          toast.info('No voiceprints', 'There were no voiceprints to remove.')
+        }
+        setForgetVoiceDialogOpen(false)
+        await loadVoiceprints()
+      } else {
+        toast.error('Failed to clear voiceprints', (result as any).error?.message || 'Unknown error')
+      }
+    } catch (err) {
+      console.error('Failed to clear voiceprints:', err)
+      toast.error('Failed to clear voiceprints', err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
+  const loadVoiceprints = useCallback(async () => {
+    if (!id) return
+    setLoadingVoiceprints(true)
+    try {
+      const result = await window.electronAPI.voiceprints.listForContact(id)
+      if (result.success && result.data) {
+        setVoiceprints(result.data)
+      } else {
+        console.error('Failed to load voiceprints:', (result as any).error)
+      }
+    } catch (err) {
+      console.error('Failed to load voiceprints:', err)
+    } finally {
+      setLoadingVoiceprints(false)
+    }
+  }, [id])
+
   useEffect(() => {
     loadDetails()
   }, [loadDetails])
+
+  useEffect(() => {
+    if (activeTab === 'voices' && id) {
+      loadVoiceprints()
+    }
+  }, [activeTab, id, loadVoiceprints])
+
+  const rememberedRecordingCount = useMemo(() => {
+    return new Set(voiceprints.filter((vp) => !vp.disabledAt).map((vp) => vp.sourceRecordingId).filter(Boolean)).size
+  }, [voiceprints])
 
   const getTypeColor = (type: PersonType) => {
     switch (type) {
@@ -243,6 +390,16 @@ export function PersonDetail() {
             <Button variant="outline" size="sm" onClick={() => loadDetails()} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
               Refresh
+            </Button>
+            <Button
+              size="sm"
+              variant={person.isSelf ? 'default' : 'outline'}
+              onClick={handleAskMarkSelf}
+              disabled={loading}
+              className="gap-2"
+            >
+              <User className="h-4 w-4" />
+              {person.isSelf ? 'You' : 'Mark as me'}
             </Button>
             {isEditing ? (
               <>
@@ -385,7 +542,7 @@ export function PersonDetail() {
             {/* Right Column: Timeline & Knowledge */}
             <div className="md:col-span-2 space-y-6">
               <div className="w-full">
-                <div className="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-lg">
+                <div className="grid w-full grid-cols-3 bg-muted/50 p-1 rounded-lg">
                   <button
                     onClick={() => setActiveTab('timeline')}
                     className={cn(
@@ -405,6 +562,16 @@ export function PersonDetail() {
                   >
                     <Bot className="h-4 w-4" />
                     Knowledge Map
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('voices')}
+                    className={cn(
+                      "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-all",
+                      activeTab === 'voices' ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Volume2 className="h-4 w-4" />
+                    Voices
                   </button>
                 </div>
 
@@ -451,6 +618,118 @@ export function PersonDetail() {
                     </Card>
                   </div>
                 )}
+
+                {activeTab === 'voices' && (
+                  <div className="mt-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <CardTitle>Voiceprints</CardTitle>
+                            <CardDescription>
+                              Remembered from {rememberedRecordingCount} recording{rememberedRecordingCount === 1 ? '' : 's'}
+                            </CardDescription>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setForgetVoiceDialogOpen(true)}
+                            disabled={loadingVoiceprints || voiceprints.length === 0}
+                          >
+                            Forget this voice
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {loadingVoiceprints ? (
+                          <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                            <RefreshCw className="h-5 w-5 animate-spin" />
+                            <span className="text-sm">Loading voiceprints...</span>
+                          </div>
+                        ) : voiceprints.length === 0 ? (
+                          <div className="text-center py-12 border rounded-xl bg-muted/5">
+                            <Volume2 className="h-10 w-10 mx-auto text-muted-foreground opacity-20 mb-3" />
+                            <p className="text-sm text-muted-foreground">
+                              No voiceprints yet. Assign this person to a speaker in a transcript to remember their voice.
+                            </p>
+                            {config?.privacy?.enableVoiceprintCapture === false && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Voiceprint capture is disabled in Settings → Privacy.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {voiceprints.map((vp) => (
+                              <div
+                                key={vp.id}
+                                className={cn(
+                                  "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded-lg",
+                                  vp.disabledAt ? "opacity-60 bg-muted/30" : ""
+                                )}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate">
+                                    {vp.sourceRecordingTitle ? (
+                                      vp.sourceRecordingId ? (
+                                        <button
+                                          className="hover:text-primary hover:underline text-left"
+                                          onClick={() => navigate(`/recording/${vp.sourceRecordingId}`)}
+                                        >
+                                          {vp.sourceRecordingTitle}
+                                        </button>
+                                      ) : (
+                                        vp.sourceRecordingTitle
+                                      )
+                                    ) : (
+                                      <span className="text-muted-foreground">from a deleted recording</span>
+                                    )}
+                                    {vp.sourceLabel && (
+                                      <span className="text-xs text-muted-foreground ml-2">
+                                        label {vp.sourceLabel}
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Captured {formatDateTime(vp.createdAt)}
+                                    {vp.cleanSpeechMs != null && (
+                                      <> · {formatDuration(vp.cleanSpeechMs / 1000)} clean speech</>
+                                    )}
+                                    {vp.createdFrom && (
+                                      <span className="ml-2 text-[10px] uppercase bg-secondary px-1.5 py-0.5 rounded">
+                                        {vp.createdFrom}
+                                      </span>
+                                    )}
+                                    {vp.disabledAt && (
+                                      <span className="ml-2 text-[10px] text-amber-600 font-medium">Disabled</span>
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleToggleVoiceprint(vp, !!vp.disabledAt)}
+                                  >
+                                    {vp.disabledAt ? 'Enable' : 'Disable'}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => setDeleteRowVp(vp)}
+                                  >
+                                    Delete
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
               </div>
 
               {(person.notes || isEditing) && (
@@ -483,7 +762,7 @@ export function PersonDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Contact</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {person.name}? This will permanently remove this contact and all their meeting associations. This action cannot be undone.
+              Are you sure you want to delete {person.name}? This will permanently remove this contact, their voiceprints, and all their meeting associations. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -493,6 +772,78 @@ export function PersonDetail() {
               onClick={handleDeleteContact}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Voice Library: per-row voiceprint delete confirmation */}
+      <AlertDialog open={deleteRowVp != null} onOpenChange={(open) => !open && setDeleteRowVp(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Voiceprint</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this voiceprint
+              {deleteRowVp?.sourceRecordingTitle ? ` from "${deleteRowVp.sourceRecordingTitle}"` : ''}?
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteRowVp(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteRowVp) {
+                  void handleDeleteVoiceprint(deleteRowVp)
+                }
+                setDeleteRowVp(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Voice Library: move "this is me" confirmation */}
+      <AlertDialog open={markSelfDialogOpen} onOpenChange={setMarkSelfDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark as you?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {priorSelf ? (
+                <>
+                  <strong>{priorSelf.name}</strong> is currently marked as you — move it to{' '}
+                  <strong>{person.name}</strong>?
+                </>
+              ) : (
+                `Mark ${person.name} as you? Only one contact can be marked as you at a time.`
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPriorSelf(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmMarkSelf}>Mark as me</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Voice Library: forget-this-voice confirmation */}
+      <AlertDialog open={forgetVoiceDialogOpen} onOpenChange={setForgetVoiceDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Forget this voice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes every voiceprint for {person.name}. It cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleForgetVoice}
+            >
+              Forget voice
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

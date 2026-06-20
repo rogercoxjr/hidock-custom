@@ -23,8 +23,13 @@ export interface AsrResult {
   turns?: Turn[]
 }
 
+export interface SpeakerOptions {
+  min_speakers_expected: number
+  max_speakers_expected: number
+}
+
 export interface AsrProvider {
-  transcribe(filePath: string, opts: { meetingContext?: string }): Promise<AsrResult>
+  transcribe(filePath: string, opts: { meetingContext?: string; speakerOptions?: SpeakerOptions }): Promise<AsrResult>
 }
 
 /** Factory keyed on config.transcription.provider. Selects EXACTLY the configured

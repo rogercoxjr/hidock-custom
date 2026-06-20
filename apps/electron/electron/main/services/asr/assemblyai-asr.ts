@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import type { AppConfig } from '../config'
-import type { AsrProvider, AsrResult, Turn } from './asr-provider'
+import type { AsrProvider, AsrResult, SpeakerOptions, Turn } from './asr-provider'
 import { ProviderRateLimitError, ProviderAuthError } from '../provider-errors'
 
 const BASE = 'https://api.assemblyai.com/v2'
@@ -86,7 +86,7 @@ export function createAssemblyAiAsr(config: AppConfig): AsrProvider {
   const languageCode = config.transcription.language || 'en'
 
   return {
-    async transcribe(filePath: string, opts: { meetingContext?: string }): Promise<AsrResult> {
+    async transcribe(filePath: string, opts: { meetingContext?: string; speakerOptions?: SpeakerOptions }): Promise<AsrResult> {
       // 1. Upload the bytes (Authorization is the raw key — no "Bearer ").
       const audio = readFileSync(filePath)
       const uploadRes = await aaiFetch(`${BASE}/upload`, {
@@ -104,12 +104,21 @@ export function createAssemblyAiAsr(config: AppConfig): AsrProvider {
       // separate `sentiment_analysis_results` array (NOT on each utterance), which we
       // never consumed; dropped per 2026-06-18 decision. If sentiment is revisited,
       // read sentiment_analysis_results — do NOT expect it on utterances.
-      const submitBody = {
+      //
+      // Phase 5: conservative static over-split range. Sent only when the policy
+      // yields one; never send the mutually-exclusive `speakers_expected` exact hint.
+      const submitBody: Record<string, unknown> = {
         audio_url: upload_url,
         speech_models: speechModels,
         speaker_labels: true,
         keyterms_prompt: buildKeyterms(opts.meetingContext),
         language_code: languageCode
+      }
+      if (opts.speakerOptions) {
+        submitBody.speaker_options = {
+          min_speakers_expected: opts.speakerOptions.min_speakers_expected,
+          max_speakers_expected: opts.speakerOptions.max_speakers_expected
+        }
       }
       const submitRes = await aaiFetch(`${BASE}/transcript`, {
         method: 'POST',

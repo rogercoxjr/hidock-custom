@@ -1,8 +1,18 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Save, FolderOpen, RefreshCw, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { Save, FolderOpen, RefreshCw, AlertCircle, Eye, EyeOff, Shield, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog'
 import { useAppStore, useCalendarSyncing } from '@/store/useAppStore'
 import { useConfigStore } from '@/store/domain/useConfigStore'
 import { formatBytes } from '@/lib/utils'
@@ -40,6 +50,12 @@ export function Settings() {
   const [storageError, setStorageError] = useState<string | null>(null) // B-SET-002: Storage error state
   const [saving, setSaving] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  // Voice Library privacy toggles (Phase 2)
+  const [enableVoiceprintCapture, setEnableVoiceprintCapture] = useState(true)
+  const [excludeVoiceprintsFromBackup, setExcludeVoiceprintsFromBackup] = useState(true)
+  const [clearAllDialogOpen, setClearAllDialogOpen] = useState(false)
+  const [clearingVoiceprints, setClearingVoiceprints] = useState(false)
 
   // Local form state
   const [icsUrl, setIcsUrl] = useState('')
@@ -228,6 +244,11 @@ export function Settings() {
         setSumProvider(sumCfg.provider || 'gemini')
         setOllamaCloudApiKey(sumCfg.ollamaCloudApiKey || '')
         setOllamaCloudModel(sumCfg.ollamaCloudModel || '')
+      }
+      const privacyCfg = config.privacy
+      if (privacyCfg) {
+        setEnableVoiceprintCapture(privacyCfg.enableVoiceprintCapture ?? true)
+        setExcludeVoiceprintsFromBackup(privacyCfg.excludeVoiceprintsFromBackup ?? true)
       }
     }
   }, [config])
@@ -489,6 +510,60 @@ export function Settings() {
 
   const handleOpenFolder = async (folder: 'recordings' | 'transcripts' | 'data') => {
     await window.electronAPI.storage.openFolder(folder)
+  }
+
+  // Voice Library privacy toggles (Phase 2) — save-on-toggle
+  const handleToggleVoiceprintCapture = async (checked: boolean) => {
+    const previous = enableVoiceprintCapture
+    setEnableVoiceprintCapture(checked)
+    try {
+      await updateConfig('privacy', {
+        ...(config?.privacy ?? {}),
+        enableVoiceprintCapture: checked
+      })
+      toast.success('Privacy Setting Saved', checked ? 'Voiceprint capture enabled' : 'Voiceprint capture disabled')
+    } catch (err) {
+      setEnableVoiceprintCapture(previous)
+      toast.error('Failed to save privacy setting', err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
+  const handleToggleExcludeFromBackup = async (checked: boolean) => {
+    const previous = excludeVoiceprintsFromBackup
+    setExcludeVoiceprintsFromBackup(checked)
+    try {
+      await updateConfig('privacy', {
+        ...(config?.privacy ?? {}),
+        excludeVoiceprintsFromBackup: checked
+      })
+      toast.success('Privacy Setting Saved', checked ? 'Voiceprints excluded from backups' : 'Voiceprints will be included in backups')
+    } catch (err) {
+      setExcludeVoiceprintsFromBackup(previous)
+      toast.error('Failed to save privacy setting', err instanceof Error ? err.message : 'Unknown error')
+    }
+  }
+
+  const handleClearAllVoiceprints = async () => {
+    setClearingVoiceprints(true)
+    try {
+      const result = await window.electronAPI.voiceprints.clearAll()
+      if (result.success && result.data) {
+        const deleted = result.data.deleted
+        if (deleted > 0) {
+          toast.success('Voiceprints Cleared', `Removed ${deleted} voiceprint${deleted === 1 ? '' : 's'}.`)
+        } else {
+          toast.info('No Voiceprints', 'There were no voiceprints to remove.')
+        }
+      } else {
+        toast.error('Failed to clear voiceprints', (result as any).error?.message || 'Unknown error')
+      }
+    } catch (err) {
+      console.error('Failed to clear voiceprints:', err)
+      toast.error('Failed to clear voiceprints', err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setClearingVoiceprints(false)
+      setClearAllDialogOpen(false)
+    }
   }
 
   // Loading state
@@ -1109,6 +1184,97 @@ export function Settings() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Privacy / Voice Library */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Privacy
+              </CardTitle>
+              <CardDescription>Voiceprint capture and backup settings</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="enableVoiceprintCapture"
+                  checked={enableVoiceprintCapture}
+                  onChange={(e) => handleToggleVoiceprintCapture(e.target.checked)}
+                  disabled={saving || clearingVoiceprints}
+                  className="mt-1 rounded"
+                />
+                <div className="flex-1">
+                  <label htmlFor="enableVoiceprintCapture" className="text-sm font-medium">
+                    Capture voiceprints
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Remember voices from speaker assignments to recognize people later. Voiceprints are local-only biometric data.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="excludeVoiceprintsFromBackup"
+                  checked={excludeVoiceprintsFromBackup}
+                  onChange={(e) => handleToggleExcludeFromBackup(e.target.checked)}
+                  disabled={saving || clearingVoiceprints}
+                  className="mt-1 rounded"
+                />
+                <div className="flex-1">
+                  <label htmlFor="excludeVoiceprintsFromBackup" className="text-sm font-medium">
+                    Exclude voiceprints from backups & sync
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Honored when backup/sync ships. Default on so biometric data stays off sync channels.
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setClearAllDialogOpen(true)}
+                  disabled={clearingVoiceprints}
+                  className="gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Clear all voiceprints
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <AlertDialog open={clearAllDialogOpen} onOpenChange={setClearAllDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Clear all voiceprints?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently deletes every stored voiceprint. It cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={clearingVoiceprints}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={handleClearAllVoiceprints}
+                  disabled={clearingVoiceprints}
+                >
+                  {clearingVoiceprints ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Clearing...
+                    </>
+                  ) : (
+                    'Clear all'
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Storage */}
           <Card>

@@ -8,7 +8,7 @@ import type { Turn } from './asr/asr-provider'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 27
+const SCHEMA_VERSION = 30
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -249,6 +249,7 @@ CREATE TABLE IF NOT EXISTS transcripts (
     sentiment TEXT,
     speakers TEXT,
     turns TEXT,
+    diarization_run_id TEXT,
     word_count INTEGER,
     transcription_provider TEXT,
     transcription_model TEXT,
@@ -308,15 +309,17 @@ CREATE TABLE IF NOT EXISTS recording_label_embeddings (
     updated_at TEXT
 );
 
--- Pending speaker-identity / merge suggestions (spec 2026-06-19 §8, v27)
+-- Pending speaker-identity / merge suggestions (spec 2026-06-19 §8, v27, diarization_run_id v28, contact_id_2 v29)
 CREATE TABLE IF NOT EXISTS speaker_suggestions (
     id TEXT PRIMARY KEY,
     recording_id TEXT NOT NULL,
     transcript_id TEXT,
+    diarization_run_id TEXT,
     kind TEXT NOT NULL CHECK(kind IN ('identity','merge','mixed','backstop')),
     target_label TEXT,
     target_label_2 TEXT,
     contact_id TEXT,
+    contact_id_2 TEXT,
     score REAL,
     rank INTEGER,
     rationale TEXT,
@@ -324,6 +327,26 @@ CREATE TABLE IF NOT EXISTS speaker_suggestions (
     created_at TEXT NOT NULL,
     resolved_at TEXT
 );
+
+-- Diarization-run instrumentation (spec 2026-06-19 §3.5, v30)
+CREATE TABLE IF NOT EXISTS diarization_runs (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL,
+    transcript_id TEXT,
+    provider TEXT NOT NULL,
+    model TEXT,
+    options_min INTEGER,
+    options_max INTEGER,
+    options_sent_json TEXT,
+    label_count INTEGER NOT NULL,
+    is_solo INTEGER NOT NULL DEFAULT 0,
+    solo_reason TEXT,
+    failure_reason TEXT,
+    duration_ms INTEGER,
+    policy_version INTEGER,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_diar_runs_recording ON diarization_runs(recording_id, created_at);
 
 -- Embeddings for RAG
 CREATE TABLE IF NOT EXISTS embeddings (
@@ -1596,6 +1619,92 @@ const MIGRATIONS: Record<number, () => void> = {
     database.run('ALTER TABLE voiceprints_new RENAME TO voiceprints')
 
     console.log('Migration v27 complete')
+  },
+
+  28: () => {
+    // v28: Voice Library Phase 2B (spec 2026-06-19 §5). speaker_suggestions gets a
+    // diarization_run_id column so suggestions can be scoped to the transcript run
+    // that produced them (re-transcribe invalidation + dismissal scoping).
+    console.log('Running migration to schema v28: speaker_suggestions diarization_run_id')
+    const database = getDatabase()
+
+    const tableInfo = database.exec("PRAGMA table_info(speaker_suggestions)")
+    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map(col => col[1]) : []
+    if (!cols.includes('diarization_run_id')) {
+      try {
+        database.run('ALTER TABLE speaker_suggestions ADD COLUMN diarization_run_id TEXT')
+        console.log('[Migration v28] Added diarization_run_id to speaker_suggestions')
+      } catch (e) {
+        console.warn('[Migration v28] ALTER failed:', e)
+      }
+    } else {
+      console.log('[Migration v28] diarization_run_id already present')
+    }
+
+    console.log('Migration v28 complete')
+  },
+
+  29: () => {
+    // v29: Voice Library Phase 2B cross-contact merge support. speaker_suggestions gets
+    // contact_id_2 so merge suggestions can name the second contact for conflict warnings.
+    console.log('Running migration to schema v29: speaker_suggestions contact_id_2')
+    const database = getDatabase()
+
+    const tableInfo = database.exec("PRAGMA table_info(speaker_suggestions)")
+    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map(col => col[1]) : []
+    if (!cols.includes('contact_id_2')) {
+      try {
+        database.run('ALTER TABLE speaker_suggestions ADD COLUMN contact_id_2 TEXT')
+        console.log('[Migration v29] Added contact_id_2 to speaker_suggestions')
+      } catch (e) {
+        console.warn('[Migration v29] ALTER failed:', e)
+      }
+    } else {
+      console.log('[Migration v29] contact_id_2 already present')
+    }
+
+    console.log('Migration v29 complete')
+  },
+
+  30: () => {
+    // v30: Voice Library Phase 2C — conservative static speaker_options + solo handling +
+    // diarization-run instrumentation. C owns diarization_runs and transcripts.diarization_run_id.
+    console.log('Running migration to schema v30: diarization_runs instrumentation')
+    const database = getDatabase()
+
+    database.run(`CREATE TABLE IF NOT EXISTS diarization_runs (
+      id TEXT PRIMARY KEY,
+      recording_id TEXT NOT NULL,
+      transcript_id TEXT,
+      provider TEXT NOT NULL,
+      model TEXT,
+      options_min INTEGER,
+      options_max INTEGER,
+      options_sent_json TEXT,
+      label_count INTEGER NOT NULL,
+      is_solo INTEGER NOT NULL DEFAULT 0,
+      solo_reason TEXT,
+      failure_reason TEXT,
+      duration_ms INTEGER,
+      policy_version INTEGER,
+      created_at TEXT NOT NULL
+    )`)
+    database.run(`CREATE INDEX IF NOT EXISTS idx_diar_runs_recording ON diarization_runs(recording_id, created_at)`)
+
+    const tableInfo = database.exec("PRAGMA table_info(transcripts)")
+    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map((col) => col[1]) : []
+    if (!cols.includes('diarization_run_id')) {
+      try {
+        database.run('ALTER TABLE transcripts ADD COLUMN diarization_run_id TEXT')
+        console.log('[Migration v30] Added diarization_run_id to transcripts')
+      } catch (e) {
+        console.warn('[Migration v30] ALTER failed:', e)
+      }
+    } else {
+      console.log('[Migration v30] diarization_run_id already present')
+    }
+
+    console.log('Migration v30 complete')
   }
 
 }
@@ -1729,6 +1838,20 @@ export async function initializeDatabase(): Promise<void> {
       }
     }
 
+    // Repair speaker_suggestions (v28: diarization_run_id; v29: contact_id_2)
+    const suggestionsInfo = database.exec("PRAGMA table_info(speaker_suggestions)")
+    if (suggestionsInfo.length > 0 && suggestionsInfo[0].values) {
+      const suggestionCols = suggestionsInfo[0].values.map(col => col[1])
+      if (!suggestionCols.includes('diarization_run_id')) {
+        console.log('[Database] Repairing speaker_suggestions: adding diarization_run_id')
+        try { database.run('ALTER TABLE speaker_suggestions ADD COLUMN diarization_run_id TEXT') } catch {}
+      }
+      if (!suggestionCols.includes('contact_id_2')) {
+        console.log('[Database] Repairing speaker_suggestions: adding contact_id_2')
+        try { database.run('ALTER TABLE speaker_suggestions ADD COLUMN contact_id_2 TEXT') } catch {}
+      }
+    }
+
     // --- PHASE 3: VERSIONED MIGRATIONS ---
     const versionResult = database.exec('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')
     const currentVersion = versionResult.length > 0 && versionResult[0].values.length > 0
@@ -1741,6 +1864,11 @@ export async function initializeDatabase(): Promise<void> {
     } else if (currentVersion === 0) {
       database.run('INSERT INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION])
     }
+
+    // Structural self-heal for diarization instrumentation (v30) — AFTER migrations
+    // so a fresh DB already has the table and this is a no-op, while a repaired/restored
+    // DB converges even if MIGRATIONS[30] was skipped.
+    ensureDiarizationSchema()
 
     // --- PHASE 4: FULL SCHEMA (INDEXES & CONSTRAINTS) ---
     console.log('[Database] Phase 4: Finalizing schema and indexes...')
@@ -1777,6 +1905,51 @@ export function getDatabase(): SqlJsDatabase {
     throw new Error('Database not initialized')
   }
   return db
+}
+
+/**
+ * Structural self-heal for the diarization_runs instrumentation table and the
+ * transcripts.diarization_run_id FK column (Voice Library Phase 2C, v30).
+ *
+ * Runs on every boot so freshly-initialized DBs (Phase 1/4) and older restored
+ * backups converge. All statements are idempotent and log only — failures are
+ * swallowed to avoid blocking app launch.
+ */
+export function ensureDiarizationSchema(): void {
+  const database = getDatabase()
+  try {
+    database.run(`CREATE TABLE IF NOT EXISTS diarization_runs (
+      id TEXT PRIMARY KEY,
+      recording_id TEXT NOT NULL,
+      transcript_id TEXT,
+      provider TEXT NOT NULL,
+      model TEXT,
+      options_min INTEGER,
+      options_max INTEGER,
+      options_sent_json TEXT,
+      label_count INTEGER NOT NULL,
+      is_solo INTEGER NOT NULL DEFAULT 0,
+      solo_reason TEXT,
+      failure_reason TEXT,
+      duration_ms INTEGER,
+      policy_version INTEGER,
+      created_at TEXT NOT NULL
+    )`)
+    database.run(`CREATE INDEX IF NOT EXISTS idx_diar_runs_recording ON diarization_runs(recording_id, created_at)`)
+
+    const tableInfo = database.exec("PRAGMA table_info(transcripts)")
+    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map((col) => col[1]) : []
+    if (!cols.includes('diarization_run_id')) {
+      try {
+        database.run('ALTER TABLE transcripts ADD COLUMN diarization_run_id TEXT')
+        console.log('[ensureDiarizationSchema] Added diarization_run_id to transcripts')
+      } catch (e) {
+        console.warn('[ensureDiarizationSchema] ALTER failed:', e)
+      }
+    }
+  } catch (e) {
+    console.warn('[ensureDiarizationSchema] Schema repair failed:', e)
+  }
 }
 
 export function closeDatabase(): void {
@@ -2197,6 +2370,20 @@ export function getRecordingById(id: string): Recording | undefined {
   return queryOne<Recording>('SELECT * FROM recordings WHERE id = ?', [id])
 }
 
+/**
+ * Look up the knowledge capture that originated from a given recording.
+ * Used by voiceprint provenance to show a human-readable source title.
+ */
+export function getKnowledgeCaptureByRecordingId(
+  recordingId: string
+): { id: string; title?: string | null } | null | undefined {
+  const capture = queryOne<{ id: string; title: string | null }>(
+    'SELECT id, title FROM knowledge_captures WHERE source_recording_id = ? LIMIT 1',
+    [recordingId]
+  )
+  return capture ?? null
+}
+
 export function getRecordingsForMeeting(meetingId: string): Recording[] {
   return queryAll<Recording>('SELECT * FROM recordings WHERE meeting_id = ?', [meetingId])
 }
@@ -2418,6 +2605,26 @@ export interface Transcript {
   question_suggestions?: string
   summarization_provider?: string
   summarization_model?: string
+  /** FK to diarization_runs.id (Voice Library Phase 2C). */
+  diarization_run_id?: string
+  created_at: string
+}
+
+export interface DiarizationRun {
+  id: string
+  recording_id: string
+  transcript_id?: string
+  provider: string
+  model?: string
+  options_min?: number
+  options_max?: number
+  options_sent_json?: string
+  label_count: number
+  is_solo: number
+  solo_reason?: string
+  failure_reason?: string
+  duration_ms?: number
+  policy_version?: number
   created_at: string
 }
 
@@ -2449,6 +2656,52 @@ export function getTranscriptsByRecordingIds(recordingIds: string[]): Map<string
   }
 
   return results
+}
+
+// ---------------------------------------------------------------------------
+// Diarization-run instrumentation (Voice Library Phase 2C, v30)
+// ---------------------------------------------------------------------------
+
+/** Persist one diarization attempt. The caller mints the run id. */
+export function insertDiarizationRun(diarizationRun: DiarizationRun): void {
+  run(
+    `INSERT INTO diarization_runs (
+       id, recording_id, transcript_id, provider, model, options_min, options_max,
+       options_sent_json, label_count, is_solo, solo_reason, failure_reason,
+       duration_ms, policy_version, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      diarizationRun.id,
+      diarizationRun.recording_id,
+      diarizationRun.transcript_id ?? null,
+      diarizationRun.provider,
+      diarizationRun.model ?? null,
+      diarizationRun.options_min ?? null,
+      diarizationRun.options_max ?? null,
+      diarizationRun.options_sent_json ?? null,
+      diarizationRun.label_count,
+      diarizationRun.is_solo ? 1 : 0,
+      diarizationRun.solo_reason ?? null,
+      diarizationRun.failure_reason ?? null,
+      diarizationRun.duration_ms ?? null,
+      diarizationRun.policy_version ?? null,
+      diarizationRun.created_at
+    ]
+  )
+}
+
+export function getLatestDiarizationRun(recordingId: string): DiarizationRun | null {
+  return queryOne<DiarizationRun>(
+    `SELECT * FROM diarization_runs WHERE recording_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [recordingId]
+  ) ?? null
+}
+
+export function getDiarizationRunsForRecording(recordingId: string): DiarizationRun[] {
+  return queryAll<DiarizationRun>(
+    `SELECT * FROM diarization_runs WHERE recording_id = ? ORDER BY created_at DESC, id DESC`,
+    [recordingId]
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -2517,6 +2770,14 @@ export function getRecordingSpeakers(recordingId: string): RecordingSpeaker[] {
 /** Delete one label's mapping (merge support, §6.3). */
 export function deleteRecordingSpeaker(recordingId: string, fileLabel: string): void {
   run('DELETE FROM recording_speakers WHERE recording_id = ? AND file_label = ?', [recordingId, fileLabel])
+}
+
+/** Read a single label's mapping for a recording, or undefined if none exists. */
+export function getRecordingSpeaker(recordingId: string, fileLabel: string): RecordingSpeaker | undefined {
+  return queryOne<RecordingSpeaker>(
+    'SELECT * FROM recording_speakers WHERE recording_id = ? AND file_label = ? LIMIT 1',
+    [recordingId, fileLabel]
+  )
 }
 
 /** Drop all mappings for a recording (re-transcribe, §6.3/§6.8). Returns the
@@ -2606,6 +2867,7 @@ export function upsertTranscriptStage1(t: {
   transcription_provider: string
   transcription_model?: string
   turns?: Turn[]
+  diarization_run_id?: string
 }): void {
   // Diarization columns (spec §6.3) are additive and written ONLY when the
   // provider supplies turns. Whisper/Gemini (no turns) leave turns/speakers/
@@ -2615,7 +2877,7 @@ export function upsertTranscriptStage1(t: {
   let turnsJson: string | null = null
   let speakersJson: string | null = null
   let sentimentJson: string | null = null
-  if (t.turns) {
+  if (t.turns !== undefined) {
     const { speakers, sentiment } = deriveSpeakerRosterSummary(t.turns)
     turnsJson = JSON.stringify(t.turns)
     speakersJson = JSON.stringify(speakers)
@@ -2624,8 +2886,8 @@ export function upsertTranscriptStage1(t: {
 
   run(
     `INSERT INTO transcripts (id, recording_id, full_text, language, word_count,
-       transcription_provider, transcription_model, turns, speakers, sentiment)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       transcription_provider, transcription_model, turns, speakers, sentiment, diarization_run_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(recording_id) DO UPDATE SET
        full_text = excluded.full_text,
        language = COALESCE(excluded.language, transcripts.language),
@@ -2634,7 +2896,8 @@ export function upsertTranscriptStage1(t: {
        transcription_model = excluded.transcription_model,
        turns = excluded.turns,
        speakers = excluded.speakers,
-       sentiment = excluded.sentiment`,
+       sentiment = excluded.sentiment,
+       diarization_run_id = excluded.diarization_run_id`,
     [
       `trans_${t.recording_id}`,
       t.recording_id,
@@ -2645,7 +2908,8 @@ export function upsertTranscriptStage1(t: {
       t.transcription_model ?? null,
       turnsJson,
       speakersJson,
-      sentimentJson
+      sentimentJson,
+      t.diarization_run_id ?? null
     ]
   )
 }
@@ -2878,13 +3142,37 @@ export interface Voiceprint {
   dim: number
   embedding: Uint8Array
   created_at: string
+  // v27 provenance + hygiene columns (Phase 2)
+  source_recording_id?: string | null
+  source_label?: string | null
+  clean_speech_ms?: number | null
+  quality_score?: number | null
+  model_version?: number | null
+  created_from?: 'manual' | 'confirmed' | 'self' | 'import' | null
+  disabled_at?: string | null
+  superseded_by?: string | null
 }
 
 export function insertVoiceprint(vp: Omit<Voiceprint, 'created_at'>): void {
   run(
-    `INSERT INTO voiceprints (id, contact_id, model_id, dim, embedding, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [vp.id, vp.contact_id, vp.model_id, vp.dim, vp.embedding, new Date().toISOString()]
+    `INSERT INTO voiceprints
+      (id, contact_id, model_id, dim, embedding, created_at,
+       source_recording_id, source_label, clean_speech_ms, quality_score, model_version, created_from)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      vp.id,
+      vp.contact_id,
+      vp.model_id,
+      vp.dim,
+      vp.embedding,
+      new Date().toISOString(),
+      vp.source_recording_id ?? null,
+      vp.source_label ?? null,
+      vp.clean_speech_ms ?? null,
+      vp.quality_score ?? null,
+      vp.model_version ?? 1,
+      vp.created_from ?? 'manual'
+    ]
   )
 }
 
@@ -2916,31 +3204,142 @@ export function deleteLabelEmbeddingsForRecording(recordingId: string): void {
 }
 
 export interface SpeakerSuggestion {
-  id: string; recording_id: string; transcript_id?: string | null; kind: 'identity' | 'merge' | 'mixed' | 'backstop'
-  target_label?: string | null; target_label_2?: string | null; contact_id?: string | null
+  id: string; recording_id: string; transcript_id?: string | null; diarization_run_id?: string | null
+  kind: 'identity' | 'merge' | 'mixed' | 'backstop'
+  target_label?: string | null; target_label_2?: string | null
+  contact_id?: string | null; contact_id_2?: string | null
   score?: number | null; rank?: number | null; rationale?: string | null
+  status?: 'pending' | 'dismissed' | 'accepted' | 'expired'
 }
 export function insertSuggestion(s: SpeakerSuggestion): void {
   run(`INSERT OR REPLACE INTO speaker_suggestions
-    (id, recording_id, transcript_id, kind, target_label, target_label_2, contact_id, score, rank, rationale, status, created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?, 'pending', ?)`,
-    [s.id, s.recording_id, s.transcript_id ?? null, s.kind, s.target_label ?? null, s.target_label_2 ?? null, s.contact_id ?? null, s.score ?? null, s.rank ?? null, s.rationale ?? null, new Date().toISOString()])
+    (id, recording_id, transcript_id, diarization_run_id, kind, target_label, target_label_2, contact_id, contact_id_2, score, rank, rationale, status, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [s.id, s.recording_id, s.transcript_id ?? null, s.diarization_run_id ?? null, s.kind, s.target_label ?? null, s.target_label_2 ?? null, s.contact_id ?? null, s.contact_id_2 ?? null, s.score ?? null, s.rank ?? null, s.rationale ?? null, s.status ?? 'pending', new Date().toISOString()])
 }
 export function dismissSuggestion(id: string): void {
   run("UPDATE speaker_suggestions SET status='dismissed', resolved_at=? WHERE id=?", [new Date().toISOString(), id])
 }
-export function getPendingSuggestions(recordingId: string): SpeakerSuggestion[] {
+export function getPendingSuggestions(recordingId: string, diarizationRunId?: string | null): SpeakerSuggestion[] {
+  if (diarizationRunId != null) {
+    return queryAll<SpeakerSuggestion>(
+      "SELECT * FROM speaker_suggestions WHERE recording_id=? AND status='pending' AND diarization_run_id=? ORDER BY rank",
+      [recordingId, diarizationRunId]
+    )
+  }
   return queryAll<SpeakerSuggestion>("SELECT * FROM speaker_suggestions WHERE recording_id=? AND status='pending' ORDER BY rank", [recordingId])
+}
+
+/** All suggestions for a recording, optionally scoped to one diarization run. */
+export function getSuggestionsForRecording(recordingId: string, diarizationRunId?: string | null): SpeakerSuggestion[] {
+  if (diarizationRunId != null) {
+    return queryAll<SpeakerSuggestion>(
+      'SELECT * FROM speaker_suggestions WHERE recording_id=? AND diarization_run_id=? ORDER BY rank',
+      [recordingId, diarizationRunId]
+    )
+  }
+  return queryAll<SpeakerSuggestion>('SELECT * FROM speaker_suggestions WHERE recording_id=? ORDER BY rank', [recordingId])
+}
+
+/** Mark pending/accepted suggestions for a recording as expired (used on re-transcribe/merge). */
+export function expireSuggestionsForRecording(recordingId: string): void {
+  run(
+    "UPDATE speaker_suggestions SET status='expired', resolved_at=? WHERE recording_id=? AND status IN ('pending','accepted')",
+    [new Date().toISOString(), recordingId]
+  )
+}
+
+/** Mark a single suggestion as accepted. */
+export function acceptSuggestion(id: string): void {
+  run("UPDATE speaker_suggestions SET status='accepted', resolved_at=? WHERE id=?", [new Date().toISOString(), id])
+}
+
+/** Delete pending suggestions for a recording, optionally scoped to one diarization run. */
+export function deletePendingSuggestionsForRecording(recordingId: string, diarizationRunId?: string | null): void {
+  if (diarizationRunId != null) {
+    run(
+      "DELETE FROM speaker_suggestions WHERE recording_id=? AND diarization_run_id=? AND status='pending'",
+      [recordingId, diarizationRunId]
+    )
+  } else {
+    run("DELETE FROM speaker_suggestions WHERE recording_id=? AND status='pending'", [recordingId])
+  }
+}
+
+/** Contacts that have at least one active (non-disabled) voiceprint for a given model. */
+export function getContactsWithActiveVoiceprints(modelId: string): Array<{ contact_id: string }> {
+  return queryAll<{ contact_id: string }>(
+    'SELECT DISTINCT contact_id FROM voiceprints WHERE model_id=? AND disabled_at IS NULL ORDER BY contact_id',
+    [modelId]
+  )
 }
 
 export function getActiveVoiceprintsByContactId(contactId: string): Voiceprint[] {
   return queryAll<Voiceprint>('SELECT * FROM voiceprints WHERE contact_id=? AND disabled_at IS NULL ORDER BY created_at', [contactId])
+}
+export function enableVoiceprint(id: string): void {
+  run('UPDATE voiceprints SET disabled_at=NULL WHERE id=?', [id])
 }
 export function disableVoiceprint(id: string): void {
   run('UPDATE voiceprints SET disabled_at=? WHERE id=?', [new Date().toISOString(), id])
 }
 export function deleteVoiceprint(id: string): void {
   run('DELETE FROM voiceprints WHERE id=?', [id])
+}
+
+/** Delete every voiceprint belonging to a contact. Returns the number of rows removed. */
+export function deleteVoiceprintsByContactId(contactId: string): number {
+  const before = queryOne<{ n: number }>('SELECT COUNT(*) AS n FROM voiceprints WHERE contact_id = ?', [contactId])
+  run('DELETE FROM voiceprints WHERE contact_id = ?', [contactId])
+  return before?.n ?? 0
+}
+
+/** Delete every voiceprint in the library. Returns the number of rows removed. */
+export function deleteAllVoiceprints(): number {
+  const before = queryOne<{ n: number }>('SELECT COUNT(*) AS n FROM voiceprints')
+  run('DELETE FROM voiceprints')
+  return before?.n ?? 0
+}
+
+/**
+ * List-valued provenance lookup. The voiceprints table has no unique constraint on
+ * (source_recording_id, source_label), so a single provenance can map to many rows
+ * (repeated assignments, reassignments across contacts). The optional contactId scope
+ * makes "the print(s) this assignment produced" unambiguous (§3.6).
+ */
+export function getVoiceprintsBySource(
+  recordingId: string,
+  fileLabel: string,
+  contactId?: string
+): Voiceprint[] {
+  if (contactId !== undefined) {
+    return queryAll<Voiceprint>(
+      'SELECT * FROM voiceprints WHERE source_recording_id=? AND source_label=? AND contact_id=? ORDER BY created_at DESC',
+      [recordingId, fileLabel, contactId]
+    )
+  }
+  return queryAll<Voiceprint>(
+    'SELECT * FROM voiceprints WHERE source_recording_id=? AND source_label=? ORDER BY created_at DESC',
+    [recordingId, fileLabel]
+  )
+}
+
+/**
+ * Batch un-bank for a specific contact's prints from one (recording, label) provenance.
+ * Always contact-scoped so a reassign auto-purge can never touch the new contact's
+ * freshly-banked print (§3.6).
+ */
+export function deleteVoiceprintsBySource(recordingId: string, fileLabel: string, contactId: string): number {
+  const before = queryOne<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM voiceprints WHERE source_recording_id=? AND source_label=? AND contact_id=?',
+    [recordingId, fileLabel, contactId]
+  )
+  run('DELETE FROM voiceprints WHERE source_recording_id=? AND source_label=? AND contact_id=?', [
+    recordingId,
+    fileLabel,
+    contactId
+  ])
+  return before?.n ?? 0
 }
 
 export function getSelfContactId(): string | null {
@@ -2951,6 +3350,11 @@ export function setSelfContact(contactId: string): void {
     runNoSave('UPDATE contacts SET is_self=0 WHERE is_self=1')
     runNoSave('UPDATE contacts SET is_self=1 WHERE id=?', [contactId])
   })
+}
+
+/** Unset the current self contact (sets is_self=0 on whoever is self). Idempotent. */
+export function clearSelfContact(): void {
+  run('UPDATE contacts SET is_self=0 WHERE is_self=1')
 }
 
 // Queue queries
@@ -3295,6 +3699,7 @@ export interface Contact {
   company: string | null
   notes: string | null
   tags: string | null // JSON string
+  is_self: number // SQLite boolean 0 or 1
   first_seen_at: string
   last_seen_at: string
   meeting_count: number
@@ -3459,9 +3864,14 @@ export function getContactsForMeeting(meetingId: string): Contact[] {
 }
 
 export function deleteContact(id: string): void {
-  // Remove junction table entries first, then the contact
-  run('DELETE FROM meeting_contacts WHERE contact_id = ?', [id])
-  run('DELETE FROM contacts WHERE id = ?', [id])
+  // Remove junction table entries, voiceprints (biometric data must not survive the
+  // person), and stale recording_speakers rows, then the contact — all atomic.
+  runInTransaction(() => {
+    runNoSave('DELETE FROM meeting_contacts WHERE contact_id = ?', [id])
+    runNoSave('DELETE FROM voiceprints WHERE contact_id = ?', [id])
+    runNoSave('DELETE FROM recording_speakers WHERE contact_id = ?', [id])
+    runNoSave('DELETE FROM contacts WHERE id = ?', [id])
+  })
 }
 
 export function linkContactToMeeting(meetingId: string, contactId: string, role: ContactRole): void {

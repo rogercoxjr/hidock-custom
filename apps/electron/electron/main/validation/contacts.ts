@@ -47,6 +47,13 @@ export const DeleteContactRequestSchema = z.object({
 })
 
 /**
+ * Set the "self" contact ("this is me"). Pass null to clear the current self.
+ */
+export const SetSelfRequestSchema = z.object({
+  contactId: z.union([UUIDSchema, z.null()])
+})
+
+/**
  * Create contact request — name required; duplicate emails allowed (existing schema).
  */
 export const CreateContactRequestSchema = z.object({
@@ -92,6 +99,7 @@ export type GetContactsRequest = z.infer<typeof GetContactsRequestSchema>
 export type GetContactByIdRequest = z.infer<typeof GetContactByIdRequestSchema>
 export type UpdateContactRequest = z.infer<typeof UpdateContactRequestSchema>
 export type DeleteContactRequest = z.infer<typeof DeleteContactRequestSchema>
+export type SetSelfRequest = z.infer<typeof SetSelfRequestSchema>
 export type CreateContactRequest = z.infer<typeof CreateContactRequestSchema>
 export type ContactRole = z.infer<typeof ContactRoleSchema>
 export type MeetingContact = z.infer<typeof MeetingContactSchema>

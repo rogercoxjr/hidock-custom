@@ -10,7 +10,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const handlers = new Map<string, (...a: unknown[]) => unknown>()
 vi.mock('electron', () => ({
-  ipcMain: { handle: vi.fn((ch: string, fn: (...a: unknown[]) => unknown) => handlers.set(ch, fn)) }
+  ipcMain: { handle: vi.fn((ch: string, fn: (...a: unknown[]) => unknown) => handlers.set(ch, fn)) },
+  app: { getPath: vi.fn(() => '/tmp/hidock') },
+  safeStorage: { isEncryptionAvailable: vi.fn(() => false), encryptString: vi.fn(), decryptString: vi.fn() }
 }))
 vi.mock('../../services/voiceprint-service', () => ({
   captureVoiceprint: vi.fn(async () => ({ captured: true }))
@@ -18,9 +20,11 @@ vi.mock('../../services/voiceprint-service', () => ({
 // D3's recording_speakers writer + any contact lookups the handler uses:
 vi.mock('../../services/database', () => ({
   upsertRecordingSpeaker: vi.fn(),
+  getRecordingSpeaker: vi.fn(),
   getContactById: vi.fn(() => ({ id: 'c_1', name: 'Alice' })),
   getRecordingSpeakers: vi.fn(),
   deleteRecordingSpeaker: vi.fn(),
+  deleteVoiceprintsBySource: vi.fn(),
   getTranscriptByRecordingId: vi.fn(),
   updateTranscriptTurns: vi.fn()
 }))
@@ -40,7 +44,7 @@ describe('speakers:assign → voiceprint capture (§6.7)', () => {
     const fn = handlers.get('speakers:assign')!
     await fn({}, { recordingId: 'rec_1', fileLabel: 'A', contactId: 'c_1' })
     await new Promise((r) => setImmediate(r)) // capture is deferred to a later tick
-    expect(vi.mocked(captureVoiceprint)).toHaveBeenCalledWith('rec_1', 'A', 'c_1')
+    expect(vi.mocked(captureVoiceprint)).toHaveBeenCalledWith('rec_1', 'A', 'c_1', 'manual')
   })
 
   it('6. defers capture to a later tick — not run on the synchronous assign IPC path', async () => {
@@ -50,7 +54,7 @@ describe('speakers:assign → voiceprint capture (§6.7)', () => {
     // main thread; it is scheduled for a later tick).
     expect(vi.mocked(captureVoiceprint)).not.toHaveBeenCalled()
     await new Promise((r) => setImmediate(r)) // let the deferred capture fire
-    expect(vi.mocked(captureVoiceprint)).toHaveBeenCalledWith('rec_1', 'A', 'c_1')
+    expect(vi.mocked(captureVoiceprint)).toHaveBeenCalledWith('rec_1', 'A', 'c_1', 'manual')
   })
 
   it('2. capture failure does not fail the assignment IPC', async () => {

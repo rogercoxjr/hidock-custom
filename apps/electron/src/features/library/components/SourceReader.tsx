@@ -9,9 +9,10 @@
  * Shows a placeholder message when no recording is selected.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { TranscriptViewer } from './TranscriptViewer'
 import { SpeakersPanel } from './SpeakersPanel'
+import type { SuggestionView } from './SpeakersPanel'
 import type { Turn } from '../types/turns'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
@@ -111,6 +112,15 @@ export function SourceReader({
   const recordingId = recording?.id
   const [turns, setTurns] = useState<Turn[]>([])
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({})
+  const [speakerAssignments, setSpeakerAssignments] = useState<
+    Record<string, { contactId: string; contactName: string }>
+  >({})
+
+  // Phase 2B: pending matcher suggestions + loading state + re-transcribe banner.
+  const [suggestions, setSuggestions] = useState<SuggestionView[]>([])
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+  const [showSuggestionsBanner, setShowSuggestionsBanner] = useState(false)
+  const hadAssignmentsRef = useRef(false)
 
   // Reset all state when recording changes
   useEffect(() => {
@@ -119,6 +129,7 @@ export function SourceReader({
     setLinkDialogOpen(false)
     setMetadataEdited(false)
     setShowTranscribeWarning(false)
+    hadAssignmentsRef.current = false
   }, [recording?.id])
 
   // D5 §6.6: probe staleness whenever the recording or transcript changes. The
@@ -138,15 +149,18 @@ export function SourceReader({
   }, [recording, transcript])
 
   /**
-   * Re-fetch BOTH the recording's turns (transcripts:getByRecordingId) and its
-   * speaker->contact-name map (speakers:getForRecording). Called on recording change
-   * and again whenever the SpeakersPanel reports an assign/merge/reassign, so the panel
-   * and the structured transcript reflect the new turns + names live.
+   * Re-fetch the recording's turns (transcripts:getByRecordingId), its
+   * speaker->contact-name map (speakers:getForRecording), and pending matcher
+   * suggestions (speakers:getSuggestions). Called on recording change and again
+   * whenever the SpeakersPanel reports an edit, so the panel reflects new turns,
+   * names, and suggestions live.
    */
   const refreshSpeakers = useCallback(async () => {
     if (!recordingId) {
       setTurns([])
       setSpeakerNames({})
+      setSuggestions([])
+      setShowSuggestionsBanner(false)
       return
     }
     // Defensive: a partially-initialized electronAPI (e.g. in unit tests) or a
@@ -154,6 +168,7 @@ export function SourceReader({
     const api = window.electronAPI
     if (!api?.transcripts?.getByRecordingId || !api?.speakers?.getForRecording) return
 
+    setIsLoadingSuggestions(!!api?.speakers?.getSuggestions)
     try {
       const [freshTranscript, speakerRes] = await Promise.all([
         api.transcripts.getByRecordingId(recordingId),
@@ -168,19 +183,38 @@ export function SourceReader({
       setTurns(parsedTurns)
 
       const names: Record<string, string> = {}
+      const assignments: Record<string, { contactId: string; contactName: string }> = {}
       if (speakerRes?.success && speakerRes.data) {
         for (const [label, entry] of Object.entries(speakerRes.data)) {
-          names[label] = (entry as { contactName: string }).contactName
+          const e = entry as { contactId: string; contactName: string }
+          names[label] = e.contactName
+          assignments[label] = { contactId: e.contactId, contactName: e.contactName }
         }
       }
       setSpeakerNames(names)
+      setSpeakerAssignments(assignments)
+
+      if (Object.keys(assignments).length > 0) {
+        hadAssignmentsRef.current = true
+      }
+
+      if (api?.speakers?.getSuggestions) {
+        const sugRes = await api.speakers.getSuggestions(recordingId)
+        const next = sugRes?.success && Array.isArray(sugRes.data) ? sugRes.data : []
+        setSuggestions(next)
+        setShowSuggestionsBanner(
+          next.length > 0 && hadAssignmentsRef.current && Object.keys(assignments).length === 0
+        )
+      }
     } catch {
       // Swallow IPC/parse failures: the prop-seeded turns remain; never propagate.
+    } finally {
+      setIsLoadingSuggestions(false)
     }
   }, [recordingId])
 
   // Seed turns from the prop transcript immediately (so the panel renders before the
-  // async fetch resolves), then fetch fresh turns + assignment names.
+  // async fetch resolves), then fetch fresh turns + assignment names + suggestions.
   const transcriptTurns = transcript?.turns
   useEffect(() => {
     let parsed: Turn[] = []
@@ -189,6 +223,9 @@ export function SourceReader({
     }
     setTurns(parsed)
     setSpeakerNames({})
+    setSpeakerAssignments({})
+    setSuggestions([])
+    setShowSuggestionsBanner(false)
     refreshSpeakers().catch(() => {})
   }, [recordingId, transcriptTurns, refreshSpeakers])
 
@@ -669,6 +706,22 @@ export function SourceReader({
                 )}
               </div>
             )}
+            {/* Phase 2B re-transcribe banner: speakers were re-lettered, confirm suggestions. */}
+            {showSuggestionsBanner && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-sm">
+                <span>Re-analyzed speakers after re-transcription — confirm the suggestions below.</span>
+                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setShowSuggestionsBanner(false)}>
+                  Dismiss
+                </Button>
+              </div>
+            )}
+            {isLoadingSuggestions && (
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>Analyzing voices…</span>
+              </div>
+            )}
+
             {/* Speakers panel — structured turns only (hidden when no turns) */}
             {hasStructuredTurns && (
               <div className="mb-4">
@@ -677,6 +730,8 @@ export function SourceReader({
                   meetingId={meeting?.id}
                   turns={turns}
                   assignedNames={speakerNames}
+                  assignedSpeakers={speakerAssignments}
+                  suggestions={suggestions}
                   onChanged={() => { refreshSpeakers().catch(() => {}) }}
                 />
               </div>

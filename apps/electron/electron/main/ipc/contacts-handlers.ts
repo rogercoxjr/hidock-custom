@@ -13,6 +13,9 @@ import {
   getMeetingsForContact,
   getContactsForMeeting,
   upsertContact,
+  setSelfContact,
+  clearSelfContact,
+  getSelfContactId,
   Contact
 } from '../services/database'
 import { success, error, Result } from '../types/api'
@@ -21,7 +24,8 @@ import {
   GetContactByIdRequestSchema,
   UpdateContactRequestSchema,
   DeleteContactRequestSchema,
-  CreateContactRequestSchema
+  CreateContactRequestSchema,
+  SetSelfRequestSchema
 } from '../validation/contacts'
 import { randomUUID } from 'crypto'
 import type { Person } from '@/types/knowledge'
@@ -78,7 +82,8 @@ export function registerContactsHandlers(): void {
           tags: null,
           first_seen_at: now,
           last_seen_at: now,
-          meeting_count: 0
+          meeting_count: 0,
+          is_self: 0
         })
 
         return success(mapToPerson(created))
@@ -214,6 +219,56 @@ export function registerContactsHandlers(): void {
       }
     }
   )
+
+  /**
+   * Get the current "self" contact ("this is me").
+   */
+  ipcMain.handle(
+    'contacts:getSelf',
+    async (): Promise<Result<Person | null>> => {
+      try {
+        const selfId = getSelfContactId()
+        if (!selfId) return success(null)
+        const contact = getContactById(selfId)
+        if (!contact) return success(null)
+        return success(mapToPerson(contact))
+      } catch (err) {
+        console.error('contacts:getSelf error:', err)
+        return error('DATABASE_ERROR', 'Failed to fetch self contact', err)
+      }
+    }
+  )
+
+  /**
+   * Set or clear the "self" contact. Passing null clears the current self.
+   */
+  ipcMain.handle(
+    'contacts:setSelf',
+    async (_, request: unknown): Promise<Result<Person | null>> => {
+      try {
+        const parsed = SetSelfRequestSchema.safeParse(request)
+        if (!parsed.success) {
+          return error('VALIDATION_ERROR', 'Invalid set-self request', parsed.error.format())
+        }
+
+        if (parsed.data.contactId === null) {
+          clearSelfContact()
+          return success(null)
+        }
+
+        const contact = getContactById(parsed.data.contactId)
+        if (!contact) {
+          return error('NOT_FOUND', `Contact with ID ${parsed.data.contactId} not found`)
+        }
+
+        setSelfContact(parsed.data.contactId)
+        return success(mapToPerson(contact))
+      } catch (err) {
+        console.error('contacts:setSelf error:', err)
+        return error('DATABASE_ERROR', 'Failed to set self contact', err)
+      }
+    }
+  )
 }
 
 function mapToPerson(contact: Contact): Person {
@@ -235,6 +290,7 @@ function mapToPerson(contact: Contact): Person {
     company: contact.company,
     notes: contact.notes,
     tags,
+    isSelf: contact.is_self === 1,
     firstSeenAt: contact.first_seen_at,
     lastSeenAt: contact.last_seen_at,
     interactionCount: contact.meeting_count,
