@@ -22,6 +22,29 @@ vi.mock('../ollama', () => ({
   }))
 }))
 
+// chat-provider resolves config at module load; keep the test on the local Ollama path
+vi.mock('../config', () => ({
+  getConfig: vi.fn(() => ({
+    version: '1.0.0',
+    storage: { dataPath: '/tmp', maxRecordingsGB: 50 },
+    calendar: { icsUrl: '', syncEnabled: false, syncIntervalMinutes: 15, lastSyncAt: null },
+    transcription: { provider: 'assemblyai', geminiApiKey: '', geminiModel: '', openaiApiKey: '', whisperModel: 'whisper-1', assemblyaiApiKey: '', assemblyaiModels: [], autoTranscribe: false, language: 'en' },
+    embeddings: { provider: 'openai', ollamaBaseUrl: '', ollamaModel: '', openaiModel: 'text-embedding-3-small', chunkSize: 500, chunkOverlap: 50 },
+    chat: { provider: 'ollama', geminiModel: '', ollamaModel: 'llama3.2', maxContextChunks: 10 },
+    summarization: { provider: 'gemini', ollamaCloudApiKey: '', ollamaCloudModel: '' },
+    device: { autoConnect: false, autoDownload: false },
+    ui: { theme: 'system', defaultView: 'week', startOfWeek: 1, calendarView: 'week', hideEmptyMeetings: true, showListView: false },
+    privacy: { enableVoiceprintCapture: false, excludeVoiceprintsFromBackup: true },
+    voiceMatching: { matchSuggest: 0.42, matchAuto: 0.55, matchMargin: 0.06, mergeThreshold: 0.62, mixedDispersion: 0.35, centroidOutlier: 0.25, bankConsistency: 0.35, maxMergeSuggestions: 5, calibrated: false, modelId: '3dspeaker_eres2net_en_voxceleb' }
+  })),
+  initializeConfig: vi.fn(),
+  saveConfig: vi.fn(),
+  getConfigPath: vi.fn(),
+  getDataPath: vi.fn(),
+  encryptSensitive: vi.fn((v: string) => v),
+  decryptSensitive: vi.fn((v: string) => v)
+}))
+
 describe('OutputGeneratorService', () => {
   beforeEach(() => {
     vi.clearAllMocks()

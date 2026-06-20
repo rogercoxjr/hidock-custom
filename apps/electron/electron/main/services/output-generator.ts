@@ -5,6 +5,8 @@
  */
 
 import { getOllamaService } from './ollama'
+import { getConfig } from './config'
+import { getChatProvider } from './chat/chat-provider'
 import { getTemplate, getTemplates, OutputTemplateId, OutputTemplate } from './output-templates'
 import {
   getMeetingById,
@@ -161,17 +163,21 @@ class OutputGeneratorService {
       prompt = prompt.replace(`{${key}}`, value)
     }
 
-    // Generate using Ollama
-    const ollama = getOllamaService()
-    const isAvailable = await ollama.isAvailable()
+    // Generate using the configured chat provider
+    const config = getConfig()
+    const chatProvider = getChatProvider()
 
-    if (!isAvailable) {
-      throw new Error('Ollama is not available. Please start Ollama to generate outputs.')
+    if (config.chat.provider === 'ollama') {
+      const ollama = getOllamaService()
+      const isAvailable = await ollama.isAvailable()
+      if (!isAvailable) {
+        throw new Error('Ollama is not available. Please start Ollama to generate outputs.')
+      }
     }
 
     const systemPrompt = `You are a professional document writer. Generate clear, well-structured documents based on meeting transcripts. Be concise but thorough. Use the exact format requested.`
 
-    const content = await ollama.generate(prompt, systemPrompt)
+    const content = await chatProvider.generate(prompt, { systemPrompt })
 
     if (!content) {
       throw new Error('Failed to generate output. Please try again.')

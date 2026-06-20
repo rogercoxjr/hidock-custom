@@ -7,6 +7,8 @@ import type { SqlValue } from 'sql.js'
 import { getVectorStore, SearchResult } from './vector-store'
 import { getOllamaService, OllamaChatMessage } from './ollama'
 import { getEmbeddingService } from './embeddings/embedding-provider'
+import { getConfig } from './config'
+import { getChatProvider } from './chat/chat-provider'
 import { getDatabase, queryOne, escapeLikePattern } from './database'
 import { Result, success, error } from '../types/api'
 
@@ -120,12 +122,16 @@ class RAGService {
   private activeControllers: Map<string, AbortController> = new Map()
 
   async isReady(): Promise<{ ready: boolean; reason?: string }> {
-    const ollama = getOllamaService()
+    const config = getConfig()
     const vectorStore = getVectorStore()
 
-    const ollamaAvailable = await ollama.isAvailable()
-    if (!ollamaAvailable) {
-      return { ready: false, reason: 'Ollama is not running. Start Ollama to use the chat feature.' }
+    // Local Ollama is only required when explicitly selected.
+    if (config.embeddings?.provider === 'ollama' || config.chat?.provider === 'ollama') {
+      const ollama = getOllamaService()
+      const ollamaAvailable = await ollama.isAvailable()
+      if (!ollamaAvailable) {
+        return { ready: false, reason: 'Ollama is not running. Start Ollama to use the chat feature.' }
+      }
     }
 
     const docCount = vectorStore.getDocumentCount()
@@ -140,24 +146,28 @@ class RAGService {
   }
 
   async initialize(): Promise<boolean> {
-    const ollama = getOllamaService()
+    const config = getConfig()
+    const usesLocalOllama =
+      config.embeddings?.provider === 'ollama' || config.chat?.provider === 'ollama'
+
+    // Only pull local Ollama models when the user actually selected local Ollama
+    // for embeddings or chat. Otherwise startup hangs on a blocking /api/pull.
+    if (usesLocalOllama) {
+      const ollama = getOllamaService()
+      const available = await ollama.isAvailable()
+      if (!available) {
+        console.log('Ollama not available, RAG service will be limited')
+        return false
+      }
+
+      const models = await ollama.ensureModels()
+      if (!models.embedding || !models.chat) {
+        console.log('Required Ollama models not available')
+        return false
+      }
+    }
+
     const vectorStore = getVectorStore()
-
-    // Check if Ollama is available
-    const available = await ollama.isAvailable()
-    if (!available) {
-      console.log('Ollama not available, RAG service will be limited')
-      return false
-    }
-
-    // Ensure required models are available
-    const models = await ollama.ensureModels()
-    if (!models.embedding || !models.chat) {
-      console.log('Required Ollama models not available')
-      return false
-    }
-
-    // Initialize vector store
     await vectorStore.initialize()
 
     console.log('RAG service initialized')
@@ -169,7 +179,7 @@ class RAGService {
     message: string,
     meetingFilter?: string
   ): Promise<RAGResponse> {
-    const ollama = getOllamaService()
+    const chatProvider = getChatProvider()
     const vectorStore = getVectorStore()
 
     // Validate that sessionId corresponds to a valid conversation
@@ -326,7 +336,7 @@ class RAGService {
     context.conversationHistory.push({ role: 'user', content: message })
 
     // B-CHAT-005: Generate response with abort signal support
-    const answer = await ollama.chat(messages, {
+    const answer = await chatProvider.chat(messages, {
       systemPrompt: SYSTEM_PROMPT,
       temperature: 0.7,
       maxTokens: 1024,
@@ -357,7 +367,7 @@ class RAGService {
   }
 
   async summarizeMeeting(meetingId: string): Promise<string | null> {
-    const ollama = getOllamaService()
+    const chatProvider = getChatProvider()
     const vectorStore = getVectorStore()
 
     // Get all chunks for this meeting
@@ -383,11 +393,11 @@ class RAGService {
 Meeting transcript:
 ${transcript.substring(0, 8000)}` // Limit context size
 
-    return ollama.generate(prompt)
+    return chatProvider.generate(prompt)
   }
 
   async findActionItems(meetingId?: string): Promise<string | null> {
-    const ollama = getOllamaService()
+    const chatProvider = getChatProvider()
     const vectorStore = getVectorStore()
 
     let docs
@@ -418,7 +428,7 @@ Format as a numbered list.
 Meeting transcripts:
 ${transcript.substring(0, 8000)}`
 
-    return ollama.generate(prompt)
+    return chatProvider.generate(prompt)
   }
 
   /**

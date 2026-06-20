@@ -69,7 +69,7 @@ export function Settings() {
   const [showOpenaiKey, setShowOpenaiKey] = useState(false)
   const [assemblyaiApiKey, setAssemblyaiApiKey] = useState('')
   const [showAssemblyaiKey, setShowAssemblyaiKey] = useState(false)
-  const [chatProvider, setChatProvider] = useState<'gemini' | 'ollama'>('gemini')
+  const [chatProvider, setChatProvider] = useState<'gemini' | 'ollama' | 'ollama-cloud'>('gemini')
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
   const [showApiKey, setShowApiKey] = useState(false)
   const [storageLoading, setStorageLoading] = useState(false)
@@ -1122,8 +1122,24 @@ export function Settings() {
                   >
                     Ollama (Local)
                   </Button>
+                  <Button
+                    variant={chatProvider === 'ollama-cloud' ? 'default' : 'outline'}
+                    onClick={() => setChatProvider('ollama-cloud')}
+                    onKeyDown={(e) => e.key === 'Enter' && setChatProvider('ollama-cloud')}
+                    disabled={saving}
+                    aria-label="Use Ollama Cloud chat provider"
+                    aria-pressed={chatProvider === 'ollama-cloud'}
+                  >
+                    Ollama Cloud
+                  </Button>
                 </div>
               </div>
+
+              {chatProvider === 'ollama-cloud' && (
+                <p className="text-xs text-muted-foreground rounded-md border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-2">
+                  Uses the Ollama Cloud API key and model configured in the Summarization section below.
+                </p>
+              )}
 
               {chatProvider === 'ollama' && (
                 <div>

@@ -63,7 +63,7 @@ export interface AppConfig {
     chunkOverlap: number
   }
   chat: {
-    provider: 'gemini' | 'ollama'
+    provider: 'gemini' | 'ollama' | 'ollama-cloud'
     geminiModel: string
     ollamaModel: string
     maxContextChunks: number

@@ -6,6 +6,7 @@ import { ipcMain } from 'electron'
 import { getRAGService, RAGResponse } from '../services/rag'
 import { getVectorStore } from '../services/vector-store'
 import { getOllamaService } from '../services/ollama'
+import { getConfig } from '../services/config'
 import { success, error, Result } from '../types/api'
 import { RAGFilterSchema } from '../validation/common'
 import type { RAGFilter, RAGStatus, RAGChatResponse } from '../types/api'
@@ -38,7 +39,10 @@ export function registerRAGHandlers(): void {
   // Check if RAG is ready (new Result pattern)
   ipcMain.handle('rag:status', async (): Promise<Result<RAGStatus>> => {
     try {
-      const ollamaAvailable = await ollama.isAvailable()
+      const config = getConfig()
+      const needsLocalOllama =
+        config.embeddings?.provider === 'ollama' || config.chat?.provider === 'ollama'
+      const ollamaAvailable = needsLocalOllama ? await ollama.isAvailable() : false
       const docCount = vectorStore.getDocumentCount()
       const meetingCount = vectorStore.getMeetingCount()
 
@@ -46,7 +50,7 @@ export function registerRAGHandlers(): void {
         ollamaAvailable,
         documentCount: docCount,
         meetingCount: meetingCount,
-        ready: ollamaAvailable && docCount > 0
+        ready: (!needsLocalOllama || ollamaAvailable) && docCount > 0
       })
     } catch (err) {
       console.error('rag:status error:', err)
