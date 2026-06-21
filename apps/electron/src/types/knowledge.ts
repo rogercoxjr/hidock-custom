@@ -337,6 +337,9 @@ export interface Person {
 
   relatedPeople?: string[]
 
+  // Voice Library
+  voiceprintCount?: number
+
 
 
 

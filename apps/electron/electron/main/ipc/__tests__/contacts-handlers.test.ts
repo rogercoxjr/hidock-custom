@@ -333,4 +333,100 @@ describe('Contacts IPC Handlers', () => {
 
     expect(result.data.contacts[0].isSelf).toBe(true)
   })
+
+  it('mapToPerson passes voiceprintCount through from voiceprint_count', async () => {
+    const { getContacts } = await import('../../services/database')
+    vi.mocked(getContacts).mockReturnValue({
+      contacts: [
+        {
+          id: 'p1',
+          name: 'Mario',
+          email: null,
+          type: 'team',
+          role: null,
+          company: null,
+          notes: null,
+          tags: null,
+          is_self: 0,
+          first_seen_at: '2026-01-01',
+          last_seen_at: '2026-01-02',
+          meeting_count: 3,
+          created_at: '2026-01-01',
+          voiceprint_count: 2
+        }
+      ],
+      total: 1
+    })
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:getAll')?.[1]
+    const result = await handler?.({} as any, {}) as any
+
+    expect(result.success).toBe(true)
+    expect(result.data.contacts[0].voiceprintCount).toBe(2)
+  })
+
+  it('mapToPerson defaults voiceprintCount to 0 when voiceprint_count is absent', async () => {
+    const { getContacts } = await import('../../services/database')
+    vi.mocked(getContacts).mockReturnValue({
+      contacts: [
+        {
+          id: 'p2',
+          name: 'Alice',
+          email: null,
+          type: 'external',
+          role: null,
+          company: null,
+          notes: null,
+          tags: null,
+          is_self: 0,
+          first_seen_at: '2026-01-01',
+          last_seen_at: '2026-01-02',
+          meeting_count: 0,
+          created_at: '2026-01-01'
+          // voiceprint_count intentionally absent (undefined)
+        }
+      ],
+      total: 1
+    })
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:getAll')?.[1]
+    const result = await handler?.({} as any, {}) as any
+
+    expect(result.success).toBe(true)
+    expect(result.data.contacts[0].voiceprintCount).toBe(0)
+  })
+
+  it('contacts:getById response carries voiceprintCount and no BLOB field', async () => {
+    const { getContactById, getMeetingsForContact } = await import('../../services/database')
+    const testId = '550e8400-e29b-41d4-a716-446655440099'
+    vi.mocked(getContactById).mockReturnValue({
+      id: testId,
+      name: 'Bob',
+      email: null,
+      type: 'team',
+      role: null,
+      company: null,
+      notes: null,
+      tags: null,
+      is_self: 0,
+      first_seen_at: '2026-01-01',
+      last_seen_at: '2026-01-02',
+      meeting_count: 1,
+      created_at: '2026-01-01',
+      voiceprint_count: 3
+    })
+    vi.mocked(getMeetingsForContact).mockReturnValue([])
+
+    registerContactsHandlers()
+    const handler = vi.mocked(ipcMain.handle).mock.calls.find(call => call[0] === 'contacts:getById')?.[1]
+    const result = await handler?.({} as any, testId) as any
+
+    expect(result.success).toBe(true)
+    expect(result.data.contact.voiceprintCount).toBe(3)
+    // No BLOB should be present in the IPC payload
+    const contactStr = JSON.stringify(result.data.contact)
+    expect(contactStr).not.toContain('embedding')
+  })
 })
