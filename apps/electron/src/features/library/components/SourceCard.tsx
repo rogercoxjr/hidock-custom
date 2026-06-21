@@ -23,6 +23,9 @@ import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-re
 import { StatusIcon } from './StatusIcon'
 import { TranscriptionStatusBadge } from './TranscriptionStatusBadge'
 import { useLibraryStore } from '@/store/useLibraryStore'
+import { CapturePeoplePills } from './CapturePeoplePills'
+import { CaptureLabelChips } from './CaptureLabelChips'
+import type { CapturePerson, CaptureLabel } from '../types/captureMeta'
 
 // Harbor Badge variant per quality rating.
 const QUALITY_VARIANT: Record<string, 'accent' | 'default'> = {
@@ -52,6 +55,11 @@ interface SourceCardProps {
   onGenerateOutput: () => void
   onToggleTranscript: () => void
   onNavigateToMeeting: (meetingId: string) => void
+  people?: CapturePerson[]
+  labels?: CaptureLabel[]
+  peopleKey?: string
+  labelsKey?: string
+  onOverflowPeopleClick?: () => void
 }
 
 export const SourceCard = memo(function SourceCard({
@@ -75,7 +83,12 @@ export const SourceCard = memo(function SourceCard({
   onAskAssistant,
   onGenerateOutput,
   onToggleTranscript,
-  onNavigateToMeeting
+  onNavigateToMeeting,
+  people = [],
+  labels = [],
+  peopleKey: _peopleKey,
+  labelsKey: _labelsKey,
+  onOverflowPeopleClick,
 }: SourceCardProps) {
   const canPlay = hasLocalPath(recording)
   const error = useLibraryStore((state) => state.recordingErrors.get(recording.id))
@@ -132,6 +145,13 @@ export const SourceCard = memo(function SourceCard({
                 {recording.size && ` · ${formatBytes(recording.size)}`}
                 {recording.duration && ` · ${formatDuration(recording.duration)}`}
               </CardDescription>
+              {/* People pills + label chips — visible when data is present */}
+              {(people.length > 0 || labels.length > 0) && (
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                  <CapturePeoplePills people={people} cap={3} onOverflowClick={onOverflowPeopleClick} />
+                  <CaptureLabelChips labels={labels} />
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -374,6 +394,8 @@ export const SourceCard = memo(function SourceCard({
     prevProps.deviceConnected === nextProps.deviceConnected &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.transcript?.id === nextProps.transcript?.id &&
-    prevProps.meeting?.id === nextProps.meeting?.id
+    prevProps.meeting?.id === nextProps.meeting?.id &&
+    prevProps.peopleKey === nextProps.peopleKey &&
+    prevProps.labelsKey === nextProps.labelsKey
   )
 })
