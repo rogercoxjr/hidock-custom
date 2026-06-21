@@ -8,7 +8,7 @@ import type { Turn } from './asr/asr-provider'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 31
+const SCHEMA_VERSION = 32
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -310,6 +310,23 @@ CREATE TABLE IF NOT EXISTS recording_label_embeddings (
     created_at TEXT NOT NULL,
     updated_at TEXT
 );
+
+-- Per-recording per-label per-window embeddings for mixed-detection persistence (spec 2026-06-21, v32)
+CREATE TABLE IF NOT EXISTS recording_window_embeddings (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL,
+    transcript_id TEXT,
+    diarization_run_id TEXT,
+    file_label TEXT NOT NULL,
+    window_index INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    model_version INTEGER NOT NULL DEFAULT 1,
+    dim INTEGER NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rwe_recording_label ON recording_window_embeddings(recording_id, file_label);
 
 -- Pending speaker-identity / merge suggestions (spec 2026-06-19 §8, v27, diarization_run_id v28, contact_id_2 v29)
 CREATE TABLE IF NOT EXISTS speaker_suggestions (
@@ -1788,6 +1805,23 @@ const MIGRATIONS: Record<number, () => void> = {
     }
 
     console.log('Migration v31 complete')
+  }
+  ,
+
+  32: () => {
+    // v32: persist mixed-detection per-window embeddings (spec 2026-06-21). Additive
+    // only — new table + index, no FK rebuild, no CHECK changes. Idempotent CREATEs so
+    // a fresh DB (already created by the canonical SCHEMA) and an upgraded DB converge.
+    console.log('Running migration to schema v32: recording_window_embeddings')
+    const database = getDatabase()
+    database.run(`CREATE TABLE IF NOT EXISTS recording_window_embeddings (
+      id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, transcript_id TEXT, diarization_run_id TEXT,
+      file_label TEXT NOT NULL, window_index INTEGER NOT NULL, fingerprint TEXT NOT NULL,
+      model_id TEXT NOT NULL, model_version INTEGER NOT NULL DEFAULT 1, dim INTEGER NOT NULL,
+      embedding BLOB NOT NULL, created_at TEXT NOT NULL)`)
+    database.run(`CREATE INDEX IF NOT EXISTS idx_rwe_recording_label
+      ON recording_window_embeddings(recording_id, file_label)`)
+    console.log('Migration v32 complete')
   }
 
 }
