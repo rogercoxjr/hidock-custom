@@ -47,8 +47,11 @@ interface LibraryState {
   panelSizes: number[]
   selectedSourceId: string | null
 
-  // Assistant drawer (transient - default closed each session)
+  // Assistant drawer — narrow widths only (transient - default closed each session)
   assistantOpen: boolean
+
+  // Assistant inline column — desktop only (transient - default OPEN each session)
+  assistantInlineOpen: boolean
 
   // Error state (transient - not persisted)
   recordingErrors: Map<string, LibraryError>
@@ -104,6 +107,8 @@ interface LibraryActions {
   setSelectedSourceId: (id: string | null) => void
   setAssistantOpen: (open: boolean) => void
   toggleAssistant: () => void
+  setAssistantInlineOpen: (open: boolean) => void
+  toggleAssistantInline: () => void
 
   // Scroll
   setScrollOffset: (offset: number) => void
@@ -128,6 +133,7 @@ const initialState: LibraryState = {
   panelSizes: [25, 45, 30],
   selectedSourceId: null,
   assistantOpen: false,
+  assistantInlineOpen: true,
   recordingErrors: new Map(),
   scrollOffset: 0
 }
@@ -280,6 +286,8 @@ export const useLibraryStore = create<LibraryStore>()(
       setSelectedSourceId: (id) => set({ selectedSourceId: id }),
       setAssistantOpen: (open) => set({ assistantOpen: open }),
       toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
+      setAssistantInlineOpen: (open) => set({ assistantInlineOpen: open }),
+      toggleAssistantInline: () => set((state) => ({ assistantInlineOpen: !state.assistantInlineOpen })),
 
       // Scroll
       setScrollOffset: (offset) => set({ scrollOffset: offset })
