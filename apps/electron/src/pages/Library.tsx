@@ -768,6 +768,11 @@ export function Library() {
 
   // Handle row click for tri-pane layout
   const handleRowClick = useCallback((recording: UnifiedRecording) => {
+    // Clicking the already-selected row deselects it (closes detail pane)
+    if (selectedSourceId === recording.id) {
+      setSelectedSourceId(null)
+      return
+    }
     audioControls.stop()
     selectSingle(recording.id)
 
@@ -775,7 +780,7 @@ export function Library() {
     if (hasLocalPath(recording) && waveformLoadedForId !== recording.id) {
       audioControls.loadWaveformOnly(recording.id, recording.localPath)
     }
-  }, [selectSingle, audioControls])
+  }, [selectedSourceId, setSelectedSourceId, selectSingle, audioControls])
 
   // C-005: Keep openDetailRef in sync with handleRowClick + filteredRecordings
   openDetailRef.current = (id: string) => {
@@ -1108,71 +1113,68 @@ export function Library() {
             </div>
           }
           centerPanel={
-            /* Center Panel: Source Reader */
-            <SourceReader
-              recording={selectedRecording ?? null}
-              transcript={selectedTranscript}
-              meeting={selectedMeeting}
-              isPlaying={selectedRecording ? currentlyPlayingId === selectedRecording.id : false}
-              currentTimeMs={playbackCurrentTime * 1000}
-              onPlay={() => {
-                if (selectedRecording && hasLocalPath(selectedRecording)) {
-                  handlePlayCallback(selectedRecording.id, selectedRecording.localPath)
-                }
-              }}
-              onStop={handleStopCallback}
-              onSeek={(startMs) => {
-                if (selectedRecording && hasLocalPath(selectedRecording)) {
-                  audioControls.seek(startMs / 1000)
-                }
-              }}
-              // Action button callbacks
-              onDownload={() => {
-                if (selectedRecording) handleDownloadCallback(selectedRecording)
-              }}
-              onTranscribe={(force?: boolean) => {
-                if (selectedRecording) queueTranscription(selectedRecording, { force })
-              }}
-              onResummarize={() => {
-                if (!selectedRecording) return
-                const recId = selectedRecording.id
-                window.electronAPI.recordings
-                  .resummarize(recId)
-                  .then(async (r) => {
-                    if (!r.success) {
-                      toast.error('Re-summarize failed', r.error)
-                      return
+            /* Center Panel: Source Reader — only mounted when a recording is selected */
+            selectedRecording
+              ? (
+                <SourceReader
+                  recording={selectedRecording}
+                  transcript={selectedTranscript}
+                  meeting={selectedMeeting}
+                  isPlaying={currentlyPlayingId === selectedRecording.id}
+                  currentTimeMs={playbackCurrentTime * 1000}
+                  onPlay={() => {
+                    if (hasLocalPath(selectedRecording)) {
+                      handlePlayCallback(selectedRecording.id, selectedRecording.localPath)
                     }
-                    // Refetch the transcript so the `transcript` prop reference
-                    // changes; this re-runs SourceReader's staleness effect and
-                    // clears the "generic speaker labels" badge once the summary
-                    // is re-stamped (D5-T3 live-clear path).
-                    const updated = await window.electronAPI.transcripts.getByRecordingId(recId)
-                    if (updated) {
-                      setTranscripts((prev) => new Map(prev).set(recId, updated))
+                  }}
+                  onStop={handleStopCallback}
+                  onSeek={(startMs) => {
+                    if (hasLocalPath(selectedRecording)) {
+                      audioControls.seek(startMs / 1000)
                     }
-                  })
-                  .catch((err) => {
-                    toast.error('Re-summarize failed', err instanceof Error ? err.message : String(err))
-                  })
-              }}
-              onDelete={() => {
-                if (selectedRecording) handleDeleteCallback(selectedRecording)
-              }}
-              // State for button disabling
-              deviceConnected={deviceConnected}
-              isDownloading={selectedRecording && isDeviceOnly(selectedRecording)
-                ? isDownloading(selectedRecording.deviceFilename)
-                : false}
-              downloadProgress={selectedRecording && isDeviceOnly(selectedRecording)
-                ? downloadQueue.get(selectedRecording.deviceFilename)?.progress
-                : undefined}
-              isDeleting={selectedRecording ? deleting === selectedRecording.id : false}
-              // Navigation
-              onNavigateToMeeting={handleNavigateToMeeting}
-              // Metadata editing
-              onMetadataEdited={() => refresh(false)}
-            />
+                  }}
+                  // Action button callbacks
+                  onDownload={() => handleDownloadCallback(selectedRecording)}
+                  onTranscribe={(force?: boolean) => queueTranscription(selectedRecording, { force })}
+                  onResummarize={() => {
+                    const recId = selectedRecording.id
+                    window.electronAPI.recordings
+                      .resummarize(recId)
+                      .then(async (r) => {
+                        if (!r.success) {
+                          toast.error('Re-summarize failed', r.error)
+                          return
+                        }
+                        // Refetch the transcript so the `transcript` prop reference
+                        // changes; this re-runs SourceReader's staleness effect and
+                        // clears the "generic speaker labels" badge once the summary
+                        // is re-stamped (D5-T3 live-clear path).
+                        const updated = await window.electronAPI.transcripts.getByRecordingId(recId)
+                        if (updated) {
+                          setTranscripts((prev) => new Map(prev).set(recId, updated))
+                        }
+                      })
+                      .catch((err) => {
+                        toast.error('Re-summarize failed', err instanceof Error ? err.message : String(err))
+                      })
+                  }}
+                  onDelete={() => handleDeleteCallback(selectedRecording)}
+                  // State for button disabling
+                  deviceConnected={deviceConnected}
+                  isDownloading={isDeviceOnly(selectedRecording)
+                    ? isDownloading(selectedRecording.deviceFilename)
+                    : false}
+                  downloadProgress={isDeviceOnly(selectedRecording)
+                    ? downloadQueue.get(selectedRecording.deviceFilename)?.progress
+                    : undefined}
+                  isDeleting={deleting === selectedRecording.id}
+                  // Navigation
+                  onNavigateToMeeting={handleNavigateToMeeting}
+                  // Metadata editing
+                  onMetadataEdited={() => refresh(false)}
+                />
+              )
+              : null
           }
           rightPanel={
             /* Right Panel: AI Assistant */

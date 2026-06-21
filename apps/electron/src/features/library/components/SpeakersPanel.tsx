@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { toast } from '@/components/ui/toaster'
 import { useConfigStore } from '@/store/domain/useConfigStore'
 import {
@@ -121,6 +122,8 @@ export function SpeakersPanel({
   const [openPickerLabel, setOpenPickerLabel] = useState<string | null>(null)
   const [openMergeLabel, setOpenMergeLabel] = useState<string | null>(null)
   const [openReassignTurn, setOpenReassignTurn] = useState<number | null>(null)
+  // The per-turn reassign list can be long; collapsed by default.
+  const [turnsExpanded, setTurnsExpanded] = useState(false)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -734,10 +737,25 @@ export function SpeakersPanel({
         )
       })}
 
-      {/* Per-turn reassign (AC3): change one turn's speaker to another existing label. */}
-      {!readOnly && (
+      {/* Per-turn reassign (AC3): change one turn's speaker to another existing label.
+          Collapsible — the list is long on real recordings. */}
+      {!readOnly && turns.length > 0 && (
         <div className="space-y-1.5">
-          <Eyebrow tone="muted">Turns</Eyebrow>
+          <button
+            type="button"
+            onClick={() => setTurnsExpanded((v) => !v)}
+            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
+            aria-expanded={turnsExpanded}
+          >
+            <Eyebrow tone="muted">Turns ({turns.length})</Eyebrow>
+            {turnsExpanded ? (
+              <ChevronDown className="h-4 w-4 text-ink-muted" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-ink-muted" />
+            )}
+          </button>
+          {turnsExpanded && (
+          <div className="space-y-1.5">
           {turns.map((t, i) => (
             <div
               key={`${t.startMs}-${t.speaker}`}
@@ -773,6 +791,8 @@ export function SpeakersPanel({
               )}
             </div>
           ))}
+          </div>
+          )}
         </div>
       )}
 

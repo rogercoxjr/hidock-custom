@@ -47,6 +47,9 @@ interface LibraryState {
   panelSizes: number[]
   selectedSourceId: string | null
 
+  // Assistant drawer (transient - default closed each session)
+  assistantOpen: boolean
+
   // Error state (transient - not persisted)
   recordingErrors: Map<string, LibraryError>
 
@@ -99,6 +102,8 @@ interface LibraryActions {
   // Panel state
   setPanelSizes: (sizes: number[]) => void
   setSelectedSourceId: (id: string | null) => void
+  setAssistantOpen: (open: boolean) => void
+  toggleAssistant: () => void
 
   // Scroll
   setScrollOffset: (offset: number) => void
@@ -122,6 +127,7 @@ const initialState: LibraryState = {
   expandedTranscripts: new Set(),
   panelSizes: [25, 45, 30],
   selectedSourceId: null,
+  assistantOpen: false,
   recordingErrors: new Map(),
   scrollOffset: 0
 }
@@ -272,6 +278,8 @@ export const useLibraryStore = create<LibraryStore>()(
       // Panel state
       setPanelSizes: (sizes) => set({ panelSizes: sizes }),
       setSelectedSourceId: (id) => set({ selectedSourceId: id }),
+      setAssistantOpen: (open) => set({ assistantOpen: open }),
+      toggleAssistant: () => set((state) => ({ assistantOpen: !state.assistantOpen })),
 
       // Scroll
       setScrollOffset: (offset) => set({ scrollOffset: offset })

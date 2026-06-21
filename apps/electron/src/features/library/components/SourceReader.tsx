@@ -121,8 +121,13 @@ export function SourceReader({
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
   const [showSuggestionsBanner, setShowSuggestionsBanner] = useState(false)
   const hadAssignmentsRef = useRef(false)
+  // Monotonic token so only the latest refreshSpeakers run may write state.
+  const refreshTokenRef = useRef(0)
 
-  // Reset all state when recording changes
+  // Reset all state when recording changes. Speaker/suggestion state is reset HERE
+  // (keyed on recording id) and NOT on transcript changes — otherwise the batched
+  // transcript fetch flipping the `transcript` prop undefined->object would blank
+  // freshly-loaded suggestions (the "suggestions flash then vanish" bug).
   useEffect(() => {
     setIsEditingTitle(false)
     setEditedTitle('')
@@ -130,6 +135,10 @@ export function SourceReader({
     setMetadataEdited(false)
     setShowTranscribeWarning(false)
     hadAssignmentsRef.current = false
+    setSpeakerNames({})
+    setSpeakerAssignments({})
+    setSuggestions([])
+    setShowSuggestionsBanner(false)
   }, [recording?.id])
 
   // D5 §6.6: probe staleness whenever the recording or transcript changes. The
@@ -168,12 +177,17 @@ export function SourceReader({
     const api = window.electronAPI
     if (!api?.transcripts?.getByRecordingId || !api?.speakers?.getForRecording) return
 
+    // Claim the latest token; any run that finds it superseded after an await
+    // bails without writing (guards against stale/overlapping refreshes — e.g. a
+    // previous recording's in-flight fetch, or the pre-transcript-populate run).
+    const token = ++refreshTokenRef.current
     setIsLoadingSuggestions(!!api?.speakers?.getSuggestions)
     try {
       const [freshTranscript, speakerRes] = await Promise.all([
         api.transcripts.getByRecordingId(recordingId),
         api.speakers.getForRecording(recordingId),
       ])
+      if (refreshTokenRef.current !== token) return
 
       let parsedTurns: Turn[] = []
       const rawTurns = (freshTranscript as Transcript | null | undefined)?.turns
@@ -200,6 +214,7 @@ export function SourceReader({
 
       if (api?.speakers?.getSuggestions) {
         const sugRes = await api.speakers.getSuggestions(recordingId)
+        if (refreshTokenRef.current !== token) return
         const next = sugRes?.success && Array.isArray(sugRes.data) ? sugRes.data : []
         setSuggestions(next)
         setShowSuggestionsBanner(
@@ -209,7 +224,7 @@ export function SourceReader({
     } catch {
       // Swallow IPC/parse failures: the prop-seeded turns remain; never propagate.
     } finally {
-      setIsLoadingSuggestions(false)
+      if (refreshTokenRef.current === token) setIsLoadingSuggestions(false)
     }
   }, [recordingId])
 
@@ -217,15 +232,15 @@ export function SourceReader({
   // async fetch resolves), then fetch fresh turns + assignment names + suggestions.
   const transcriptTurns = transcript?.turns
   useEffect(() => {
+    // Seed turns from the prop so the panel renders before the async fetch resolves,
+    // then refresh. Do NOT blank speakerNames/suggestions here — that reset is keyed
+    // on recording id above; blanking on every transcript change caused suggestions to
+    // flash then vanish when the parent's batched transcript fetch populated the prop.
     let parsed: Turn[] = []
     if (transcriptTurns) {
       try { parsed = JSON.parse(transcriptTurns) } catch { parsed = [] }
     }
     setTurns(parsed)
-    setSpeakerNames({})
-    setSpeakerAssignments({})
-    setSuggestions([])
-    setShowSuggestionsBanner(false)
     refreshSpeakers().catch(() => {})
   }, [recordingId, transcriptTurns, refreshSpeakers])
 
