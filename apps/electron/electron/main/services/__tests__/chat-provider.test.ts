@@ -8,7 +8,7 @@ vi.mock('../config', () => ({
     version: '1.0.0',
     storage: { dataPath: '/tmp', maxRecordingsGB: 50 },
     calendar: { icsUrl: '', syncEnabled: false, syncIntervalMinutes: 15, lastSyncAt: null },
-    transcription: { provider: 'assemblyai', geminiApiKey: 'AIza-test-key', geminiModel: 'gemini-2.0-flash', openaiApiKey: '', whisperModel: 'whisper-1', assemblyaiApiKey: '', assemblyaiModels: [], autoTranscribe: false, language: 'en' },
+    transcription: { provider: 'assemblyai', geminiApiKey: 'AIza-test-key', geminiModel: 'gemini-2.0-flash', openaiApiKey: '', whisperModel: 'whisper-1', assemblyaiApiKey: '', assemblyaiModels: [], autoTranscribe: false, language: 'en', diarization: { speakerOptionsEnabled: true, minSpeakers: 2, maxSpeakers: 8, minDurationMsForHint: 120000, policyVersion: 1 } },
     embeddings: { provider: 'openai', ollamaBaseUrl: '', ollamaModel: '', openaiModel: 'text-embedding-3-small', chunkSize: 500, chunkOverlap: 50 },
     chat: { provider: 'gemini', geminiModel: 'gemini-2.0-flash', ollamaModel: 'llama3.2', maxContextChunks: 10 },
     summarization: { provider: 'ollama-cloud', ollamaCloudApiKey: 'oc-test-key', ollamaCloudModel: 'gpt-oss:120b' },
@@ -38,7 +38,8 @@ const baseConfig = {
     assemblyaiApiKey: '',
     assemblyaiModels: [],
     autoTranscribe: false,
-    language: 'en'
+    language: 'en',
+    diarization: { speakerOptionsEnabled: true, minSpeakers: 2, maxSpeakers: 8, minDurationMsForHint: 120000, policyVersion: 1 }
   },
   embeddings: {
     provider: 'openai' as const,
