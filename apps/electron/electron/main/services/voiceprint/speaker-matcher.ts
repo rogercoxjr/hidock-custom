@@ -15,7 +15,11 @@ import {
   getRecordingSpeaker,
   getSelfContactId,
   getSuggestionsForRecording,
+  getTranscriptByRecordingId,
+  getWindowEmbeddingsForRecording,
   insertSuggestion,
+  replaceWindowEmbeddingsForLabel,
+  type WindowEmbeddingRow,
 } from '../database'
 import {
   decodeRecordingPcm16k,
@@ -23,6 +27,7 @@ import {
   MAX_EMBED_SPEECH_MS,
   MIN_CLEAN_SPEECH_MS,
   VOICEPRINT_MODEL_ID,
+  VOICEPRINT_MODEL_VERSION,
 } from '../voiceprint-service'
 import { createHash } from 'crypto'
 import type { Turn } from '../asr/asr-provider'
@@ -83,92 +88,133 @@ export function labelTurnsFingerprint(
   return createHash('sha1').update(payload).digest('hex')
 }
 
+/** Float32 embedding → little-endian byte BLOB (4 bytes/element). Copies (slice) so no
+ *  external/zero-copy view escapes into the sql.js bind path. */
+function windowEmbToBlob(vec: Float32Array): Uint8Array {
+  return new Uint8Array(vec.buffer.slice(vec.byteOffset, vec.byteOffset + vec.byteLength))
+}
+
 /**
- * Cache of per-window ERes2Net embeddings used by mixed detection, keyed by
- * (recordingId, diarizationRunId). These embeddings are INVARIANT for a given
- * recording + diarization run — computing them requires a full ffmpeg decode of
- * the (300+ MB) file plus serial model inference per 20s window, which made
- * speakers:getSuggestions take 30–60s on EVERY call. We compute them once and
- * reuse; identity scoring against the contact voice library is cheap and still
- * re-runs each call, so results reflect the current voiceprint set.
+ * DB-backed per-window embeddings for the recording's long labels (spec §4).
  *
- * A new diarization run (re-transcribe / merge) yields a new key → fresh compute.
- * In-memory only (re-embeds once per recording per app session); bounded to cap
- * memory. Cleared explicitly when a recording's label embeddings are invalidated.
- */
-const WINDOW_EMB_CACHE = new Map<string, WindowedLabel[]>()
-const WINDOW_EMB_CACHE_MAX = 32
-
-function windowCacheKey(recordingId: string, diarizationRunId: string | null): string {
-  return `${recordingId}::${diarizationRunId ?? 'norun'}`
-}
-
-/** Drop cached window embeddings for a recording (call when its embeddings change). */
-export function invalidateWindowEmbeddings(recordingId: string): void {
-  for (const key of [...WINDOW_EMB_CACHE.keys()]) {
-    if (key.startsWith(`${recordingId}::`)) WINDOW_EMB_CACHE.delete(key)
-  }
-}
-
-/** Test-only: clear the entire window-embedding cache. */
-export function __clearWindowEmbeddingCache(): void {
-  WINDOW_EMB_CACHE.clear()
-}
-
-/**
- * Obtain per-window embeddings for the recording's "long" labels, decoding +
- * embedding once per (recording, run) and serving cache hits thereafter.
+ * `turns` and `diarizationRunId` are passed in by the caller (runMatcher already parsed/resolved
+ * them) so this function performs ZERO redundant DB reads beyond the single window-row read.
+ *
+ * Each long label's CURRENT content fingerprint is compared to the persisted one. Labels whose
+ * fingerprint matches are served from DB (no decode/inference) — including the empty-tombstone
+ * case (a single 0-byte sentinel row → a hit that contributes no windows). Any miss triggers ONE
+ * decode of the file, re-embeds only the missing labels, and atomically replaces that label's rows
+ * via `replaceWindowEmbeddingsForLabel`. A label that genuinely yields zero windows persists a
+ * sentinel so it is not re-decoded on every open. Scoring against contacts always re-runs in the
+ * caller, so results track the current voiceprint set.
  */
 async function getWindowEmbeddings(
   recordingId: string,
+  longLabels: string[],
   diarizationRunId: string | null,
-  longLabels: string[]
+  turns: Turn[]
 ): Promise<WindowedLabel[]> {
   if (longLabels.length === 0) return []
 
-  const key = windowCacheKey(recordingId, diarizationRunId)
-  const cached = WINDOW_EMB_CACHE.get(key)
-  if (cached && longLabels.every((l) => cached.some((w) => w.fileLabel === l))) {
-    return cached
+  const transcript = getTranscriptByRecordingId(recordingId)
+  const transcriptId = transcript?.id ?? null
+
+  // Current fingerprint per long label (computed from the passed-in turns — no re-read).
+  const fpByLabel = new Map<string, string>()
+  for (const label of longLabels) {
+    fpByLabel.set(label, labelTurnsFingerprint(turns, label, VOICEPRINT_MODEL_ID, VOICEPRINT_MODEL_VERSION))
   }
 
-  const windowed: WindowedLabel[] = []
-  const recording = getRecordingById(recordingId)
+  // Persisted (non-stale-model) groups, indexed by label.
+  const persisted = new Map<string, { fingerprint: string; embeddings: Uint8Array[] }>()
+  for (const g of getWindowEmbeddingsForRecording(recordingId, VOICEPRINT_MODEL_ID, VOICEPRINT_MODEL_VERSION)) {
+    persisted.set(g.fileLabel, { fingerprint: g.fingerprint, embeddings: g.embeddings })
+  }
+
+  const result: WindowedLabel[] = []
+  const misses: string[] = []
+  for (const label of longLabels) {
+    const hit = persisted.get(label)
+    if (hit && hit.fingerprint === fpByLabel.get(label)) {
+      // Empty tombstone: a single 0-byte sentinel blob → valid empty hit (no windows, no decode).
+      const isTombstone = hit.embeddings.length === 1 && hit.embeddings[0].byteLength === 0
+      if (isTombstone) {
+        // contributes no windows; do NOT push to result, do NOT re-decode.
+      } else if (hit.embeddings.length > 0) {
+        result.push({ fileLabel: label, windowEmbs: hit.embeddings.map((b) => blobToFloat32(b)) })
+      } else {
+        misses.push(label)
+      }
+    } else {
+      misses.push(label)
+    }
+  }
+
+  if (misses.length === 0) return result
+
+  // At least one miss → decode the file ONCE.
   let pcm: Buffer | undefined
+  const recording = getRecordingById(recordingId)
   if (recording?.file_path) {
     try {
       pcm = await decodeRecordingPcm16k(recording.file_path)
     } catch (e) {
+      console.warn(`[Voiceprint] runMatcher decode failed for ${recordingId}: ${(e as Error).message}`)
+    }
+  }
+  if (!pcm) return result // hits (if any) still usable; misses retried next call (nothing persisted)
+
+  for (const label of misses) {
+    const fingerprint = fpByLabel.get(label)!
+    try {
+      const windowEmbs = await embedLabelWindows(recordingId, label, {
+        pcm,
+        windowMs: WINDOW_SLICE_PARAMS.windowMs,
+        hopMs: WINDOW_SLICE_PARAMS.hopMs,
+      })
+      if (windowEmbs.length === 0) {
+        // Legitimately zero windows → persist a tombstone so we never re-decode this recording
+        // for this label/fingerprint again. (Decode succeeded; only the slice/embed produced none.)
+        replaceWindowEmbeddingsForLabel(recordingId, label, [
+          {
+            id: `rwe_${recordingId}_${label}_tomb`,
+            recording_id: recordingId,
+            transcript_id: transcriptId,
+            diarization_run_id: diarizationRunId,
+            file_label: label,
+            window_index: -1,
+            fingerprint,
+            model_id: VOICEPRINT_MODEL_ID,
+            model_version: VOICEPRINT_MODEL_VERSION,
+            dim: 0,
+            embedding: new Uint8Array(0),
+          },
+        ])
+        continue // mixed detection skips this label
+      }
+      const rows: WindowEmbeddingRow[] = windowEmbs.map((emb, i) => ({
+        id: `rwe_${recordingId}_${label}_${i}`,
+        recording_id: recordingId,
+        transcript_id: transcriptId,
+        diarization_run_id: diarizationRunId,
+        file_label: label,
+        window_index: i,
+        fingerprint,
+        model_id: VOICEPRINT_MODEL_ID,
+        model_version: VOICEPRINT_MODEL_VERSION,
+        dim: emb.length,
+        embedding: windowEmbToBlob(emb),
+      }))
+      // Atomic replace: delete this label's stale rows + insert the fresh set in ONE transaction.
+      replaceWindowEmbeddingsForLabel(recordingId, label, rows)
+      result.push({ fileLabel: label, windowEmbs })
+    } catch (e) {
       console.warn(
-        `[Voiceprint] runMatcher decode failed for ${recordingId}: ${(e as Error).message}`
+        `[Voiceprint] runMatcher mixed detection skipped for ${label} (${recordingId}): ${(e as Error).message}`
       )
     }
   }
-
-  if (pcm) {
-    for (const label of longLabels) {
-      try {
-        const windowEmbs = await embedLabelWindows(recordingId, label, { pcm })
-        if (windowEmbs.length === 0) continue
-        windowed.push({ fileLabel: label, windowEmbs })
-      } catch (e) {
-        console.warn(
-          `[Voiceprint] runMatcher mixed detection skipped for ${label} (${recordingId}): ${(e as Error).message}`
-        )
-      }
-    }
-  }
-
-  // Only cache a real result (decode succeeded and produced embeddings) so a
-  // transient decode failure is retried next call rather than cached as empty.
-  if (windowed.length > 0) {
-    if (WINDOW_EMB_CACHE.size >= WINDOW_EMB_CACHE_MAX) {
-      const oldest = WINDOW_EMB_CACHE.keys().next().value
-      if (oldest !== undefined) WINDOW_EMB_CACHE.delete(oldest)
-    }
-    WINDOW_EMB_CACHE.set(key, windowed)
-  }
-  return windowed
+  return result
 }
 
 /** Build a suppression key matching conflict-policy.ts suggestionKey(). */
@@ -278,7 +324,16 @@ export async function runMatcher(recordingId: string): Promise<MatcherResult> {
       .filter((r) => (r.clean_speech_ms ?? 0) >= 2 * MIN_CLEAN_SPEECH_MS)
       .map((r) => r.file_label)
 
-    const windowed = await getWindowEmbeddings(recordingId, diarizationRunId, longLabels)
+    // Window/mixed detection needs the diarized turns; parse once and reuse (the fingerprint is
+    // computed from them). diarizationRunId was already resolved in step b.
+    const wTranscript = getTranscriptByRecordingId(recordingId)
+    let wTurns: Turn[] = []
+    try {
+      wTurns = wTranscript?.turns ? (JSON.parse(wTranscript.turns) as Turn[]) : []
+    } catch {
+      wTurns = []
+    }
+    const windowed = await getWindowEmbeddings(recordingId, longLabels, diarizationRunId, wTurns)
 
     const perWindowIdentity = new Map<string, IdentityScore[][]>()
     for (const w of windowed) {
