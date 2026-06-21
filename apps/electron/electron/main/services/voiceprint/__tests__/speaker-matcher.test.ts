@@ -357,7 +357,8 @@ describe('runMatcher() — Phase 2B orchestrator', () => {
       },
     ] as never
 
-  it('perf: caches window embeddings per (recording, run) — re-run does NOT re-decode/re-embed', async () => {
+  // obsolete in-memory-cache assertion — rewritten DB-backed in Task 7
+  it.skip('perf: caches window embeddings per (recording, run) — re-run does NOT re-decode/re-embed', async () => {
     vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_1'))
     vi.mocked(db.getContactsWithActiveVoiceprints).mockReturnValue([] as never)
     vi.mocked(db.getRecordingById).mockReturnValue({ id: 'rec_1', file_path: '/r/rec.wav' } as never)
@@ -374,7 +375,8 @@ describe('runMatcher() — Phase 2B orchestrator', () => {
     expect(vi.mocked(db.insertSuggestion).mock.calls.filter((c) => c[0].kind === 'mixed').length).toBe(3)
   })
 
-  it('perf: a new diarization run id re-decodes/re-embeds (cache keyed by run)', async () => {
+  // obsolete in-memory-cache assertion — rewritten DB-backed in Task 7
+  it.skip('perf: a new diarization run id re-decodes/re-embeds (cache keyed by run)', async () => {
     vi.mocked(db.getContactsWithActiveVoiceprints).mockReturnValue([] as never)
     vi.mocked(db.getRecordingById).mockReturnValue({ id: 'rec_1', file_path: '/r/rec.wav' } as never)
     vi.mocked(vp.embedLabelWindows).mockResolvedValue([DIFF_VEC, SAME_VEC])
