@@ -3321,6 +3321,114 @@ export function deleteLabelEmbeddingsForRecording(recordingId: string): void {
   run('DELETE FROM recording_label_embeddings WHERE recording_id = ?', [recordingId])
 }
 
+// v32 mixed-detection window embeddings (spec 2026-06-21 §2). The fingerprint is the
+// content cache key (NOT diarization_run_id); see speaker-matcher.labelTurnsFingerprint.
+export interface WindowEmbeddingRow {
+  id: string; recording_id: string; transcript_id?: string | null; diarization_run_id?: string | null
+  file_label: string; window_index: number; fingerprint: string
+  model_id: string; model_version?: number; dim: number; embedding: Uint8Array; created_at?: string
+}
+
+export interface WindowEmbeddingGroup {
+  fileLabel: string; fingerprint: string; embeddings: Uint8Array[]
+}
+
+/** Insert all window-embedding rows inside ONE transaction and save the sql.js image
+ *  ONCE. Never per-row run() (whole-DB write storm). Empty input is a no-op. */
+export function insertWindowEmbeddingsBatch(rows: WindowEmbeddingRow[]): void {
+  if (rows.length === 0) return
+  const now = new Date().toISOString()
+  runInTransaction(() => {
+    const stmt = getDatabase().prepare(`INSERT OR REPLACE INTO recording_window_embeddings
+      (id, recording_id, transcript_id, diarization_run_id, file_label, window_index, fingerprint,
+       model_id, model_version, dim, embedding, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    try {
+      for (const r of rows) {
+        stmt.bind([
+          r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
+          r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
+          r.dim, r.embedding, r.created_at ?? now
+        ])
+        stmt.step()
+        stmt.reset()
+      }
+    } finally {
+      stmt.free()
+    }
+  })
+}
+
+/** Rows for a recording, grouped by file_label, embeddings ordered by window_index,
+ *  with each label's fingerprint. Stale model_id / model_version rows are excluded. */
+export function getWindowEmbeddingsForRecording(
+  recordingId: string,
+  modelId: string,
+  modelVersion: number
+): WindowEmbeddingGroup[] {
+  const rows = queryAll<WindowEmbeddingRow>(
+    `SELECT * FROM recording_window_embeddings
+     WHERE recording_id = ? AND model_id = ? AND model_version = ?
+     ORDER BY file_label, window_index`,
+    [recordingId, modelId, modelVersion]
+  )
+  const byLabel = new Map<string, WindowEmbeddingGroup>()
+  for (const r of rows) {
+    let g = byLabel.get(r.file_label)
+    if (!g) {
+      g = { fileLabel: r.file_label, fingerprint: r.fingerprint, embeddings: [] }
+      byLabel.set(r.file_label, g)
+    }
+    g.embeddings.push(r.embedding)
+  }
+  return [...byLabel.values()]
+}
+
+export function deleteWindowEmbeddingsForRecording(recordingId: string): void {
+  run('DELETE FROM recording_window_embeddings WHERE recording_id = ?', [recordingId])
+}
+
+export function deleteWindowEmbeddingsForLabel(recordingId: string, fileLabel: string): void {
+  run('DELETE FROM recording_window_embeddings WHERE recording_id = ? AND file_label = ?', [recordingId, fileLabel])
+}
+
+/** Atomically replace one label's window rows: DELETE the label's existing rows + INSERT the
+ *  fresh set inside ONE transaction, saving the sql.js image ONCE. This is the recompute accessor
+ *  the matcher uses — a separate delete + batch-insert would be TWO auto-saving transactions with a
+ *  crash window that could leave the label with zero rows (spec §4.4 atomicity). Empty `rows` just
+ *  deletes the label. */
+export function replaceWindowEmbeddingsForLabel(
+  recordingId: string,
+  fileLabel: string,
+  rows: WindowEmbeddingRow[]
+): void {
+  const now = new Date().toISOString()
+  runInTransaction(() => {
+    runNoSave('DELETE FROM recording_window_embeddings WHERE recording_id = ? AND file_label = ?', [
+      recordingId,
+      fileLabel,
+    ])
+    if (rows.length === 0) return
+    const stmt = getDatabase().prepare(`INSERT OR REPLACE INTO recording_window_embeddings
+      (id, recording_id, transcript_id, diarization_run_id, file_label, window_index, fingerprint,
+       model_id, model_version, dim, embedding, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    try {
+      for (const r of rows) {
+        stmt.bind([
+          r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
+          r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
+          r.dim, r.embedding, r.created_at ?? now
+        ])
+        stmt.step()
+        stmt.reset()
+      }
+    } finally {
+      stmt.free()
+    }
+  })
+}
+
 export interface SpeakerSuggestion {
   id: string; recording_id: string; transcript_id?: string | null; diarization_run_id?: string | null
   kind: 'identity' | 'merge' | 'mixed' | 'backstop'

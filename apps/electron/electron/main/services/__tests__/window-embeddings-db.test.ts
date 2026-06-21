@@ -13,12 +13,17 @@ vi.mock('electron', () => ({
   },
 }))
 
+// Helper shared by both describes: pre-create the HiDock/data directory so sql.js saveDatabase() can write.
+function setupTmpDir(dir: string) {
+  mkdirSync(join(dir, 'HiDock', 'data'), { recursive: true })
+}
+
 describe('recording_window_embeddings schema (v32)', () => {
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'rwe-schema-'))
     // DEFAULT_CONFIG.storage.dataPath = join(app.getPath('home'), 'HiDock') = tmpDir/HiDock
     // getDatabasePath() = tmpDir/HiDock/data/hidock.db — pre-create so saveDatabase() can write
-    mkdirSync(join(tmpDir, 'HiDock', 'data'), { recursive: true })
+    setupTmpDir(tmpDir)
     vi.resetModules()
   })
   afterEach(() => {
@@ -106,5 +111,155 @@ describe('recording_window_embeddings schema (v32)', () => {
       "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_rwe_recording_label'"
     )
     expect(idx.length).toBe(1)
+  })
+})
+
+describe('window-embedding accessors', () => {
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'rwe-acc-'))
+    setupTmpDir(tmpDir)
+    vi.resetModules()
+  })
+  afterEach(() => {
+    try { rmSync(tmpDir, { recursive: true, force: true }) } catch { /* ignore */ }
+  })
+
+  const blob = (vals: number[]) => {
+    const f32 = Float32Array.from(vals)
+    return new Uint8Array(f32.buffer.slice(0))
+  }
+
+  it('batch insert round-trips grouped by label, ordered by window_index', async () => {
+    const db = await import('../database')
+    await db.initializeDatabase()
+    db.insertWindowEmbeddingsBatch([
+      { id: 'rwe_rec1_A_1', recording_id: 'rec1', file_label: 'A', window_index: 1,
+        fingerprint: 'fpA', model_id: 'm', model_version: 1, dim: 2, embedding: blob([0.1, 0.2]) },
+      { id: 'rwe_rec1_A_0', recording_id: 'rec1', file_label: 'A', window_index: 0,
+        fingerprint: 'fpA', model_id: 'm', model_version: 1, dim: 2, embedding: blob([0.3, 0.4]) },
+      { id: 'rwe_rec1_B_0', recording_id: 'rec1', file_label: 'B', window_index: 0,
+        fingerprint: 'fpB', model_id: 'm', model_version: 1, dim: 2, embedding: blob([0.5, 0.6]) },
+    ])
+    const groups = db.getWindowEmbeddingsForRecording('rec1', 'm', 1)
+    const a = groups.find((g) => g.fileLabel === 'A')!
+    expect(a.fingerprint).toBe('fpA')
+    expect(a.embeddings.length).toBe(2)
+    // window_index 0 first
+    expect(new Float32Array(a.embeddings[0].buffer.slice(0))[0]).toBeCloseTo(0.3)
+    expect(new Float32Array(a.embeddings[1].buffer.slice(0))[0]).toBeCloseTo(0.1)
+    expect(groups.find((g) => g.fileLabel === 'B')!.fingerprint).toBe('fpB')
+  })
+
+  it('getWindowEmbeddingsForRecording filters stale model_id / model_version', async () => {
+    const db = await import('../database')
+    await db.initializeDatabase()
+    db.insertWindowEmbeddingsBatch([
+      { id: 'rwe_x_A_0', recording_id: 'recX', file_label: 'A', window_index: 0,
+        fingerprint: 'fp', model_id: 'good', model_version: 1, dim: 1, embedding: blob([1]) },
+      { id: 'rwe_x_B_0', recording_id: 'recX', file_label: 'B', window_index: 0,
+        fingerprint: 'fp', model_id: 'stale', model_version: 1, dim: 1, embedding: blob([1]) },
+      { id: 'rwe_x_C_0', recording_id: 'recX', file_label: 'C', window_index: 0,
+        fingerprint: 'fp', model_id: 'good', model_version: 9, dim: 1, embedding: blob([1]) },
+    ])
+    const groups = db.getWindowEmbeddingsForRecording('recX', 'good', 1)
+    expect(groups.map((g) => g.fileLabel)).toEqual(['A'])
+  })
+
+  it('deleteWindowEmbeddingsForLabel removes only that label', async () => {
+    const db = await import('../database')
+    await db.initializeDatabase()
+    db.insertWindowEmbeddingsBatch([
+      { id: 'rwe_d_A_0', recording_id: 'recD', file_label: 'A', window_index: 0,
+        fingerprint: 'fp', model_id: 'm', model_version: 1, dim: 1, embedding: blob([1]) },
+      { id: 'rwe_d_B_0', recording_id: 'recD', file_label: 'B', window_index: 0,
+        fingerprint: 'fp', model_id: 'm', model_version: 1, dim: 1, embedding: blob([1]) },
+    ])
+    db.deleteWindowEmbeddingsForLabel('recD', 'A')
+    expect(db.getWindowEmbeddingsForRecording('recD', 'm', 1).map((g) => g.fileLabel)).toEqual(['B'])
+  })
+
+  it('deleteWindowEmbeddingsForRecording removes all rows for the recording', async () => {
+    const db = await import('../database')
+    await db.initializeDatabase()
+    db.insertWindowEmbeddingsBatch([
+      { id: 'rwe_r_A_0', recording_id: 'recR', file_label: 'A', window_index: 0,
+        fingerprint: 'fp', model_id: 'm', model_version: 1, dim: 1, embedding: blob([1]) },
+    ])
+    db.deleteWindowEmbeddingsForRecording('recR')
+    expect(db.getWindowEmbeddingsForRecording('recR', 'm', 1)).toEqual([])
+  })
+
+  it('empty batch is a no-op (does not throw)', async () => {
+    const db = await import('../database')
+    await db.initializeDatabase()
+    expect(() => db.insertWindowEmbeddingsBatch([])).not.toThrow()
+  })
+
+  it('replaceWindowEmbeddingsForLabel atomically swaps a label\'s rows in one transaction', async () => {
+    const db = await import('../database')
+    await db.initializeDatabase()
+    // Seed label A under the OLD fingerprint (2 windows) and label B (untouched).
+    db.insertWindowEmbeddingsBatch([
+      { id: 'rwe_rp_A_0', recording_id: 'recP', file_label: 'A', window_index: 0,
+        fingerprint: 'OLD', model_id: 'm', model_version: 1, dim: 1, embedding: blob([1]) },
+      { id: 'rwe_rp_A_1', recording_id: 'recP', file_label: 'A', window_index: 1,
+        fingerprint: 'OLD', model_id: 'm', model_version: 1, dim: 1, embedding: blob([2]) },
+      { id: 'rwe_rp_B_0', recording_id: 'recP', file_label: 'B', window_index: 0,
+        fingerprint: 'OLD', model_id: 'm', model_version: 1, dim: 1, embedding: blob([9]) },
+    ])
+    // Replace A with a single fresh window under a NEW fingerprint.
+    db.replaceWindowEmbeddingsForLabel('recP', 'A', [
+      { id: 'rwe_rp_A_0', recording_id: 'recP', file_label: 'A', window_index: 0,
+        fingerprint: 'NEW', model_id: 'm', model_version: 1, dim: 1, embedding: blob([7]) },
+    ])
+    const groups = db.getWindowEmbeddingsForRecording('recP', 'm', 1)
+    const a = groups.find((g) => g.fileLabel === 'A')!
+    expect(a.fingerprint).toBe('NEW')
+    expect(a.embeddings.length).toBe(1) // old 2 rows gone, 1 fresh row present
+    expect(new Float32Array(a.embeddings[0].buffer.slice(0))[0]).toBeCloseTo(7)
+    // Label B is untouched.
+    expect(groups.find((g) => g.fileLabel === 'B')!.embeddings.length).toBe(1)
+  })
+
+  it('replaceWindowEmbeddingsForLabel with empty rows just deletes the label', async () => {
+    const db = await import('../database')
+    await db.initializeDatabase()
+    db.insertWindowEmbeddingsBatch([
+      { id: 'rwe_re_A_0', recording_id: 'recE', file_label: 'A', window_index: 0,
+        fingerprint: 'fp', model_id: 'm', model_version: 1, dim: 1, embedding: blob([1]) },
+    ])
+    db.replaceWindowEmbeddingsForLabel('recE', 'A', [])
+    expect(db.getWindowEmbeddingsForRecording('recE', 'm', 1)).toEqual([])
+  })
+
+  // The headline guarantee: what insertWindowEmbeddingsBatch writes is byte-exact readable by
+  // getWindowEmbeddingsForRecording AFTER a simulated restart (vi.resetModules re-imports the
+  // module, dropping the in-process DB handle and forcing a re-open from the temp-dir image), and
+  // a fingerprint recomputed "in session 2" matches the one persisted "in session 1". If this
+  // round-trip ever drifted, every restart would be a silent cache miss and the feature would do
+  // nothing — yet the mocked unit tests would still pass. *(improvement-high "restart-survival".)*
+  it('persisted window rows survive a simulated restart and round-trip bit-exact', async () => {
+    const vec = Float32Array.from([0.125, -0.5, 0.75, 1.0])
+    // Session 1: init, write.
+    {
+      const db = await import('../database')
+      await db.initializeDatabase()
+      db.insertWindowEmbeddingsBatch([
+        { id: 'rwe_surv_A_0', recording_id: 'recSurv', file_label: 'A', window_index: 0,
+          fingerprint: 'fp-session1', model_id: 'm', model_version: 1, dim: vec.length,
+          embedding: new Uint8Array(vec.buffer.slice(0)) },
+      ])
+    }
+    // Session 2: drop module cache (re-open the on-disk image), read back.
+    vi.resetModules()
+    {
+      const db = await import('../database')
+      await db.initializeDatabase()
+      const groups = db.getWindowEmbeddingsForRecording('recSurv', 'm', 1)
+      const a = groups.find((g) => g.fileLabel === 'A')!
+      expect(a.fingerprint).toBe('fp-session1')
+      const readBack = new Float32Array(a.embeddings[0].buffer.slice(0))
+      expect(Array.from(readBack)).toEqual(Array.from(vec)) // bit-exact
+    }
   })
 })
