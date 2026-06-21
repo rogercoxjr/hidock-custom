@@ -26,16 +26,10 @@ import {
 import { toast } from '@/components/ui/toaster'
 import { RecordingLinkDialog } from '@/components/RecordingLinkDialog'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
+import { useConfigStore } from '@/store/domain/useConfigStore'
+import { labelName } from '@/features/library/utils'
 import { formatDateTime, formatDuration, formatBytes } from '@/lib/utils'
-
-const CATEGORY_OPTIONS = [
-  { value: 'meeting', label: 'Meeting' },
-  { value: 'interview', label: 'Interview' },
-  { value: '1:1', label: '1:1' },
-  { value: 'brainstorm', label: 'Brainstorm' },
-  { value: 'note', label: 'Note' },
-  { value: 'other', label: 'Other' },
-] as const
 
 interface SourceReaderProps {
   recording: UnifiedRecording | null
@@ -92,6 +86,9 @@ export function SourceReader({
 
   // Category saving state
   const [isSavingCategory, setIsSavingCategory] = useState(false)
+
+  // Smart Labels taxonomy — drives the category dropdown options + display names.
+  const labelItems = useConfigStore((s) => s.config?.labels?.items) ?? []
 
   // Meeting link dialog state
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
@@ -288,6 +285,12 @@ export function SourceReader({
   const handleCategoryChange = useCallback(async (newCategory: string) => {
     if (!recording?.knowledgeCaptureId) return
     if (newCategory === recording.category) return
+    // App-layer validation (replaces the dropped DB CHECK): only persist a category
+    // that exists in the taxonomy.
+    if (!labelItems.some((l) => l.id === newCategory)) {
+      toast.error('Unknown label')
+      return
+    }
     setIsSavingCategory(true)
     try {
       const result = await window.electronAPI.knowledge.update(
@@ -307,7 +310,7 @@ export function SourceReader({
     } finally {
       setIsSavingCategory(false)
     }
-  }, [recording, onMetadataEdited])
+  }, [recording, onMetadataEdited, labelItems])
 
   const handleRemoveMeetingLink = useCallback(async () => {
     if (!recording) return
@@ -425,32 +428,49 @@ export function SourceReader({
               <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Quality</p>
               <p className="capitalize text-foreground">{recording.quality || 'Standard'}</p>
             </div>
-            {recording.knowledgeCaptureId ? (
-              <div>
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Category</p>
+            <div>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Category</p>
+              {recording.knowledgeCaptureId ? (
                 <Select
                   value={recording.category || ''}
                   onValueChange={handleCategoryChange}
                   disabled={isSavingCategory}
                 >
                   <SelectTrigger className="h-7 w-[140px] text-sm">
-                    <SelectValue placeholder="Select category" />
+                    <SelectValue placeholder="Select category">
+                      {labelName(labelItems, recording.category) || undefined}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORY_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
+                    {labelItems.map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            ) : recording.category ? (
-              <div>
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Category</p>
-                <p className="capitalize text-foreground">{recording.category}</p>
-              </div>
-            ) : null}
+              ) : (
+                // S4: no capture row to write to (device-only / untranscribed) — show a
+                // disabled control with a tooltip explaining how to unlock labeling.
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0} className="inline-block">
+                        <Select value="" disabled>
+                          <SelectTrigger
+                            className="h-7 w-[140px] text-sm"
+                            aria-label="Category (transcribe to enable)"
+                          >
+                            <SelectValue placeholder="Not labeled" />
+                          </SelectTrigger>
+                        </Select>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Transcribe to label this recording</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
             <div>
               <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Location</p>
               <p className="capitalize text-foreground">{recording.location.replace('-', ' ')}</p>

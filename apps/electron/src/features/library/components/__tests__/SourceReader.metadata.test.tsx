@@ -25,6 +25,28 @@ vi.mock('@radix-ui/react-portal', () => ({
   Portal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
+// Provide the Smart Labels taxonomy so the category dropdown has options and the
+// app-layer category validation accepts built-in ids.
+vi.mock('@/store/domain/useConfigStore', () => ({
+  useConfigStore: vi.fn((selector?: any) => {
+    const state = {
+      config: {
+        labels: {
+          items: [
+            { id: 'meeting', name: 'Meeting', color: 'blue', builtin: true },
+            { id: 'interview', name: 'Interview', color: 'teal', builtin: true },
+            { id: '1:1', name: '1:1', color: 'green', builtin: true },
+            { id: 'brainstorm', name: 'Brainstorm', color: 'amber', builtin: true },
+            { id: 'note', name: 'Note', color: 'violet', builtin: true },
+            { id: 'other', name: 'Other', color: 'slate', builtin: true }
+          ]
+        }
+      }
+    }
+    return typeof selector === 'function' ? selector(state) : state
+  })
+}))
+
 // Mock toast to track calls
 vi.mock('@/components/ui/toaster', () => ({
   toast: Object.assign(vi.fn(), {
@@ -87,13 +109,15 @@ vi.mock('../TranscriptViewer', () => ({
   TranscriptViewer: () => <div data-testid="transcript-viewer" />,
 }))
 
-// Mock Radix Select — jsdom cannot open portals, so render a native <select>
+// Mock Radix Select — jsdom cannot open portals, so render a native <select>.
+// Forward `disabled` so the S4 capture-gate (disabled control) is observable.
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ onValueChange, value, children }: any) => (
+  Select: ({ onValueChange, value, children, disabled }: any) => (
     <select
       data-testid="category-select"
       value={value}
-      onChange={(e) => onValueChange(e.target.value)}
+      disabled={disabled}
+      onChange={(e) => onValueChange?.(e.target.value)}
     >
       {children}
     </select>
@@ -289,6 +313,30 @@ describe('SourceReader — metadata editing', () => {
     fireEvent.change(screen.getByTestId('category-select'), { target: { value: 'meeting' } })
 
     // Allow microtasks to flush
+    await new Promise((r) => setTimeout(r, 0))
+    expect(mockKnowledgeUpdate).not.toHaveBeenCalled()
+  })
+
+  // 9c. S4 — capture-gated manual assignment: no capture row → disabled control,
+  // no write. (The category Select is rendered disabled with a "transcribe" hint.)
+  it('renders a DISABLED category control for a recording with no knowledgeCaptureId', () => {
+    const rec = makeRecording({ knowledgeCaptureId: undefined, category: undefined })
+    render(<SourceReader recording={rec} />)
+
+    // The category control still renders, but disabled (gated on a capture row).
+    const select = screen.getByTestId('category-select')
+    expect(select).toBeDisabled()
+  })
+
+  it('renders an ENABLED category control when a capture row exists', () => {
+    const rec = makeRecording({ knowledgeCaptureId: 'kc-1', category: 'meeting' })
+    render(<SourceReader recording={rec} />)
+    expect(screen.getByTestId('category-select')).not.toBeDisabled()
+  })
+
+  it('does not call knowledge.update for a category change when there is no capture', async () => {
+    const rec = makeRecording({ knowledgeCaptureId: undefined, category: undefined })
+    render(<SourceReader recording={rec} />)
     await new Promise((r) => setTimeout(r, 0))
     expect(mockKnowledgeUpdate).not.toHaveBeenCalled()
   })
