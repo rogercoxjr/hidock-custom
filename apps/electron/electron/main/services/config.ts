@@ -90,7 +90,34 @@ export interface AppConfig {
     excludeVoiceprintsFromBackup: boolean  // keep biometric prints out of sync/backups by default
   }
   voiceMatching: VoiceMatchingConfig
+  // Smart Labels (v1 manual taxonomy) — user-owned category list. Assignment lives in
+  // knowledge_captures.category; this is the source of truth for the chip taxonomy/colors.
+  labels: {
+    items: LabelDefinition[]
+  }
 }
+
+/** A user-owned category label. `id` is an immutable slug; `name` is editable display. */
+export interface LabelDefinition {
+  id: string        // immutable slug, e.g. 'meeting' — equals the stored knowledge_captures.category
+  name: string      // editable display, e.g. 'Meeting'
+  color: string     // Harbor palette token name (see src/features/library/utils/labelPalette.ts)
+  builtin?: boolean  // true for the 6 seeds; blocks hard-delete
+}
+
+/**
+ * The six built-in labels seeded for every user (and back-filled into existing
+ * configs via deepMerge). `id`s match the legacy hardcoded CATEGORIES so existing
+ * knowledge_captures.category values keep resolving. `color` is a Harbor palette token.
+ */
+export const BUILTIN_LABELS: LabelDefinition[] = [
+  { id: 'meeting', name: 'Meeting', color: 'blue', builtin: true },
+  { id: 'interview', name: 'Interview', color: 'teal', builtin: true },
+  { id: '1:1', name: '1:1', color: 'green', builtin: true },
+  { id: 'brainstorm', name: 'Brainstorm', color: 'amber', builtin: true },
+  { id: 'note', name: 'Note', color: 'violet', builtin: true },
+  { id: 'other', name: 'Other', color: 'slate', builtin: true }
+]
 
 export interface VoiceMatchingConfig extends MatchThresholds {
   modelId: string      // must equal the active VOICEPRINT_MODEL_ID to use these thresholds
@@ -167,6 +194,10 @@ const DEFAULT_CONFIG: AppConfig = {
     maxMergeSuggestions: 5,
     calibrated: false,
     modelId: '3dspeaker_eres2net_en_voxceleb'
+  },
+  labels: {
+    // Spread copies so the shared BUILTIN_LABELS array is never mutated by config edits.
+    items: BUILTIN_LABELS.map((l) => ({ ...l }))
   }
 }
 

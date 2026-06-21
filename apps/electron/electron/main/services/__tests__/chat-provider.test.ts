@@ -15,7 +15,8 @@ vi.mock('../config', () => ({
     device: { autoConnect: false, autoDownload: false },
     ui: { theme: 'system', defaultView: 'week', startOfWeek: 1, calendarView: 'week', hideEmptyMeetings: true, showListView: false },
     privacy: { enableVoiceprintCapture: false, excludeVoiceprintsFromBackup: true },
-    voiceMatching: { matchSuggest: 0.42, matchAuto: 0.55, matchMargin: 0.06, mergeThreshold: 0.62, mixedDispersion: 0.35, centroidOutlier: 0.25, bankConsistency: 0.35, maxMergeSuggestions: 5, calibrated: false, modelId: '3dspeaker_eres2net_en_voxceleb' }
+    voiceMatching: { matchSuggest: 0.42, matchAuto: 0.55, matchMargin: 0.06, mergeThreshold: 0.62, mixedDispersion: 0.35, centroidOutlier: 0.25, bankConsistency: 0.35, maxMergeSuggestions: 5, calibrated: false, modelId: '3dspeaker_eres2net_en_voxceleb' },
+    labels: { items: [{ id: 'meeting', name: 'Meeting', color: 'blue', builtin: true }] }
   })),
   initializeConfig: vi.fn(),
   saveConfig: vi.fn(),
@@ -81,7 +82,8 @@ const baseConfig = {
     maxMergeSuggestions: 5,
     calibrated: false,
     modelId: '3dspeaker_eres2net_en_voxceleb'
-  }
+  },
+  labels: { items: [{ id: 'meeting', name: 'Meeting', color: 'blue', builtin: true }] }
 }
 
 const mockOllamaService = {
