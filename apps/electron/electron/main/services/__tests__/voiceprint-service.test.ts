@@ -113,6 +113,7 @@ vi.mock('../database', () => ({
   insertLabelEmbedding: vi.fn(),
   getLabelEmbeddingsForRecording: vi.fn(() => []),
   deleteLabelEmbeddingsForRecording: vi.fn(),
+  deleteWindowEmbeddingsForRecording: vi.fn(),
   getActiveVoiceprintsByContactId: vi.fn(() => []),
   getSuggestionsForRecording: vi.fn(() => []),
   getVoiceprintsBySource: vi.fn(() => []),

@@ -18,6 +18,7 @@ vi.mock('../../services/database', () => ({
   getPendingSuggestions: vi.fn(),
   getSelfContactId: vi.fn(),
   deleteLabelEmbeddingsForRecording: vi.fn(),
+  deleteWindowEmbeddingsForRecording: vi.fn(),
   expireSuggestionsForRecording: vi.fn(),
   acceptSuggestion: vi.fn(),
   dismissSuggestion: vi.fn()

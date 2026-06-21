@@ -52,6 +52,7 @@ vi.mock('../database', () => ({
   releaseTranscriptionLock: vi.fn().mockReturnValue(true),
   deleteRecordingSpeakersForRecording: vi.fn(),
   deleteLabelEmbeddingsForRecording: vi.fn(),
+  deleteWindowEmbeddingsForRecording: vi.fn(),
   expireSuggestionsForRecording: vi.fn(),
   clearStaleTranscriptionLock: vi.fn(), // Called on startTranscriptionProcessor()
   resetStuckTranscriptions: vi.fn().mockReturnValue({ recordingsReset: 0, queueItemsReset: 0 }), // Called on startTranscriptionProcessor()

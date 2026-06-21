@@ -18,6 +18,7 @@ import {
   getPendingSuggestions,
   getSelfContactId,
   deleteLabelEmbeddingsForRecording,
+  deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
   acceptSuggestion as dbAcceptSuggestion,
   dismissSuggestion as dbDismissSuggestion,
@@ -293,6 +294,8 @@ export function registerSpeakersHandlers(): void {
         // A merge changes the label set for this diarization run; drop stale embeddings
         // and suggestions so the next panel-open mints a fresh run id and re-matches.
         deleteLabelEmbeddingsForRecording(recordingId)
+        deleteWindowEmbeddingsForRecording(recordingId)
+        clearSuggestionsInFlight(recordingId) // evict any pre-edit compute (Task 5)
         expireSuggestionsForRecording(recordingId)
 
         // 2. Preserve the mapping: if toLabel has no row but fromLabel does, carry it over.
@@ -395,6 +398,14 @@ export function registerSpeakersHandlers(): void {
 
         const { recordingId, turns } = parsed.data
         updateTranscriptTurns(recordingId, turns as Turn[])
+        // Per-turn reassign edits turn membership without minting a new run id. The window
+        // fingerprint already forces a window recompute, but LABEL embeddings (identity/merge
+        // scoring) are computed from the clean-speech set and would otherwise stay stale — so drop
+        // BOTH, matching what speakers:merge does, and evict any in-flight compute so the renderer's
+        // post-edit refresh starts fresh. (spec §6; improvement-high "label embeddings stale".)
+        deleteLabelEmbeddingsForRecording(recordingId)
+        deleteWindowEmbeddingsForRecording(recordingId)
+        clearSuggestionsInFlight(recordingId)
         return success({ recordingId })
       } catch (err) {
         console.error('transcripts:updateTurns error:', err)

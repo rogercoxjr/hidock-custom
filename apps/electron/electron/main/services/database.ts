@@ -2645,6 +2645,8 @@ export function deleteRecordingLocal(id: string): void {
     on_local: 0,
     location: newLocation as Recording['location']
   })
+  deleteLabelEmbeddingsForRecording(id)
+  deleteWindowEmbeddingsForRecording(id)
 }
 
 export function insertRecording(recording: Omit<Recording, 'created_at'>): void {

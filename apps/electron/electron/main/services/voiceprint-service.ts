@@ -24,6 +24,7 @@ import {
   insertLabelEmbedding,
   getLabelEmbeddingsForRecording,
   deleteLabelEmbeddingsForRecording,
+  deleteWindowEmbeddingsForRecording,
   getActiveVoiceprintsByContactId,
   getSuggestionsForRecording,
   getRecordingSpeaker
@@ -480,6 +481,7 @@ export async function embedRecordingLabels(recordingId: string): Promise<void> {
   const hasStale = existing.some((e) => e.model_id !== VOICEPRINT_MODEL_ID || e.model_version !== VOICEPRINT_MODEL_VERSION)
   if (hasStale) {
     deleteLabelEmbeddingsForRecording(recordingId)
+    deleteWindowEmbeddingsForRecording(recordingId)
   } else if (existing.length > 0) {
     return
   }
