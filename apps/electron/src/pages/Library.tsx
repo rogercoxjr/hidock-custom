@@ -55,7 +55,7 @@ export function Library() {
   // Selected source for center panel
   const selectedSourceId = useLibraryStore((state) => state.selectedSourceId)
   const setSelectedSourceId = useLibraryStore((state) => state.setSelectedSourceId)
-  const selectSingle = useLibraryStore((state) => state.selectSingle)
+  const openSource = useLibraryStore((state) => state.openSource)
 
   // Centralized operations (downloads + transcriptions)
   const {
@@ -785,15 +785,16 @@ export function Library() {
       return
     }
     audioControls.stop()
-    // selectSingle also seeds selectedIds to [id]; the plain-click router clears
-    // the bulk set first so a plain click never leaves stale multi-selection.
-    selectSingle(recording.id)
+    // openSource sets ONLY selectedSourceId (the detail pane), never the bulk set
+    // (selectedIds) — so opening a single record does not show the bulk-actions bar.
+    // The plain-click router still clears any prior bulk selection first.
+    openSource(recording.id)
 
     const { waveformLoadedForId } = useUIStore.getState()
     if (hasLocalPath(recording) && waveformLoadedForId !== recording.id) {
       audioControls.loadWaveformOnly(recording.id, recording.localPath)
     }
-  }, [selectedSourceId, setSelectedSourceId, selectSingle, audioControls])
+  }, [selectedSourceId, setSelectedSourceId, openSource, audioControls])
 
   // Unified Finder-style click router for SourceRow / SourceCard.
   //  • Shift-click (anchor exists) → selectRange(anchor → id); does NOT open detail

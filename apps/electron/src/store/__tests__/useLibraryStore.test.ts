@@ -343,6 +343,31 @@ describe('useLibraryStore', () => {
   })
 
   describe('Selection', () => {
+    it('openSource sets selectedSourceId WITHOUT touching the bulk set', () => {
+      const { openSource } = useLibraryStore.getState()
+
+      openSource('rec-1')
+
+      const state = useLibraryStore.getState()
+      expect(state.selectedSourceId).toBe('rec-1')
+      // Opening a record must NOT populate selectedIds — otherwise the
+      // bulk-actions bar (gated on selectedIds.size) would appear on a single open.
+      expect(state.selectedIds.size).toBe(0)
+    })
+
+    it('open (selectedSourceId) and bulk (selectedIds) are independent', () => {
+      const { openSource, toggleSelection } = useLibraryStore.getState()
+
+      openSource('rec-1') // detail open, bulk empty
+      expect(useLibraryStore.getState().selectedIds.size).toBe(0)
+
+      toggleSelection('rec-2') // deliberate bulk-select grows the bulk set
+      const state = useLibraryStore.getState()
+      expect(state.selectedSourceId).toBe('rec-1')
+      expect(state.selectedIds.size).toBe(1)
+      expect(state.selectedIds.has('rec-2')).toBe(true)
+    })
+
     it('toggleSelection adds ID when not selected', () => {
       const { toggleSelection } = useLibraryStore.getState()
 

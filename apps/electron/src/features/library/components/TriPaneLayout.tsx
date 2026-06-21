@@ -141,8 +141,11 @@ export function TriPaneLayout({ leftPanel, centerPanel, rightPanel }: TriPaneLay
   )
 
   // The detail panel content (back bar shows only in the narrow/hidden state).
+  // Eases in (fade + slide from right) when it mounts on selection, so the reader
+  // doesn't pop in. One-shot on mount — navigating between records keeps it mounted,
+  // so it doesn't re-animate on every record switch.
   const detailContent = (
-    <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
+    <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-200">
       {/* Header bar — back button when list is hidden (narrow), and/or the desktop
           inline-assistant re-open toggle. Rendered only when it has something to show. */}
       {(listIsHidden || inlineToggleButton) && (
@@ -197,8 +200,14 @@ export function TriPaneLayout({ leftPanel, centerPanel, rightPanel }: TriPaneLay
       {/* List + detail group (inline Assistant becomes a flex:none sibling after it) */}
       <div className="flex min-w-0 flex-1 overflow-hidden">
         {listIsRail ? (
-          // WIDE + SELECTED → draggable rail + detail split.
-          <ResizablePanelGroup direction="horizontal" className="h-full w-full" onLayout={handleLayout}>
+          // WIDE + SELECTED → draggable rail + detail split. The whole rail+detail
+          // group fades in on mount so the switch from the full-width list eases in
+          // (masking the list's reflow to the narrow rail) rather than snapping.
+          <ResizablePanelGroup
+            direction="horizontal"
+            className="h-full w-full motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
+            onLayout={handleLayout}
+          >
             <ResizablePanel
               defaultSize={railDefault}
               minSize={RAIL_MIN_PCT}
