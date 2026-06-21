@@ -59,8 +59,8 @@ export const useAudioControls = () => {
   // delegate to window.__audioControls at call time, so they always
   // reference the latest implementation.
   return useMemo(() => ({
-    play: (recordingId: string, filePath: string) => {
-      window.__audioControls?.play(recordingId, filePath)
+    play: (recordingId: string, filePath: string, startTimeSeconds?: number) => {
+      window.__audioControls?.play(recordingId, filePath, startTimeSeconds)
     },
     pause: () => {
       window.__audioControls?.pause()

@@ -254,14 +254,15 @@ export function Library() {
     onConfirm: () => void
   }>({ open: false, title: '', description: '', actionLabel: 'Delete', onConfirm: () => {} })
 
-  // Selection for bulk operations
+  // Selection for bulk operations (multi-select driven by modifier-clicks below)
   const {
     selectedIds,
     selectedCount,
     toggleSelection,
     selectAll,
+    selectRange,
     clearSelection,
-    handleSelectionClick
+    lastSelectedRef
   } = useSourceSelection()
 
   // Accessibility announcements
@@ -454,7 +455,7 @@ export function Library() {
   // Memoize the list of IDs for keyboard navigation
   const itemIds = useMemo(() => filteredRecordings.map((r) => r.id), [filteredRecordings])
 
-  // C-005: Ref to hold the latest openDetail handler, wired to handleRowClick below
+  // C-005: Ref to hold the latest openDetail handler (keyboard Enter → open detail)
   const openDetailRef = useRef<(id: string) => void>(() => {})
 
   // Keyboard navigation for accessibility - LB-19 fix: Use focusedIndex and containerRef
@@ -774,14 +775,18 @@ export function Library() {
     [toggleTranscript]
   )
 
-  // Handle row click for tri-pane layout
-  const handleRowClick = useCallback((recording: UnifiedRecording) => {
-    // Clicking the already-selected row deselects it (closes detail pane)
+  // Open the detail pane for a recording (toggles closed if it's already open).
+  // This is the "plain click" / keyboard-Enter / overflow-pill path: it does NOT
+  // touch the bulk-selection set.
+  const openDetail = useCallback((recording: UnifiedRecording) => {
+    // Clicking the already-open row deselects it (closes detail pane)
     if (selectedSourceId === recording.id) {
       setSelectedSourceId(null)
       return
     }
     audioControls.stop()
+    // selectSingle also seeds selectedIds to [id]; the plain-click router clears
+    // the bulk set first so a plain click never leaves stale multi-selection.
     selectSingle(recording.id)
 
     const { waveformLoadedForId } = useUIStore.getState()
@@ -790,11 +795,38 @@ export function Library() {
     }
   }, [selectedSourceId, setSelectedSourceId, selectSingle, audioControls])
 
-  // C-005: Keep openDetailRef in sync with handleRowClick + filteredRecordings
+  // Unified Finder-style click router for SourceRow / SourceCard.
+  //  • Shift-click (anchor exists) → selectRange(anchor → id); does NOT open detail
+  //  • Cmd/Ctrl-click               → toggleSelection(id); set anchor; does NOT open
+  //  • Plain click                  → clearSelection() then toggle the detail pane;
+  //                                   set anchor = id
+  const handleSourceClick = useCallback((recording: UnifiedRecording, e: React.MouseEvent) => {
+    const id = recording.id
+    const allIds = filteredRecordings.map((r) => r.id)
+
+    if (e.shiftKey && lastSelectedRef.current) {
+      selectRange(allIds, lastSelectedRef.current, id)
+      return
+    }
+
+    if (e.metaKey || e.ctrlKey) {
+      toggleSelection(id)
+      lastSelectedRef.current = id
+      return
+    }
+
+    // Plain click: clear any bulk selection, then toggle the detail pane.
+    clearSelection()
+    openDetail(recording)
+    lastSelectedRef.current = id
+  }, [filteredRecordings, lastSelectedRef, selectRange, toggleSelection, clearSelection, openDetail])
+
+  // C-005: Keep openDetailRef in sync with openDetail + filteredRecordings
+  // (keyboard Enter opens the detail pane without affecting bulk selection)
   openDetailRef.current = (id: string) => {
     const recording = filteredRecordings.find((r) => r.id === id)
     if (recording) {
-      handleRowClick(recording)
+      openDetail(recording)
     }
   }
 
@@ -1032,10 +1064,7 @@ export function Library() {
                           isSelected={selectedIds.has(recording.id)}
                           isActiveSource={selectedSourceId === recording.id}
                           searchQuery={deferredSearchQuery}
-                          onSelectionChange={(id, shiftKey) =>
-                            handleSelectionClick(id, shiftKey, filteredRecordings.map((r) => r.id))
-                          }
-                          onClick={() => handleRowClick(recording)}
+                          onClick={(e) => handleSourceClick(recording, e)}
                           onPlay={() => {
                             if (hasLocalPath(recording)) {
                               setSelectedSourceId(recording.id)
@@ -1057,7 +1086,7 @@ export function Library() {
                           labels={rowLabels}
                           peopleKey={rowPeopleKey}
                           labelsKey={rowLabelsKey}
-                          onOverflowPeopleClick={() => handleRowClick(recording)}
+                          onOverflowPeopleClick={() => openDetail(recording)}
                         />
                       </div>
                     )
@@ -1105,10 +1134,7 @@ export function Library() {
                           isDeleting={deleting === recording.id}
                           deviceConnected={deviceConnected}
                           isSelected={selectedIds.has(recording.id)}
-                          onSelectionChange={(id, shiftKey) =>
-                            handleSelectionClick(id, shiftKey, filteredRecordings.map((r) => r.id))
-                          }
-                          onClick={() => handleRowClick(recording)}
+                          onClick={(e) => handleSourceClick(recording, e)}
                           onPlay={() => {
                             if (hasLocalPath(recording)) {
                               setSelectedSourceId(recording.id)
@@ -1127,7 +1153,7 @@ export function Library() {
                           labels={cardLabels}
                           peopleKey={cardPeopleKey}
                           labelsKey={cardLabelsKey}
-                          onOverflowPeopleClick={() => handleRowClick(recording)}
+                          onOverflowPeopleClick={() => openDetail(recording)}
                         />
                       </div>
                     )
@@ -1158,6 +1184,23 @@ export function Library() {
                   onSeek={(startMs) => {
                     if (hasLocalPath(selectedRecording)) {
                       audioControls.seek(startMs / 1000)
+                    }
+                  }}
+                  // Speaker-name jump: seek to a speaker's first turn and play.
+                  // If this recording is the active (already-loaded) audio, seek
+                  // the element directly and resume if it was paused — avoids a
+                  // full reload. Otherwise load+start it at the offset (the offset
+                  // is applied on loadedmetadata so it isn't dropped pre-load).
+                  // Device-only captures (no localPath) no-op.
+                  onJumpToTime={(startMs) => {
+                    if (!hasLocalPath(selectedRecording)) return
+                    const seconds = startMs / 1000
+                    const isActive = currentlyPlayingId === selectedRecording.id
+                    if (isActive) {
+                      audioControls.seek(seconds)
+                      if (!useUIStore.getState().isPlaying) audioControls.resume()
+                    } else {
+                      audioControls.play(selectedRecording.id, selectedRecording.localPath, seconds)
                     }
                   }}
                   // Action button callbacks

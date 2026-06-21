@@ -45,6 +45,11 @@ interface SourceReaderProps {
   onPlay?: () => void
   onStop?: () => void
   onSeek?: (startMs: number, endMs?: number) => void
+  // Jump audio to a speaker's first turn (ms) and start playing. Forwarded to
+  // SpeakersPanel so a speaker name click seeks+plays; transcript follows via
+  // the existing currentTimeMs highlight. Distinct from onSeek (transcript-line
+  // scrub) — this one loads+plays when the recording isn't the active audio.
+  onJumpToTime?: (startMs: number) => void
   // Action button callbacks
   onDownload?: () => void
   // `force` (D5 §6.8 / AC6) re-queues an already-transcribed recording, bypassing
@@ -72,6 +77,7 @@ export function SourceReader({
   onPlay,
   onStop,
   onSeek,
+  onJumpToTime,
   onDownload,
   onTranscribe,
   onResummarize,
@@ -390,7 +396,7 @@ export function SourceReader({
             ) : (
               <div className="group flex items-center gap-2">
                 <h2
-                  className="truncate font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink"
+                  className="line-clamp-2 font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink"
                   title={recording.title || meeting?.subject || recording.filename}
                 >
                   {recording.title || meeting?.subject || recording.filename}
@@ -775,6 +781,7 @@ export function SourceReader({
                   assignedNames={speakerNames}
                   assignedSpeakers={speakerAssignments}
                   suggestions={suggestions}
+                  onJumpToTime={onJumpToTime}
                   onChanged={() => { refreshSpeakers().catch(() => {}) }}
                 />
               </div>

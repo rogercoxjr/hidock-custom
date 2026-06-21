@@ -28,8 +28,8 @@ export function useAudioPlayback() {
 
   // ---- Play Audio ----
 
-  const playAudio = useCallback(async (recordingId: string, filePath: string) => {
-    if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Playing: ${recordingId}, path: ${filePath}`)
+  const playAudio = useCallback(async (recordingId: string, filePath: string, startTimeSeconds?: number) => {
+    if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Playing: ${recordingId}, path: ${filePath}${startTimeSeconds ? `, startAt: ${startTimeSeconds}s` : ''}`)
 
     // Wait for any pending operation to complete to prevent race conditions
     if (playbackLockRef.current) {
@@ -171,6 +171,30 @@ export function useAudioPlayback() {
 
         if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Setting audio src (Blob URL), mime: ${mimeType}, size: ${blob.size} bytes`)
         audioRef.current.src = audioBlobUrlRef.current
+
+        // Seek-after-load: a `seek()` fired immediately after `play()` is dropped
+        // because the element's metadata (duration / seekable range) isn't ready yet
+        // and `currentTime` can't be set reliably until then. When a start offset is
+        // requested, apply it once metadata is available (or immediately if already
+        // loaded) so the playhead lands at the requested turn before/at play start.
+        if (startTimeSeconds && startTimeSeconds > 0) {
+          const audio = audioRef.current
+          const applyStart = () => {
+            if (audioRef.current === audio) {
+              try {
+                audio.currentTime = startTimeSeconds
+              } catch {
+                // Ignore: out-of-range seeks settle to a valid position on play.
+              }
+            }
+          }
+          if (audio.readyState >= 1 /* HAVE_METADATA */) {
+            applyStart()
+          } else {
+            audio.addEventListener('loadedmetadata', applyStart, { once: true })
+          }
+        }
+
         if (shouldLogQa()) console.log('[QA-MONITOR][Operation] Calling audio.play()')
         await audioRef.current.play()
         if (shouldLogQa()) console.log('[QA-MONITOR][Operation] audio.play() resolved successfully')

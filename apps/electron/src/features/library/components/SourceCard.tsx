@@ -13,7 +13,6 @@ import {
   Wand2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AudioPlayer } from '@/components/AudioPlayer'
@@ -44,8 +43,11 @@ interface SourceCardProps {
   isDeleting: boolean
   deviceConnected: boolean
   isSelected?: boolean
-  onSelectionChange?: (id: string, shiftKey: boolean) => void
-  onClick?: () => void
+  /**
+   * Unified click handler. Receives the raw mouse event so the parent can read
+   * modifier keys (shift = range select, cmd/ctrl = toggle, plain = open detail).
+   */
+  onClick?: (e: React.MouseEvent) => void
   onPlay: () => void
   onStop: () => void
   onDownload: () => void
@@ -73,7 +75,6 @@ export const SourceCard = memo(function SourceCard({
   isDeleting,
   deviceConnected,
   isSelected = false,
-  onSelectionChange,
   onClick,
   onPlay,
   onStop,
@@ -93,45 +94,38 @@ export const SourceCard = memo(function SourceCard({
   const canPlay = hasLocalPath(recording)
   const error = useLibraryStore((state) => state.recordingErrors.get(recording.id))
 
-  const handleCheckboxClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onSelectionChange?.(recording.id, e.shiftKey)
-  }
-
   const handleCardClick = (e: React.MouseEvent) => {
-    // Don't trigger onClick if clicking on buttons, checkbox, or interactive elements
+    // Don't trigger onClick if clicking on buttons or interactive elements
     const target = e.target as HTMLElement
-    if (target.closest('button') || target.closest('[role="checkbox"]') || target.closest('a')) {
+    if (target.closest('button') || target.closest('a')) {
       return
     }
-    onClick?.()
+    onClick?.(e)
   }
 
   return (
     <Card
-      className={`${isSelected ? 'border-border-brand shadow-sm bg-accent-strong-soft' : ''} cursor-pointer transition-colors`}
+      // BULK-selected cards get a distinct teal selection tint + left accent bar
+      // (mirrors SourceRow), differentiating multi-select from a plain card.
+      className={[
+        'cursor-pointer transition-colors border-l-4',
+        isSelected ? 'bg-accent-2-soft border-l-accent-2 shadow-sm' : 'border-l-transparent'
+      ].join(' ')}
       onClick={handleCardClick}
       data-testid="source-card"
       role="option"
       aria-selected={isPlaying || isSelected}
+      data-selected={isSelected || undefined}
       tabIndex={0}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            {onSelectionChange && (
-              <Checkbox
-                checked={isSelected}
-                onClick={handleCheckboxClick}
-                aria-label={`Select ${recording.filename}`}
-                className="shrink-0"
-              />
-            )}
-            {/* Icon tile — selected uses bg-primary; otherwise surface-sunken w/ location-colored status icon */}
+            {/* Icon tile — selected uses teal accent; otherwise surface-sunken w/ location-colored status icon */}
             <div
               className={[
                 'flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md',
-                isSelected ? 'bg-primary text-primary-foreground' : 'bg-surface-sunken'
+                isSelected ? 'bg-accent-2 text-white' : 'bg-surface-sunken'
               ].join(' ')}
             >
               <StatusIcon recording={recording} />

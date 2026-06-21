@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface AudioControls {
-  play: (recordingId: string, filePath: string) => void
+  play: (recordingId: string, filePath: string, startTimeSeconds?: number) => void
   pause: () => void
   resume: () => void
   stop: () => void

@@ -204,6 +204,59 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     expect(screen.queryByRole('button', { name: /reassign turn/i })).not.toBeInTheDocument()
   })
 
+  describe('jump to first turn (speaker-name click)', () => {
+    it('clicking the speaker name calls onJumpToTime with that label\'s minimum startMs', async () => {
+      const onJumpToTime = vi.fn()
+      // Out-of-order turns: A's EARLIEST start (1000) appears AFTER a later A turn
+      // (3000) in array order, and B's earliest (500) is not first in the array.
+      // firstMs must be the minimum start per label, not the first-seen.
+      const turns: Turn[] = [
+        { speaker: 'A', startMs: 3000, endMs: 4000, text: 'a-late' },
+        { speaker: 'B', startMs: 500, endMs: 1500, text: 'b-early' },
+        { speaker: 'A', startMs: 1000, endMs: 2000, text: 'a-early' },
+      ]
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={turns}
+          onJumpToTime={onJumpToTime}
+          onChanged={vi.fn()}
+        />
+      )
+      // Speaker A name button -> A's minimum startMs (1000).
+      fireEvent.click(await screen.findByRole('button', { name: /play from where a first speaks/i }))
+      expect(onJumpToTime).toHaveBeenCalledTimes(1)
+      expect(onJumpToTime).toHaveBeenCalledWith(1000)
+
+      // Speaker B name button -> B's minimum startMs (500).
+      fireEvent.click(screen.getByRole('button', { name: /play from where b first speaks/i }))
+      expect(onJumpToTime).toHaveBeenCalledTimes(2)
+      expect(onJumpToTime).toHaveBeenLastCalledWith(500)
+    })
+
+    it('the Assign button does NOT trigger onJumpToTime', async () => {
+      const onJumpToTime = vi.fn()
+      render(
+        <SpeakersPanel
+          recordingId="rec-1"
+          meetingId="meet-1"
+          turns={makeTurns()}
+          onJumpToTime={onJumpToTime}
+          onChanged={vi.fn()}
+        />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /assign contact to a/i }))
+      expect(onJumpToTime).not.toHaveBeenCalled()
+    })
+
+    it('renders the speaker label as plain text (no jump button) when onJumpToTime is absent', async () => {
+      render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={makeTurns()} onChanged={vi.fn()} />)
+      expect(await screen.findByRole('button', { name: /assign contact to a/i })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /play from where .* first speaks/i })).not.toBeInTheDocument()
+    })
+  })
+
   describe('Phase 2A capture + un-bank', () => {
     it('renders assigned speaker contact names and exposes inline un-bank (AC2)', async () => {
       render(
