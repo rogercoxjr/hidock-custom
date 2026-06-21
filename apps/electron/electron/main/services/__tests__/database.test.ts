@@ -914,4 +914,81 @@ describe('Database Service', () => {
       expect(fs.writeFileSync).toHaveBeenCalled()
     })
   })
+
+  // =========================================================================
+  // getContacts / getContactById — voiceprint_count LEFT JOIN aggregate
+  // =========================================================================
+  describe('getContacts() voiceprint_count aggregate', () => {
+    it('prepared SQL includes the LEFT JOIN sub-aggregate for voiceprint_count', async () => {
+      const dbModule = await initTestDatabase()
+      mockDatabase.prepare.mockClear()
+
+      // First call: COUNT query (returns 0); second call: main SELECT (returns [])
+      setQueryResults([{ count: 0 }])
+
+      dbModule.getContacts()
+
+      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
+      const mainQuery = sqls.find((s) => s.includes('voiceprint_count'))
+      expect(mainQuery).toBeDefined()
+      expect(mainQuery).toContain('LEFT JOIN')
+      expect(mainQuery).toContain('disabled_at IS NULL')
+      expect(mainQuery).toContain('COALESCE')
+    })
+
+    it('getContacts qualifies WHERE columns with c. alias when search is passed', async () => {
+      const dbModule = await initTestDatabase()
+      mockDatabase.prepare.mockClear()
+      setQueryResults([{ count: 0 }])
+
+      dbModule.getContacts('mario')
+
+      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
+      const searchQuery = sqls.find((s) => s.includes('c.name'))
+      expect(searchQuery).toBeDefined()
+      expect(searchQuery).toContain('c.name LIKE')
+      expect(searchQuery).toContain('c.email LIKE')
+      expect(searchQuery).toContain('c.company LIKE')
+      expect(searchQuery).toContain('c.role LIKE')
+    })
+
+    it('getContacts qualifies type WHERE clause with c. alias when type is passed', async () => {
+      const dbModule = await initTestDatabase()
+      mockDatabase.prepare.mockClear()
+      setQueryResults([{ count: 0 }])
+
+      dbModule.getContacts(undefined, 'team')
+
+      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
+      const typeQuery = sqls.find((s) => s.includes('c.type'))
+      expect(typeQuery).toBeDefined()
+      expect(typeQuery).toContain('c.type = ?')
+    })
+
+    it('getContactById SQL also includes the LEFT JOIN and WHERE c.id = ?', async () => {
+      const dbModule = await initTestDatabase()
+      mockDatabase.prepare.mockClear()
+      setQueryResults([])
+
+      dbModule.getContactById('test-id')
+
+      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
+      const byIdQuery = sqls.find((s) => s.includes('voiceprint_count'))
+      expect(byIdQuery).toBeDefined()
+      expect(byIdQuery).toContain('LEFT JOIN')
+      expect(byIdQuery).toContain('disabled_at IS NULL')
+      expect(byIdQuery).toContain('WHERE c.id = ?')
+    })
+
+    it('getContactById binds the correct id parameter', async () => {
+      const dbModule = await initTestDatabase()
+      mockDatabase.prepare.mockClear()
+      setQueryResults([])
+
+      dbModule.getContactById('contact-uuid-123')
+
+      expect(mockStmt.bind).toHaveBeenCalledWith(['contact-uuid-123'])
+      expect(mockStmt.free).toHaveBeenCalled()
+    })
+  })
 })

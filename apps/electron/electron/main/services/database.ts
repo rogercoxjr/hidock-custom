@@ -3704,6 +3704,7 @@ export interface Contact {
   last_seen_at: string
   meeting_count: number
   created_at: string
+  voiceprint_count?: number
 }
 
 export type ContactRole = 'organizer' | 'attendee'
@@ -3716,18 +3717,25 @@ export interface MeetingContact {
 
 export function getContacts(search?: string, type?: string, limit = 100, offset = 0): { contacts: Contact[]; total: number } {
   let countSql = 'SELECT COUNT(*) as count FROM contacts'
-  let sql = 'SELECT * FROM contacts'
+  let sql = `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count
+FROM contacts c
+LEFT JOIN (
+  SELECT contact_id, COUNT(*) AS vp_count
+  FROM voiceprints
+  WHERE disabled_at IS NULL
+  GROUP BY contact_id
+) v ON v.contact_id = c.id`
   const params: unknown[] = []
   const whereClauses: string[] = []
 
   if (search) {
     const escaped = escapeLikePattern(search)
-    whereClauses.push("(name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR company LIKE ? ESCAPE '\\' OR role LIKE ? ESCAPE '\\')")
+    whereClauses.push("(c.name LIKE ? ESCAPE '\\' OR c.email LIKE ? ESCAPE '\\' OR c.company LIKE ? ESCAPE '\\' OR c.role LIKE ? ESCAPE '\\')")
     params.push(`%${escaped}%`, `%${escaped}%`, `%${escaped}%`, `%${escaped}%`)
   }
 
   if (type && type !== 'all') {
-    whereClauses.push('type = ?')
+    whereClauses.push('c.type = ?')
     params.push(type)
   }
 
@@ -3737,7 +3745,7 @@ export function getContacts(search?: string, type?: string, limit = 100, offset 
     sql += whereClause
   }
 
-  sql += ' ORDER BY meeting_count DESC, last_seen_at DESC LIMIT ? OFFSET ?'
+  sql += ' ORDER BY c.meeting_count DESC, c.last_seen_at DESC LIMIT ? OFFSET ?'
 
   const countResult = queryOne<{ count: number }>(countSql, params)
   const contacts = queryAll<Contact>(sql, [...params, limit, offset])
@@ -3746,7 +3754,18 @@ export function getContacts(search?: string, type?: string, limit = 100, offset 
 }
 
 export function getContactById(id: string): Contact | undefined {
-  return queryOne<Contact>('SELECT * FROM contacts WHERE id = ?', [id])
+  return queryOne<Contact>(
+    `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count
+FROM contacts c
+LEFT JOIN (
+  SELECT contact_id, COUNT(*) AS vp_count
+  FROM voiceprints
+  WHERE disabled_at IS NULL
+  GROUP BY contact_id
+) v ON v.contact_id = c.id
+WHERE c.id = ?`,
+    [id]
+  )
 }
 
 export function getContactByEmail(email: string): Contact | undefined {
