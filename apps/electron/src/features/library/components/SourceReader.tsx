@@ -390,7 +390,7 @@ export function SourceReader({
             ) : (
               <div className="group flex items-center gap-2">
                 <h2
-                  className="truncate font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink"
+                  className="line-clamp-2 font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink"
                   title={recording.title || meeting?.subject || recording.filename}
                 >
                   {recording.title || meeting?.subject || recording.filename}
