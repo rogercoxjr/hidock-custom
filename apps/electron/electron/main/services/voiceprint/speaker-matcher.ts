@@ -317,9 +317,11 @@ export async function runMatcher(recordingId: string): Promise<MatcherResult> {
     }))
     const merges = detectMergeClusters(labelVecs, thresholds, identityByLabel)
 
-    // f. Mixed detection. Per-window embeddings are decoded+inferred once per
-    // (recording, run) and cached; scoring against contacts is cheap and re-runs
-    // here every call so suggestions reflect the current voiceprint set.
+    // f. Mixed detection. Per-window embeddings are decoded+inferred once and
+    // persisted to the DB, keyed by a per-label content fingerprint (turns +
+    // slicing params + model); getWindowEmbeddings serves them on a fingerprint
+    // hit and recomputes only on miss/change. Scoring against contacts is cheap
+    // and re-runs here every call so suggestions reflect the current voiceprint set.
     const longLabels = rows
       .filter((r) => (r.clean_speech_ms ?? 0) >= 2 * MIN_CLEAN_SPEECH_MS)
       .map((r) => r.file_label)
