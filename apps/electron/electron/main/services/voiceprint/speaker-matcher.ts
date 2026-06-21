@@ -20,9 +20,12 @@ import {
 import {
   decodeRecordingPcm16k,
   embedLabelWindows,
+  MAX_EMBED_SPEECH_MS,
   MIN_CLEAN_SPEECH_MS,
   VOICEPRINT_MODEL_ID,
 } from '../voiceprint-service'
+import { createHash } from 'crypto'
+import type { Turn } from '../asr/asr-provider'
 import { blobToFloat32 } from './vector-math'
 import {
   ContactPrints,
@@ -46,6 +49,38 @@ export interface MatchSummary {
 export interface MatcherResult {
   summary: MatchSummary
   diarizationRunId: string | null
+}
+
+/** Window slicing params — MUST mirror sliceLabelWindows() defaults in voiceprint-service.ts
+ *  (windowMs=20_000, hopMs=10_000). Folded into the fingerprint so a slicing change invalidates
+ *  persisted windows. */
+export const WINDOW_SLICE_PARAMS = { windowMs: 20_000, hopMs: 10_000 } as const
+
+/**
+ * Per-label content fingerprint — the cache key for persisted window embeddings.
+ *
+ * Hashes the label's sorted turn time-ranges + the slicing params + model id/version. It
+ * changes exactly when the label's windows would differ: turn-membership edits (per-turn
+ * reassign, merge), slicing-param changes, or model swaps. NOT keyed by diarization_run_id
+ * (a per-turn reassign edits turn membership without minting a new run id).
+ */
+export function labelTurnsFingerprint(
+  turns: Turn[],
+  label: string,
+  modelId: string,
+  modelVersion: number
+): string {
+  const mine = turns
+    .filter((t) => t.speaker === label)
+    .map((t) => [t.startMs, t.endMs] as [number, number])
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+  const payload = JSON.stringify([
+    mine,
+    { windowMs: WINDOW_SLICE_PARAMS.windowMs, hopMs: WINDOW_SLICE_PARAMS.hopMs, maxMs: MAX_EMBED_SPEECH_MS },
+    modelId,
+    modelVersion,
+  ])
+  return createHash('sha1').update(payload).digest('hex')
 }
 
 /**
