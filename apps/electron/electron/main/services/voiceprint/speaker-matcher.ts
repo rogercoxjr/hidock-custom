@@ -48,6 +48,94 @@ export interface MatcherResult {
   diarizationRunId: string | null
 }
 
+/**
+ * Cache of per-window ERes2Net embeddings used by mixed detection, keyed by
+ * (recordingId, diarizationRunId). These embeddings are INVARIANT for a given
+ * recording + diarization run — computing them requires a full ffmpeg decode of
+ * the (300+ MB) file plus serial model inference per 20s window, which made
+ * speakers:getSuggestions take 30–60s on EVERY call. We compute them once and
+ * reuse; identity scoring against the contact voice library is cheap and still
+ * re-runs each call, so results reflect the current voiceprint set.
+ *
+ * A new diarization run (re-transcribe / merge) yields a new key → fresh compute.
+ * In-memory only (re-embeds once per recording per app session); bounded to cap
+ * memory. Cleared explicitly when a recording's label embeddings are invalidated.
+ */
+const WINDOW_EMB_CACHE = new Map<string, WindowedLabel[]>()
+const WINDOW_EMB_CACHE_MAX = 32
+
+function windowCacheKey(recordingId: string, diarizationRunId: string | null): string {
+  return `${recordingId}::${diarizationRunId ?? 'norun'}`
+}
+
+/** Drop cached window embeddings for a recording (call when its embeddings change). */
+export function invalidateWindowEmbeddings(recordingId: string): void {
+  for (const key of [...WINDOW_EMB_CACHE.keys()]) {
+    if (key.startsWith(`${recordingId}::`)) WINDOW_EMB_CACHE.delete(key)
+  }
+}
+
+/** Test-only: clear the entire window-embedding cache. */
+export function __clearWindowEmbeddingCache(): void {
+  WINDOW_EMB_CACHE.clear()
+}
+
+/**
+ * Obtain per-window embeddings for the recording's "long" labels, decoding +
+ * embedding once per (recording, run) and serving cache hits thereafter.
+ */
+async function getWindowEmbeddings(
+  recordingId: string,
+  diarizationRunId: string | null,
+  longLabels: string[]
+): Promise<WindowedLabel[]> {
+  if (longLabels.length === 0) return []
+
+  const key = windowCacheKey(recordingId, diarizationRunId)
+  const cached = WINDOW_EMB_CACHE.get(key)
+  if (cached && longLabels.every((l) => cached.some((w) => w.fileLabel === l))) {
+    return cached
+  }
+
+  const windowed: WindowedLabel[] = []
+  const recording = getRecordingById(recordingId)
+  let pcm: Buffer | undefined
+  if (recording?.file_path) {
+    try {
+      pcm = await decodeRecordingPcm16k(recording.file_path)
+    } catch (e) {
+      console.warn(
+        `[Voiceprint] runMatcher decode failed for ${recordingId}: ${(e as Error).message}`
+      )
+    }
+  }
+
+  if (pcm) {
+    for (const label of longLabels) {
+      try {
+        const windowEmbs = await embedLabelWindows(recordingId, label, { pcm })
+        if (windowEmbs.length === 0) continue
+        windowed.push({ fileLabel: label, windowEmbs })
+      } catch (e) {
+        console.warn(
+          `[Voiceprint] runMatcher mixed detection skipped for ${label} (${recordingId}): ${(e as Error).message}`
+        )
+      }
+    }
+  }
+
+  // Only cache a real result (decode succeeded and produced embeddings) so a
+  // transient decode failure is retried next call rather than cached as empty.
+  if (windowed.length > 0) {
+    if (WINDOW_EMB_CACHE.size >= WINDOW_EMB_CACHE_MAX) {
+      const oldest = WINDOW_EMB_CACHE.keys().next().value
+      if (oldest !== undefined) WINDOW_EMB_CACHE.delete(oldest)
+    }
+    WINDOW_EMB_CACHE.set(key, windowed)
+  }
+  return windowed
+}
+
 /** Build a suppression key matching conflict-policy.ts suggestionKey(). */
 function suggestionKey(
   kind: string,
@@ -148,47 +236,21 @@ export async function runMatcher(recordingId: string): Promise<MatcherResult> {
     }))
     const merges = detectMergeClusters(labelVecs, thresholds, identityByLabel)
 
-    // f. Mixed detection.
-    const windowed: WindowedLabel[] = []
-    const perWindowIdentity = new Map<string, IdentityScore[][]>()
+    // f. Mixed detection. Per-window embeddings are decoded+inferred once per
+    // (recording, run) and cached; scoring against contacts is cheap and re-runs
+    // here every call so suggestions reflect the current voiceprint set.
     const longLabels = rows
       .filter((r) => (r.clean_speech_ms ?? 0) >= 2 * MIN_CLEAN_SPEECH_MS)
       .map((r) => r.file_label)
 
-    if (longLabels.length > 0) {
-      const recording = getRecordingById(recordingId)
-      let pcm: Buffer | undefined
-      if (recording?.file_path) {
-        try {
-          pcm = await decodeRecordingPcm16k(recording.file_path)
-        } catch (e) {
-          console.warn(
-            `[Voiceprint] runMatcher decode failed for ${recordingId}: ${(e as Error).message}`
-          )
-        }
-      }
+    const windowed = await getWindowEmbeddings(recordingId, diarizationRunId, longLabels)
 
-      if (pcm) {
-        for (const label of longLabels) {
-          try {
-            const windowEmbs = await embedLabelWindows(recordingId, label, { pcm })
-            if (windowEmbs.length === 0) continue
-            windowed.push({ fileLabel: label, windowEmbs })
-
-            const perWindow: IdentityScore[][] = []
-            for (const emb of windowEmbs) {
-              perWindow.push(
-                scoreLabelAgainstContacts(emb, contacts, thresholds).candidates
-              )
-            }
-            perWindowIdentity.set(label, perWindow)
-          } catch (e) {
-            console.warn(
-              `[Voiceprint] runMatcher mixed detection skipped for ${label} (${recordingId}): ${(e as Error).message}`
-            )
-          }
-        }
-      }
+    const perWindowIdentity = new Map<string, IdentityScore[][]>()
+    for (const w of windowed) {
+      perWindowIdentity.set(
+        w.fileLabel,
+        w.windowEmbs.map((emb) => scoreLabelAgainstContacts(emb, contacts, thresholds).candidates)
+      )
     }
     const mixed = detectMixedLabels(windowed, perWindowIdentity, thresholds)
 

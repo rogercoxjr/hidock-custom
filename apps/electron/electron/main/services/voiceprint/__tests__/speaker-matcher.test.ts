@@ -4,7 +4,7 @@
  * Mocks the DB and voiceprint-service I/O; uses the real pure matcher units.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { runMatcher } from '../speaker-matcher'
+import { runMatcher, __clearWindowEmbeddingCache } from '../speaker-matcher'
 import * as db from '../../database'
 import * as vp from '../../voiceprint-service'
 import { VOICEPRINT_MODEL_ID } from '../../voiceprint-service'
@@ -65,6 +65,7 @@ const SAME_VEC = new Float32Array(256).fill(0.5)
 const DIFF_VEC = new Float32Array(256).fill(-0.5)
 
 beforeEach(() => {
+  __clearWindowEmbeddingCache() // isolate the per-(recording,run) window-embedding cache
   vi.mocked(getConfig).mockReset().mockReturnValue({
     privacy: { enableVoiceprintCapture: true, excludeVoiceprintsFromBackup: true },
     voiceMatching: VOICE_MATCHING_DEFAULT,
@@ -330,5 +331,51 @@ describe('runMatcher() — Phase 2B orchestrator', () => {
     const row = vi.mocked(db.insertSuggestion).mock.calls[0][0]
     expect(row.kind).toBe('mixed')
     expect(row.target_label).toBe('M')
+  })
+
+  /** A long label whose window embeddings drive mixed detection. */
+  const longLabelRows = (runId: string) =>
+    [
+      {
+        id: 'le_M',
+        recording_id: 'rec_1',
+        file_label: 'M',
+        model_id: VOICEPRINT_MODEL_ID,
+        dim: 256,
+        embedding: embBlob(SAME_VEC),
+        clean_speech_ms: 25_000,
+        diarization_run_id: runId,
+      },
+    ] as never
+
+  it('perf: caches window embeddings per (recording, run) — re-run does NOT re-decode/re-embed', async () => {
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_1'))
+    vi.mocked(db.getContactsWithActiveVoiceprints).mockReturnValue([] as never)
+    vi.mocked(db.getRecordingById).mockReturnValue({ id: 'rec_1', file_path: '/r/rec.wav' } as never)
+    vi.mocked(vp.embedLabelWindows).mockResolvedValue([DIFF_VEC, SAME_VEC])
+
+    await runMatcher('rec_1')
+    await runMatcher('rec_1')
+    await runMatcher('rec_1')
+
+    // The expensive decode + per-window inference run ONCE for the run, not per call.
+    expect(vi.mocked(vp.decodeRecordingPcm16k)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(vp.embedLabelWindows)).toHaveBeenCalledTimes(1)
+    // But suggestions are still produced on every call (scoring re-runs).
+    expect(vi.mocked(db.insertSuggestion).mock.calls.filter((c) => c[0].kind === 'mixed').length).toBe(3)
+  })
+
+  it('perf: a new diarization run id re-decodes/re-embeds (cache keyed by run)', async () => {
+    vi.mocked(db.getContactsWithActiveVoiceprints).mockReturnValue([] as never)
+    vi.mocked(db.getRecordingById).mockReturnValue({ id: 'rec_1', file_path: '/r/rec.wav' } as never)
+    vi.mocked(vp.embedLabelWindows).mockResolvedValue([DIFF_VEC, SAME_VEC])
+
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_1'))
+    await runMatcher('rec_1')
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_2'))
+    await runMatcher('rec_1')
+
+    expect(vi.mocked(vp.decodeRecordingPcm16k)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(vp.embedLabelWindows)).toHaveBeenCalledTimes(2)
   })
 })
