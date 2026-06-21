@@ -7,7 +7,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class {},
 }))
 
-const embedRecordingLabels = vi.fn(async () => {})
+const embedRecordingLabels = vi.fn(async (..._a: unknown[]) => {})
 let resolveMatcher: (v: { diarizationRunId: string | null }) => void
 const runMatcher = vi.fn(
   () => new Promise<{ diarizationRunId: string | null }>((res) => { resolveMatcher = res })
