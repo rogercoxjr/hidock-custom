@@ -13,7 +13,8 @@ import {
   ChevronRight,
   Filter,
   UserPlus,
-  Trash2
+  Trash2,
+  AudioWaveform
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -287,7 +288,13 @@ export function People() {
                   <CardHeader className="pb-3 bg-surface-sunken/40 group-hover:bg-surface-sunken/70 transition-colors">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 min-w-0">
-                        <PersonAvatar name={person.name} color={avatarColor(person.name)} size={40} className="rounded-xl" />
+                        <PersonAvatar
+                          name={person.name}
+                          color={avatarColor(person.name)}
+                          size={40}
+                          className="rounded-xl"
+                          voiceBadge={(person.voiceprintCount ?? 0) > 0}
+                        />
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <CardTitle className="text-base truncate text-ink">{person.name}</CardTitle>
@@ -346,6 +353,13 @@ export function People() {
                         <span>{formatDate(person.lastSeenAt)}</span>
                       </div>
                     </div>
+
+                    {(person.voiceprintCount ?? 0) > 0 && (
+                      <div className="flex items-center gap-1.5 font-mono text-[10.5px] text-accent-2">
+                        <AudioWaveform className="h-3.5 w-3.5" />
+                        <span>{person.voiceprintCount} voiceprints</span>
+                      </div>
+                    )}
 
                     {(person.tags?.length ?? 0) > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-1">

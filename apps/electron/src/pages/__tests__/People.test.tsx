@@ -18,7 +18,8 @@ const mockGetAll = vi.fn().mockResolvedValue({
         tags: ['dev'],
         email: 'mario@example.com',
         role: 'Engineer',
-        company: 'Nintendo'
+        company: 'Nintendo',
+        voiceprintCount: 2
       },
       {
         id: 'p2',
@@ -30,7 +31,8 @@ const mockGetAll = vi.fn().mockResolvedValue({
         tags: [],
         email: 'alice@example.com',
         role: 'PM',
-        company: 'Acme'
+        company: 'Acme',
+        voiceprintCount: 0
       },
       {
         id: 'p3',
@@ -43,6 +45,7 @@ const mockGetAll = vi.fn().mockResolvedValue({
         email: null,
         role: null,
         company: null
+        // voiceprintCount intentionally absent — tests undefined behavior
       }
     ],
     total: 3
@@ -296,5 +299,54 @@ describe('People Page', () => {
     // Should show "Unknown" instead of "Invalid Date"
     expect(screen.getByText('Unknown')).toBeInTheDocument()
     expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
+  })
+
+  it('shows voiceprint pip and count for contact with voiceprintCount > 0', async () => {
+    render(
+      <MemoryRouter>
+        <People />
+      </MemoryRouter>
+    )
+
+    await screen.findByText('Mario')
+
+    // The voiceprint count text should appear for Mario (count=2)
+    expect(screen.getByText('2 voiceprints')).toBeInTheDocument()
+
+    // The accessible pip label should be present for Mario
+    expect(screen.getAllByTitle('Has enrolled voiceprint').length).toBeGreaterThan(0)
+  })
+
+  it('hides voiceprint pip and count for contact with voiceprintCount = 0', async () => {
+    render(
+      <MemoryRouter>
+        <People />
+      </MemoryRouter>
+    )
+
+    await screen.findByText('Alice')
+
+    // Alice has voiceprintCount=0 — should not show voiceprint text in her card
+    const aliceHeading = screen.getByText('Alice')
+    const aliceCard = aliceHeading.closest('[data-testid]') ?? aliceHeading.parentElement?.closest('div')
+    if (aliceCard) {
+      expect(within(aliceCard as HTMLElement).queryByText(/voiceprints/)).not.toBeInTheDocument()
+    }
+    // Total "2 voiceprints" in DOM should only be from Mario, not duplicated
+    expect(screen.getAllByText('2 voiceprints').length).toBe(1)
+  })
+
+  it('hides voiceprint pip for contact with undefined voiceprintCount', async () => {
+    render(
+      <MemoryRouter>
+        <People />
+      </MemoryRouter>
+    )
+
+    await screen.findByText('Zara')
+
+    // Zara has no voiceprintCount — only Mario has a pip
+    const pips = screen.queryAllByTitle('Has enrolled voiceprint')
+    expect(pips.length).toBe(1) // only Mario's card
   })
 })
