@@ -367,7 +367,13 @@ export function PersonDetail() {
             <Button variant="ghost" size="icon" onClick={() => navigate('/people')}>
               <ChevronLeft className="h-5 w-5" />
             </Button>
-            <PersonAvatar name={person.name} color={personColor} size={52} className="rounded-2xl text-[1.25rem]" />
+            <PersonAvatar
+              name={person.name}
+              color={personColor}
+              size={52}
+              className="rounded-2xl text-[1.25rem]"
+              voiceBadge={(person.voiceprintCount ?? 0) > 0}
+            />
             <div className="min-w-0">
               {isEditing ? (
                 <input
@@ -385,6 +391,12 @@ export function PersonDetail() {
                   {person.isSelf && (
                     <span className="rounded-full bg-accent-2-soft px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.06em] text-accent-2">
                       this is you
+                    </span>
+                  )}
+                  {(person.voiceprintCount ?? 0) > 0 && (
+                    <span className="flex items-center gap-1 rounded-full bg-accent-2-soft px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.06em] text-accent-2">
+                      <AudioWaveform className="h-2.5 w-2.5" />
+                      {person.voiceprintCount} voiceprints
                     </span>
                   )}
                 </div>

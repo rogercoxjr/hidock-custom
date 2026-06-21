@@ -188,4 +188,58 @@ describe('PersonDetail Page', () => {
 
     expect(screen.getByText('Great teammate')).toBeInTheDocument()
   })
+
+  it('shows voiceprint pill in header when voiceprintCount > 0', async () => {
+    // Override mockGetById for this test to return voiceprintCount=3
+    mockGetById.mockResolvedValueOnce({
+      success: true,
+      data: {
+        contact: {
+          id: 'p1',
+          name: 'Mario',
+          type: 'team',
+          interactionCount: 5,
+          lastSeenAt: new Date().toISOString(),
+          firstSeenAt: new Date().toISOString(),
+          tags: [],
+          email: 'mario@example.com',
+          role: 'Engineer',
+          company: 'Nintendo',
+          notes: null,
+          voiceprintCount: 3
+        },
+        meetings: [],
+        totalMeetingTimeMinutes: 0
+      }
+    })
+
+    renderPersonDetail()
+
+    await screen.findByText('Mario')
+
+    expect(screen.getByText('3 voiceprints')).toBeInTheDocument()
+    expect(screen.getAllByTitle('Has enrolled voiceprint').length).toBeGreaterThan(0)
+  })
+
+  it('hides voiceprint pill when voiceprintCount is 0', async () => {
+    // Default mockGetById returns Mario with no voiceprintCount (undefined → 0)
+    renderPersonDetail()
+
+    await screen.findByText('Mario')
+
+    expect(screen.queryByText(/voiceprints/)).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Has enrolled voiceprint')).not.toBeInTheDocument()
+  })
+
+  it('Voices tab lazy-loading is not affected (listForContact not called on header mount)', async () => {
+    // The Voices tab should only load when clicked, not on initial render
+    const mockListForContact = vi.fn().mockResolvedValue({ success: true, data: { voiceprints: [] } })
+    ;(global.window.electronAPI as any).voiceprints = { listForContact: mockListForContact }
+
+    renderPersonDetail()
+    await screen.findByText('Mario')
+
+    // After initial render (header loaded), listForContact should NOT have been called
+    expect(mockListForContact).not.toHaveBeenCalled()
+  })
 })
