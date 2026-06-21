@@ -1,9 +1,8 @@
 /**
  * SourceReader — diarization wiring (D3-T4 Fix 1, live path)
  *
- * SourceReader is the LIVE host of TranscriptViewer (Library.tsx -> SourceReader ->
- * TranscriptViewer). SourceDetailDrawer (which previously hosted SpeakersPanel) is
- * mounted nowhere, so the diarization UI is re-homed here.
+ * SourceReader is the LIVE host of the diarization UI (Library.tsx -> SourceReader ->
+ * TranscriptViewer + SpeakersPanel).
  *
  * Asserts:
  *  - when the transcript carries structured `turns`, SourceReader parses them,

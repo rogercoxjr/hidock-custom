@@ -109,8 +109,8 @@ export function SourceReader({
   const [showRetranscribeConfirm, setShowRetranscribeConfirm] = useState(false)
 
   // Speaker diarization (D3-T4): structured turns + speaker->contact name map.
-  // SourceReader is the LIVE host of the diarization UI (SourceDetailDrawer is dead
-  // code). Turns come from transcript.turns (JSON); names from speakers:getForRecording.
+  // SourceReader is the LIVE host of the diarization UI. Turns come from
+  // transcript.turns (JSON); names from speakers:getForRecording.
   const recordingId = recording?.id
   const [turns, setTurns] = useState<Turn[]>([])
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({})
@@ -412,7 +412,7 @@ export function SourceReader({
             )}
           </div>
 
-          {/* Comprehensive Metadata Grid - same as SourceRowExpanded */}
+          {/* Comprehensive Metadata Grid */}
           <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3 lg:grid-cols-4">
             <div>
               <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Date Recorded</p>
