@@ -134,6 +134,10 @@ export function SpeakersPanel({
   const [turnsExpanded, setTurnsExpanded] = useState(false)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
+  // Optimistically hide suggestions the user just resolved (confirm/dismiss) so the chip
+  // disappears instantly with visible feedback, without waiting on the heavyweight
+  // re-match refresh (which can lag or be superseded). Reset when the recording changes.
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set())
 
   // Phase 2: transient capture feedback per label (enrolled / skipped / purged)
   type CaptureNote = {
@@ -175,16 +179,25 @@ export function SpeakersPanel({
   const readOnly = labels.length <= 1
 
   // Group pending suggestions by their primary label.
+  useEffect(() => {
+    setResolvedIds(new Set())
+  }, [recordingId])
+
+  const visibleSuggestions = useMemo(
+    () => suggestions.filter((s) => !resolvedIds.has(s.id)),
+    [suggestions, resolvedIds]
+  )
+
   const suggestionsByLabel = useMemo(() => {
     const map = new Map<string, SuggestionView[]>()
-    for (const s of suggestions) {
+    for (const s of visibleSuggestions) {
       const key = s.targetLabel
       const list = map.get(key) ?? []
       list.push(s)
       map.set(key, list)
     }
     return map
-  }, [suggestions])
+  }, [visibleSuggestions])
 
   // Load attendees (top-sorted) or fall back to all-contacts.
   useEffect(() => {
@@ -383,6 +396,7 @@ export function SpeakersPanel({
     try {
       const res = await (window as any).electronAPI.speakers.dismissSuggestion(id)
       if (res?.success) {
+        setResolvedIds((prev) => new Set(prev).add(id))
         onChanged()
       } else {
         toast.error('Could not dismiss suggestion', res?.error?.message)
@@ -407,13 +421,23 @@ export function SpeakersPanel({
   async function confirmIdentity(suggestion: SuggestionView) {
     if (!suggestion.contactId) return
     const res = await assign(suggestion.targetLabel, suggestion.contactId, 'suggestion_confirmed')
-    if (res?.success) await acceptSuggestion(suggestion.id)
+    if (res?.success) {
+      setResolvedIds((prev) => new Set(prev).add(suggestion.id))
+      toast.success('Speaker confirmed', suggestion.contactName ? `Labeled ${suggestion.contactName}` : undefined)
+      await acceptSuggestion(suggestion.id)
+      onChanged()
+    }
   }
 
   async function doConfirmMerge(suggestion: SuggestionView) {
     if (!suggestion.targetLabel2) return
     const res = await mergeInto(suggestion.targetLabel, suggestion.targetLabel2)
-    if (res?.success) await acceptSuggestion(suggestion.id)
+    if (res?.success) {
+      setResolvedIds((prev) => new Set(prev).add(suggestion.id))
+      toast.success('Speakers merged')
+      await acceptSuggestion(suggestion.id)
+      onChanged()
+    }
   }
 
   function confirmMerge(suggestion: SuggestionView) {
@@ -442,10 +466,12 @@ export function SpeakersPanel({
   }
 
   async function dismissAllSuggestions() {
-    if (suggestions.length === 0) return
+    if (visibleSuggestions.length === 0) return
+    const ids = visibleSuggestions.map((s) => s.id)
+    setResolvedIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.add(id)); return next })
     setBusy(true)
     try {
-      await Promise.all(suggestions.map((s) => (window as any).electronAPI.speakers.dismissSuggestion(s.id)))
+      await Promise.all(ids.map((id) => (window as any).electronAPI.speakers.dismissSuggestion(id)))
     } catch (err) {
       console.error('Failed to dismiss all suggestions:', err)
       toast.error('Failed to dismiss all suggestions')
@@ -483,7 +509,7 @@ export function SpeakersPanel({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Eyebrow tone="muted">Speakers</Eyebrow>
-        {suggestions.length > 0 && (
+        {visibleSuggestions.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => void dismissAllSuggestions()} disabled={busy}>
             Dismiss all suggestions
           </Button>

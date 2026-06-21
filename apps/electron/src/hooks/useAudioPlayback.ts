@@ -10,7 +10,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useUIStore } from '@/store/useUIStore'
 import { toast } from '@/components/ui/toaster'
 import { parseError, getErrorMessage } from '@/features/library/utils/errorHandling'
-import { generateWaveformData, decodeAudioData, getAudioMimeType } from '@/utils/audioUtils'
+import { generateWaveformData, decodeAudioData, getAudioMimeType, getMediaUrl } from '@/utils/audioUtils'
 import { shouldLogQa } from '@/services/qa-monitor'
 
 export function useAudioPlayback() {
@@ -18,6 +18,12 @@ export function useAudioPlayback() {
   const audioBlobUrlRef = useRef<string | null>(null)
   const waveformAbortControllerRef = useRef<AbortController | null>(null)
   const playbackLockRef = useRef<Promise<void> | null>(null)
+  // Monotonic token identifying the "current" playback intent. Every playAudio()
+  // call and every stopAudio() bumps it. Large recordings take seconds to load,
+  // leaving the play() promise pending; if the user clicks Stop / another chip
+  // meanwhile, the older invocation must bail SILENTLY instead of surfacing the
+  // resulting AbortError (or clobbering the newer invocation's element/state).
+  const playEpochRef = useRef(0)
 
   const {
     setCurrentlyPlaying,
@@ -31,26 +37,31 @@ export function useAudioPlayback() {
   const playAudio = useCallback(async (recordingId: string, filePath: string, startTimeSeconds?: number) => {
     if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Playing: ${recordingId}, path: ${filePath}${startTimeSeconds ? `, startAt: ${startTimeSeconds}s` : ''}`)
 
-    // Wait for any pending operation to complete to prevent race conditions
+    // Claim the current playback intent. Any later play()/stop() bumps this and
+    // this invocation will detect it after each await and bail silently.
+    const myEpoch = ++playEpochRef.current
+    const superseded = () => playEpochRef.current !== myEpoch
+
+    // Wait for any in-flight operation so heavy work doesn't overlap. If a newer
+    // intent arrived while we waited, abort before doing anything.
     if (playbackLockRef.current) {
       if (shouldLogQa()) console.log('[useAudioPlayback] Waiting for previous playback operation to complete')
-      await playbackLockRef.current
+      try { await playbackLockRef.current } catch { /* prior op's failure is its own concern */ }
     }
+    if (superseded()) return
 
-    // Create new lock for this operation
-    playbackLockRef.current = (async () => {
+    const thisRun = (async () => {
       try {
-        // Stop current playback
+        // Tear down any existing element (listeners first so its teardown
+        // 'emptied'/'error' events can't fire stale handlers).
         if (audioRef.current) {
-          // Clean up event listeners before stopping
           if ((audioRef.current as any)._eventCleanup) {
             ;(audioRef.current as any)._eventCleanup()
           }
           audioRef.current.pause()
           audioRef.current.src = ''
-          audioRef.current = null // Clear the ref to allow recreation with fresh listeners
+          audioRef.current = null
         }
-        // Revoke previous Blob URL to prevent memory leaks
         if (audioBlobUrlRef.current) {
           URL.revokeObjectURL(audioBlobUrlRef.current)
           audioBlobUrlRef.current = null
@@ -61,116 +72,74 @@ export function useAudioPlayback() {
         // Set currently playing immediately to show loading state in UI
         setCurrentlyPlaying(recordingId, filePath)
 
-        // Load audio file via IPC
-        if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Reading audio file: ${filePath}`)
-        const response = await window.electronAPI.storage.readRecording(filePath)
-        if (!response.success || !response.data) {
-          const errorMsg = response.error || 'Failed to load audio file'
-          console.error(`[useAudioPlayback] readRecording failed:`, errorMsg)
-          toast({ title: 'Error', description: errorMsg, variant: 'error' })
+        // Build a fresh element OWNED by this invocation. Its handlers are guarded
+        // by myEpoch so a superseded element can never clobber current state.
+        if (shouldLogQa()) console.log('[useAudioPlayback] Creating new Audio element (streaming)')
+        const audio = new Audio()
+
+        const handleTimeUpdate = () => {
+          if (superseded()) return
+          setPlaybackProgress(audio.currentTime, audio.duration)
+        }
+        const handlePlay = () => {
+          if (superseded()) return
+          if (shouldLogQa()) console.log('[QA-MONITOR][Operation] Audio play event fired')
+          setIsPlaying(true)
+        }
+        const handlePause = () => {
+          if (superseded()) return
+          setIsPlaying(false)
+        }
+        const handleEnded = () => {
+          if (superseded()) return
+          setIsPlaying(false)
           setCurrentlyPlaying(null, null)
-          return
+          setPlaybackProgress(0, 0)
+          setWaveformData(null)
         }
-        const base64 = response.data
-        if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Audio data loaded: ${(base64.length / 1024).toFixed(1)}KB base64`)
-
-        // Create audio element if needed
-        if (!audioRef.current) {
-          if (shouldLogQa()) console.log('[useAudioPlayback] Creating new Audio element')
-          audioRef.current = new Audio()
-
-          // Define event handlers as named functions so they can be properly removed
-          const handleTimeUpdate = () => {
-            if (audioRef.current) {
-              setPlaybackProgress(audioRef.current.currentTime, audioRef.current.duration)
-            }
-          }
-
-          const handlePlay = () => {
-            if (shouldLogQa()) console.log('[QA-MONITOR][Operation] Audio play event fired')
-            setIsPlaying(true)
-          }
-
-          const handlePause = () => {
-            setIsPlaying(false)
-          }
-
-          const handleEnded = () => {
-            setIsPlaying(false)
-            setCurrentlyPlaying(null, null)
-            setPlaybackProgress(0, 0)
-            setWaveformData(null)
-          }
-
-          const handleError = (e: ErrorEvent) => {
-            const mediaError = audioRef.current?.error
-            console.error('[useAudioPlayback] Audio element error:', {
-              code: mediaError?.code,
-              message: mediaError?.message,
-              event: e
-            })
-            const libraryError = parseError(e, 'audio playback')
-            toast({
-              title: 'Playback error',
-              description: getErrorMessage(libraryError.type),
-              variant: 'error'
-            })
-            setIsPlaying(false)
-            setCurrentlyPlaying(null, null)
-            setWaveformData(null)
-          }
-
-          // Add event listeners
-          audioRef.current.addEventListener('timeupdate', handleTimeUpdate)
-          audioRef.current.addEventListener('play', handlePlay)
-          audioRef.current.addEventListener('pause', handlePause)
-          audioRef.current.addEventListener('ended', handleEnded)
-          audioRef.current.addEventListener('error', handleError)
-
-          // Store cleanup functions for removal
-          // We use a custom property to track the handlers for cleanup
-          ;(audioRef.current as any)._eventCleanup = () => {
-            const audio = audioRef.current
-            if (audio) {
-              audio.removeEventListener('timeupdate', handleTimeUpdate)
-              audio.removeEventListener('play', handlePlay)
-              audio.removeEventListener('pause', handlePause)
-              audio.removeEventListener('ended', handleEnded)
-              audio.removeEventListener('error', handleError)
-            }
-          }
+        const handleError = (e: ErrorEvent) => {
+          // Ignore errors from a superseded element (e.g. src='' teardown).
+          if (superseded()) return
+          const mediaError = audio.error
+          console.error('[useAudioPlayback] Audio element error:', {
+            code: mediaError?.code,
+            message: mediaError?.message,
+            event: e
+          })
+          const libraryError = parseError(e, 'audio playback')
+          toast({
+            title: 'Playback error',
+            description: getErrorMessage(libraryError.type),
+            variant: 'error'
+          })
+          setIsPlaying(false)
+          setCurrentlyPlaying(null, null)
+          setWaveformData(null)
         }
 
-        const mimeType = getAudioMimeType(filePath)
-
-        // Generate waveform data for visualization (skip if already loaded)
-        const { waveformLoadedForId } = useUIStore.getState()
-        if (waveformLoadedForId !== recordingId) {
-          try {
-            const audioBuffer = await decodeAudioData(base64, mimeType)
-            const waveformData = await generateWaveformData(audioBuffer, 1000)
-            setWaveformData(waveformData)
-            useUIStore.getState().setWaveformLoadedFor(recordingId)
-          } catch (waveformError) {
-            console.warn('[useAudioPlayback] Failed to generate waveform:', waveformError)
-            setWaveformData(null)
-            useUIStore.getState().setWaveformLoadingError(recordingId, 'Failed to generate waveform')
-          }
-        } else {
-          if (shouldLogQa()) console.log('[useAudioPlayback] Skipping waveform generation - already loaded')
+        audio.addEventListener('timeupdate', handleTimeUpdate)
+        audio.addEventListener('play', handlePlay)
+        audio.addEventListener('pause', handlePause)
+        audio.addEventListener('ended', handleEnded)
+        audio.addEventListener('error', handleError)
+        ;(audio as any)._eventCleanup = () => {
+          audio.removeEventListener('timeupdate', handleTimeUpdate)
+          audio.removeEventListener('play', handlePlay)
+          audio.removeEventListener('pause', handlePause)
+          audio.removeEventListener('ended', handleEnded)
+          audio.removeEventListener('error', handleError)
         }
 
-        // Convert base64 to Blob URL (more reliable than data URI for larger files)
-        const binaryData = atob(base64)
-        const uint8Array = new Uint8Array(binaryData.length)
-        for (let i = 0; i < binaryData.length; i++) {
-          uint8Array[i] = binaryData.charCodeAt(i)
-        }
-        const blob = new Blob([uint8Array], { type: mimeType })
-        audioBlobUrlRef.current = URL.createObjectURL(blob)
+        if (superseded()) return // a newer play/stop took over; don't commit
+        audioRef.current = audio
 
-        if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Setting audio src (Blob URL), mime: ${mimeType}, size: ${blob.size} bytes`)
-        audioRef.current.src = audioBlobUrlRef.current
+        // Stream the recording via the custom `hidock-media` protocol instead of
+        // loading the whole (often 300+ MB) file as base64 over IPC. The <audio>
+        // element fetches only the bytes it needs and seeking issues HTTP Range
+        // requests, so playback starts near-instantly and never blocks the UI.
+        const mediaUrl = getMediaUrl(filePath)
+        if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Setting audio src (stream): ${mediaUrl}`)
+        audio.src = mediaUrl
 
         // Seek-after-load: a `seek()` fired immediately after `play()` is dropped
         // because the element's metadata (duration / seekable range) isn't ready yet
@@ -178,9 +147,8 @@ export function useAudioPlayback() {
         // requested, apply it once metadata is available (or immediately if already
         // loaded) so the playhead lands at the requested turn before/at play start.
         if (startTimeSeconds && startTimeSeconds > 0) {
-          const audio = audioRef.current
           const applyStart = () => {
-            if (audioRef.current === audio) {
+            if (audioRef.current === audio && !superseded()) {
               try {
                 audio.currentTime = startTimeSeconds
               } catch {
@@ -196,9 +164,26 @@ export function useAudioPlayback() {
         }
 
         if (shouldLogQa()) console.log('[QA-MONITOR][Operation] Calling audio.play()')
-        await audioRef.current.play()
+        await audio.play()
         if (shouldLogQa()) console.log('[QA-MONITOR][Operation] audio.play() resolved successfully')
+
+        // Generate the waveform in the background (non-blocking) so playback is
+        // never gated on decoding the whole file. Skipped when already loaded for
+        // this recording; loadWaveformOnly itself skips files >100MB. Invoked via
+        // the global control to avoid a render-time circular dependency between
+        // playAudio and loadWaveformOnly.
+        if (useUIStore.getState().waveformLoadedForId !== recordingId) {
+          window.__audioControls?.loadWaveformOnly?.(recordingId, filePath)
+        }
       } catch (error) {
+        // AbortError is the EXPECTED result when a newer play()/stop() interrupts a
+        // pending play() (large files keep it pending for seconds). It is not a real
+        // failure — never surface it, and don't touch state the newer intent owns.
+        const name = (error as { name?: string })?.name
+        if (name === 'AbortError' || superseded()) {
+          if (shouldLogQa()) console.log('[useAudioPlayback] Playback superseded/aborted (benign)')
+          return
+        }
         const libraryError = parseError(error, 'audio playback')
         console.error('[useAudioPlayback] Play error:', error)
         toast({
@@ -210,12 +195,15 @@ export function useAudioPlayback() {
         setCurrentlyPlaying(null, null)
         setWaveformData(null)
       } finally {
-        // Always release the lock when done
-        playbackLockRef.current = null
+        // Release the lock only if we're still the current intent. If superseded,
+        // the newer invocation (currently awaiting this promise) will install its
+        // own lock once we resolve.
+        if (!superseded()) playbackLockRef.current = null
       }
     })()
 
-    return playbackLockRef.current
+    playbackLockRef.current = thisRun
+    return thisRun
   }, [setCurrentlyPlaying, setPlaybackProgress, setIsPlaying, setWaveformData])
 
   // ---- Waveform-Only Load ----
@@ -291,6 +279,9 @@ export function useAudioPlayback() {
   }, [])
 
   const stopAudio = useCallback(() => {
+    // Supersede any in-flight play() so its pending promise resolves to a silent
+    // bail instead of an AbortError toast.
+    playEpochRef.current++
     if (audioRef.current) {
       // Clean up event listeners when stopping
       if ((audioRef.current as any)._eventCleanup) {

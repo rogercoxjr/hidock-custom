@@ -86,6 +86,18 @@ export async function decodeAudioData(
 }
 
 /**
+ * Build the streaming URL for a local recording. The Electron main process
+ * registers the `hidock-media` scheme and serves the file with Range support,
+ * so the <audio> element streams instead of loading the whole (often 300+ MB)
+ * file into memory. Mirrors buildMediaUrl in electron/main/services/media-protocol.ts.
+ *
+ * @param filePath - Absolute path to the recording file
+ */
+export function getMediaUrl(filePath: string): string {
+  return `hidock-media://media/?p=${encodeURIComponent(filePath)}`
+}
+
+/**
  * Get the MIME type for an audio file based on its extension.
  *
  * @param filePath - Full file path or just the filename/extension

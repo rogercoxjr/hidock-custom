@@ -41,20 +41,26 @@ describe('FIX-013: Path case sensitivity', () => {
     expect(result).toBe(false)
   })
 
-  it('readRecordingFile uses case-insensitive path comparison on Windows', () => {
-    // Read the actual source of readRecordingFile to verify the fix
+  it('readRecordingFile enforces the case-insensitive guard (via isRecordingPathAllowed)', () => {
+    // Read the actual source to verify the fix. The directory-allow check was
+    // extracted into isRecordingPathAllowed (shared with the streaming media
+    // protocol); readRecordingFile must delegate to it, and that guard must use
+    // the case-insensitive comparison on Windows.
     const sourceFile = join(__dirname, '..', 'file-storage.ts')
     const source = readFileSync(sourceFile, 'utf-8')
 
-    // Extract the readRecordingFile function body
-    const funcStart = source.indexOf('export function readRecordingFile')
-    expect(funcStart).toBeGreaterThan(-1)
-    const funcBody = source.slice(funcStart, source.indexOf('\n}', funcStart) + 2)
+    // readRecordingFile must call the shared guard.
+    const readFn = source.slice(
+      source.indexOf('export function readRecordingFile'),
+      source.indexOf('\n}', source.indexOf('export function readRecordingFile')) + 2
+    )
+    expect(readFn).toContain('isRecordingPathAllowed')
 
-    // The path comparison within readRecordingFile must use case-insensitive check
-    // Look for .toLowerCase() specifically in the startsWith path check
-    const hasPathCaseInsensitive = funcBody.includes('toLowerCase')
-    expect(hasPathCaseInsensitive).toBe(true)
+    // The shared guard must do the case-insensitive comparison.
+    const guardStart = source.indexOf('export function isRecordingPathAllowed')
+    expect(guardStart).toBeGreaterThan(-1)
+    const guardBody = source.slice(guardStart, source.indexOf('\n}', guardStart) + 2)
+    expect(guardBody.includes('toLowerCase')).toBe(true)
   })
 
   it('deleteRecording uses case-insensitive path comparison on Windows', () => {
