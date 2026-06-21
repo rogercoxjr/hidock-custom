@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
@@ -56,8 +55,11 @@ interface SourceRowProps {
   isSelected?: boolean
   isActiveSource?: boolean
   searchQuery?: string
-  onSelectionChange?: (id: string, shiftKey: boolean) => void
-  onClick?: () => void
+  /**
+   * Unified click handler. Receives the raw mouse event so the parent can read
+   * modifier keys (shift = range select, cmd/ctrl = toggle, plain = open detail).
+   */
+  onClick?: (e: React.MouseEvent) => void
   onPlay: () => void
   onStop: () => void
   // Action handlers
@@ -90,7 +92,6 @@ export const SourceRow = memo(function SourceRow({
   isSelected = false,
   isActiveSource = false,
   searchQuery = '',
-  onSelectionChange,
   onClick,
   onPlay,
   onStop,
@@ -115,22 +116,16 @@ export const SourceRow = memo(function SourceRow({
   const { primaryText, source: titleSource } = getDisplayTitle(recording, meeting, transcript)
   const showFilenameInSecondary = titleSource !== 'filename'
 
-  const handleCheckboxClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onSelectionChange?.(recording.id, e.shiftKey)
-  }
-
   const handleRowClick = (e: React.MouseEvent) => {
-    // Don't trigger onClick if clicking on buttons, checkbox, or dropdown
+    // Don't trigger onClick if clicking on buttons or dropdown content
     const target = e.target as HTMLElement
     if (
       target.closest('button') ||
-      target.closest('[role="checkbox"]') ||
       target.closest('[data-radix-popper-content-wrapper]')
     ) {
       return
     }
-    onClick?.()
+    onClick?.(e)
   }
 
   // Secondary line: date · duration (· filename when title isn't the filename)
@@ -148,26 +143,23 @@ export const SourceRow = memo(function SourceRow({
   return (
     <div
       className={[
-        'group @container flex items-center justify-between py-2 px-3 hover:bg-surface-hover cursor-pointer transition-colors',
-        isSelected ? 'bg-accent-strong-soft border-l-2 border-l-accent-strong/50' : 'border-l-2 border-l-transparent',
+        // Two coexisting visual states, applied via a left accent bar + tint:
+        //  • BULK-selected (isSelected) → teal selection tint + teal left bar
+        //  • OPEN/active source (isActiveSource) → blue accent-soft tint + blue left bar
+        // A row can be both; the open (blue) bar takes the left-edge so the
+        // currently-open row stays identifiable inside a multi-selection.
+        'group @container flex items-center justify-between py-2 px-3 cursor-pointer transition-colors border-l-2',
+        isSelected ? 'bg-accent-2-soft border-l-accent-2' : 'border-l-transparent hover:bg-surface-hover',
         isActiveSource ? 'bg-accent-strong-soft border-l-primary' : '',
       ].filter(Boolean).join(' ')}
       role="option"
       onClick={handleRowClick}
       aria-selected={isPlaying || isSelected}
+      data-selected={isSelected || undefined}
       tabIndex={0}
     >
-      {/* Left: checkbox + icon tile + content */}
+      {/* Left: icon tile + content */}
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        {onSelectionChange && (
-          <Checkbox
-            checked={isSelected}
-            onClick={handleCheckboxClick}
-            aria-label={`Select ${recording.filename}`}
-            className="shrink-0"
-          />
-        )}
-
         {/* Icon tile — active source uses bg-primary, otherwise surface-sunken */}
         <div
           className={[
@@ -373,7 +365,6 @@ export const SourceRow = memo(function SourceRow({
     prevProps.searchQuery === nextProps.searchQuery &&
     prevProps.peopleKey === nextProps.peopleKey &&
     prevProps.labelsKey === nextProps.labelsKey &&
-    prevProps.onSelectionChange === nextProps.onSelectionChange &&
     prevProps.onClick === nextProps.onClick
   )
 })
