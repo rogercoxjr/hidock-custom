@@ -32,6 +32,7 @@ import {
 } from '@/features/library/components'
 import { useSourceSelection, useKeyboardNavigation, useTransitionFilters } from '@/features/library/hooks'
 import { buildSearchCorpus } from '@/features/library/utils/buildSearchCorpus'
+import { deriveCapturePeople, buildPeopleKey, deriveCaptureLabels, buildLabelsKey } from '@/features/library/utils'
 import { useLibraryStore, useLibrarySorting } from '@/store/useLibraryStore'
 import { useOperations } from '@/hooks/useOperations'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -318,7 +319,7 @@ export function Library() {
       .sort()
       .join(',')
     const meetingIds = recordings
-      .filter((rec) => hasLocalPath(rec) && rec.meetingId)
+      .filter((rec) => rec.meetingId)
       .map((rec) => rec.meetingId!)
       .sort()
       .join(',')
@@ -335,7 +336,7 @@ export function Library() {
     const loadEnrichment = async () => {
       const recordingIdsForTranscripts = recordings.filter((rec) => hasLocalPath(rec)).map((rec) => rec.id)
       const meetingIds = recordings
-        .filter((rec) => hasLocalPath(rec) && rec.meetingId)
+        .filter((rec) => rec.meetingId)
         .map((rec) => rec.meetingId!)
 
       try {
@@ -991,6 +992,10 @@ export function Library() {
                     const recording = filteredRecordings[virtualRow.index]
                     const meeting = recording.meetingId ? meetings.get(recording.meetingId) : undefined
                     const isFocused = focusedIndex === virtualRow.index
+                    const rowPeople = deriveCapturePeople(meeting)
+                    const rowLabels = deriveCaptureLabels(recording.category)
+                    const rowPeopleKey = buildPeopleKey(rowPeople)
+                    const rowLabelsKey = buildLabelsKey(rowLabels)
 
                     return (
                       <div
@@ -1040,6 +1045,11 @@ export function Library() {
                             isDeviceOnly(recording) ? downloadQueue.get(recording.deviceFilename)?.progress : undefined
                           }
                           deviceConnected={deviceConnected}
+                          people={rowPeople}
+                          labels={rowLabels}
+                          peopleKey={rowPeopleKey}
+                          labelsKey={rowLabelsKey}
+                          onOverflowPeopleClick={() => handleRowClick(recording)}
                         />
                       </div>
                     )
@@ -1053,6 +1063,10 @@ export function Library() {
                     const transcript = transcripts.get(recording.id)
                     const meeting = recording.meetingId ? meetings.get(recording.meetingId) : undefined
                     const isFocused = focusedIndex === virtualRow.index
+                    const cardPeople = deriveCapturePeople(meeting)
+                    const cardLabels = deriveCaptureLabels(recording.category)
+                    const cardPeopleKey = buildPeopleKey(cardPeople)
+                    const cardLabelsKey = buildLabelsKey(cardLabels)
 
                     return (
                       <div
@@ -1101,6 +1115,11 @@ export function Library() {
                           onGenerateOutput={() => handleGenerateOutputCallback(recording)}
                           onToggleTranscript={() => handleToggleTranscriptCallback(recording.id)}
                           onNavigateToMeeting={handleNavigateToMeeting}
+                          people={cardPeople}
+                          labels={cardLabels}
+                          peopleKey={cardPeopleKey}
+                          labelsKey={cardLabelsKey}
+                          onOverflowPeopleClick={() => handleRowClick(recording)}
                         />
                       </div>
                     )
