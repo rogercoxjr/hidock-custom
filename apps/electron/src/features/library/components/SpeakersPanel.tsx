@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Play } from 'lucide-react'
 import { toast } from '@/components/ui/toaster'
 import { useConfigStore } from '@/store/domain/useConfigStore'
 import {
@@ -57,6 +57,13 @@ interface SpeakersPanelProps {
   assignedSpeakers?: Record<string, { contactId: string; contactName: string }>
   /** Pending matcher suggestions for this recording (Phase 2B). */
   suggestions?: SuggestionView[]
+  /**
+   * Jump audio playback to a speaker's first turn (in ms). When provided, the
+   * speaker NAME becomes a button that seeks + plays from that turn; the
+   * transcript follows via the existing playback highlight. When absent, the
+   * name renders as plain text (no jump affordance).
+   */
+  onJumpToTime?: (startMs: number) => void
   /** Called after any successful assign/merge/reassign/suggestion action so the host can refetch. */
   onChanged: () => void
 }
@@ -112,6 +119,7 @@ export function SpeakersPanel({
   assignedNames,
   assignedSpeakers,
   suggestions = [],
+  onJumpToTime,
   onChanged,
 }: SpeakersPanelProps) {
   const { config } = useConfigStore()
@@ -145,17 +153,22 @@ export function SpeakersPanel({
   const [warningSuggestion, setWarningSuggestion] = useState<SuggestionView | null>(null)
   const [selfHintLabel, setSelfHintLabel] = useState<string | null>(null)
 
-  // Per-label stats: turn-count + talk-time (overlapping intervals merged).
+  // Per-label stats: turn-count + talk-time (overlapping intervals merged) +
+  // firstMs (earliest turn start, for "jump to where this speaker first speaks").
   const labels = useMemo(() => {
-    const stats = new Map<string, { count: number; intervals: Array<{ startMs: number; endMs: number }> }>()
+    const stats = new Map<
+      string,
+      { count: number; intervals: Array<{ startMs: number; endMs: number }>; firstMs: number }
+    >()
     for (const t of turns) {
-      const cur = stats.get(t.speaker) ?? { count: 0, intervals: [] }
+      const cur = stats.get(t.speaker) ?? { count: 0, intervals: [], firstMs: t.startMs }
       cur.count += 1
       cur.intervals.push({ startMs: t.startMs, endMs: t.endMs })
+      cur.firstMs = Math.min(cur.firstMs, t.startMs)
       stats.set(t.speaker, cur)
     }
     return [...stats.entries()]
-      .map(([label, s]) => ({ label, count: s.count, talkMs: mergedTalkMs(s.intervals) }))
+      .map(([label, s]) => ({ label, count: s.count, talkMs: mergedTalkMs(s.intervals), firstMs: s.firstMs }))
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [turns])
 
@@ -481,9 +494,10 @@ export function SpeakersPanel({
           Voice memory is off — assignments won&apos;t be remembered. Enable in Settings → Privacy.
         </p>
       )}
-      {labels.map(({ label, count, talkMs }) => {
+      {labels.map(({ label, count, talkMs, firstMs }) => {
         const assignment = assignedSpeakers?.[label]
         const assignedName = assignment?.contactName ?? assignedNames?.[label]
+        const displayName = assignedName ?? label
         const note = captureNotes[label]
         const labelSuggestions = suggestionsByLabel.get(label) ?? []
         const identityChips = labelSuggestions
@@ -502,7 +516,20 @@ export function SpeakersPanel({
                 style={{ background: dotColor }}
                 aria-hidden
               />
-              <span className="w-8 shrink-0 font-mono text-[13px] font-semibold text-ink">{label}</span>
+              {onJumpToTime ? (
+                <button
+                  type="button"
+                  onClick={() => onJumpToTime(firstMs)}
+                  aria-label={`Play from where ${displayName} first speaks`}
+                  title={`Play from where ${displayName} first speaks`}
+                  className="group/jump -my-1 -ml-1 flex shrink-0 items-center gap-1 rounded-sm py-1 pl-1 pr-1.5 transition-colors hover:bg-accent-2-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-2"
+                >
+                  <Play className="h-3 w-3 shrink-0 text-ink-muted opacity-0 transition-opacity group-hover/jump:opacity-100 group-hover/jump:text-accent-2" aria-hidden />
+                  <span className="w-8 shrink-0 font-mono text-[13px] font-semibold text-ink group-hover/jump:text-accent-2">{label}</span>
+                </button>
+              ) : (
+                <span className="w-8 shrink-0 font-mono text-[13px] font-semibold text-ink">{label}</span>
+              )}
               <span className="flex-1 text-xs text-ink-muted">
                 <span>{count} turns</span>
                 <span> &bull; </span>

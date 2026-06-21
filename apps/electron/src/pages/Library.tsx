@@ -1186,6 +1186,23 @@ export function Library() {
                       audioControls.seek(startMs / 1000)
                     }
                   }}
+                  // Speaker-name jump: seek to a speaker's first turn and play.
+                  // If this recording is the active (already-loaded) audio, seek
+                  // the element directly and resume if it was paused — avoids a
+                  // full reload. Otherwise load+start it at the offset (the offset
+                  // is applied on loadedmetadata so it isn't dropped pre-load).
+                  // Device-only captures (no localPath) no-op.
+                  onJumpToTime={(startMs) => {
+                    if (!hasLocalPath(selectedRecording)) return
+                    const seconds = startMs / 1000
+                    const isActive = currentlyPlayingId === selectedRecording.id
+                    if (isActive) {
+                      audioControls.seek(seconds)
+                      if (!useUIStore.getState().isPlaying) audioControls.resume()
+                    } else {
+                      audioControls.play(selectedRecording.id, selectedRecording.localPath, seconds)
+                    }
+                  }}
                   // Action button callbacks
                   onDownload={() => handleDownloadCallback(selectedRecording)}
                   onTranscribe={(force?: boolean) => queueTranscription(selectedRecording, { force })}
