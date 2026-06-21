@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Badge } from '@/components/ui/badge'
 
 interface TranscriptionStatusBadgeProps {
   status: 'none' | 'pending' | 'processing' | 'complete' | 'error'
@@ -15,22 +16,22 @@ const STATUS_LABELS: Record<string, string> = {
   error: 'Failed'
 }
 
-// Badge styling based on status
-const STATUS_STYLES: Record<string, string> = {
-  none: 'bg-secondary text-secondary-foreground',
-  pending: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300',
-  processing: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300',
-  complete: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300',
-  error: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+// Harbor Badge variant per status
+const STATUS_VARIANTS: Record<string, 'default' | 'warning' | 'success' | 'danger'> = {
+  none: 'default',
+  pending: 'warning',
+  processing: 'warning',
+  complete: 'success',
+  error: 'danger'
 }
 
-// Compact dot colors
+// Compact dot colors (Harbor status tokens)
 const DOT_STYLES: Record<string, string> = {
-  none: 'bg-muted-foreground/40',
-  pending: 'bg-yellow-500',
-  processing: 'bg-yellow-500 animate-pulse',
-  complete: 'bg-green-500',
-  error: 'bg-red-500'
+  none: 'bg-ink-muted/40',
+  pending: 'bg-warning',
+  processing: 'bg-warning animate-pulse',
+  complete: 'bg-success',
+  error: 'bg-danger'
 }
 
 export function TranscriptionStatusBadge({ status, compact, className }: TranscriptionStatusBadgeProps) {
@@ -53,8 +54,8 @@ export function TranscriptionStatusBadge({ status, compact, className }: Transcr
   }
 
   return (
-    <span className={`text-xs px-2 py-1 rounded-full ${STATUS_STYLES[status]} ${className || ''}`}>
+    <Badge variant={STATUS_VARIANTS[status]} className={className}>
       {STATUS_LABELS[status]}
-    </span>
+    </Badge>
   )
 }

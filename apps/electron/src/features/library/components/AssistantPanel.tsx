@@ -16,7 +16,7 @@ import { useNavigate } from 'react-router-dom'
 import { UnifiedRecording, hasLocalPath } from '@/types/unified-recording'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Sparkles, FileText, Lightbulb, AlertCircle } from 'lucide-react'
+import { Sparkles, FileText, Lightbulb, AlertCircle, Send } from 'lucide-react'
 
 interface AssistantPanelProps {
   recording: UnifiedRecording | null
@@ -108,57 +108,64 @@ export function AssistantPanel({ recording, transcript, onAskAssistant, onGenera
   })()
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header */}
-      <div className="p-4 border-b">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">AI Assistant</h3>
+    <div className="flex flex-col h-full bg-surface">
+      {/* Header — sparkle (teal accent) + Assistant title + capture meta */}
+      <div className="flex-none px-[var(--space-4)] py-[var(--space-3)] border-b border-border flex items-center gap-[9px]">
+        <Sparkles className="h-[17px] w-[17px] text-accent-2 flex-none" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-ink">Assistant</div>
+          {recording && (
+            <div className="font-mono text-[10px] text-ink-muted overflow-hidden text-ellipsis whitespace-nowrap">
+              {recording.title || recording.filename}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-y-auto px-[var(--space-4)] py-[var(--space-4)]">
         {recording ? (
-          <div className="space-y-4">
-            {/* Context-aware suggestions */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium text-muted-foreground">Quick Actions</h4>
-              <div className="space-y-2">
-                {recording.transcriptionStatus === 'complete' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => onGenerateOutput?.(recording)}
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    Generate Meeting Minutes
-                  </Button>
-                )}
+          <div className="flex flex-col gap-[var(--space-4)]">
+            {/* Quick Actions — chip row */}
+            {(recording.transcriptionStatus === 'complete' || hasLocalPath(recording)) && (
+              <div className="flex flex-col gap-2">
+                <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-muted">
+                  Quick Actions
+                </div>
+                <div className="flex flex-wrap gap-[6px]">
+                  {recording.transcriptionStatus === 'complete' && (
+                    <button
+                      className="inline-flex items-center gap-[6px] px-[11px] py-[6px] bg-surface border border-border rounded-full text-xs font-medium text-foreground hover:bg-surface-hover transition-colors"
+                      onClick={() => onGenerateOutput?.(recording)}
+                    >
+                      <FileText className="h-[13px] w-[13px] text-accent-2" />
+                      Generate Meeting Minutes
+                    </button>
+                  )}
 
-                {hasLocalPath(recording) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => onAskAssistant?.(recording)}
-                  >
-                    <Lightbulb className="h-4 w-4 mr-2" />
-                    Ask about this recording
-                  </Button>
-                )}
+                  {hasLocalPath(recording) && (
+                    <button
+                      className="inline-flex items-center gap-[6px] px-[11px] py-[6px] bg-surface border border-border rounded-full text-xs font-medium text-foreground hover:bg-surface-hover transition-colors"
+                      onClick={() => onAskAssistant?.(recording)}
+                    >
+                      <Lightbulb className="h-[13px] w-[13px] text-accent-2" />
+                      Ask about this recording
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Contextual suggestions */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium text-muted-foreground">Suggested Questions</h4>
-              <div className="space-y-2 text-sm">
+            {/* Suggested Questions — assistant-bubble styled prompts */}
+            <div className="flex flex-col gap-2">
+              <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-muted">
+                Suggested Questions
+              </div>
+              <div className="flex flex-col gap-[var(--space-3)]">
                 {suggestedQuestions.map((question, index) => (
                   <button
                     key={index}
-                    className="w-full text-left p-2 rounded hover:bg-muted transition-colors"
+                    className="self-start max-w-[86%] text-left text-[13px] leading-[1.55] px-[13px] py-[10px] rounded-lg rounded-bl-[4px] bg-surface-sunken border border-border text-ink hover:bg-surface-hover transition-colors"
                     onClick={() => setQuery(question)}
                   >
                     {question}
@@ -168,47 +175,49 @@ export function AssistantPanel({ recording, transcript, onAskAssistant, onGenera
             </div>
           </div>
         ) : (
-          <div className="text-center text-muted-foreground py-8">
+          <div className="text-center text-ink-muted py-8">
             <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">Select a recording to get AI assistance</p>
           </div>
         )}
       </div>
 
-      {/* Input Area */}
-      <div className="p-4 border-t space-y-2">
+      {/* Composer */}
+      <div className="flex-none px-[var(--space-4)] py-[var(--space-3)] border-t border-border space-y-2">
         {isRateLimited && (
-          <div className="flex items-start gap-2 p-2 bg-destructive/10 text-destructive text-xs rounded">
+          <div className="flex items-start gap-2 p-2 bg-danger-soft text-danger text-xs rounded-md">
             <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
             <p>Rate limit reached. Wait {Math.ceil((rateLimitReset! - Date.now()) / 1000)}s before submitting more queries.</p>
           </div>
         )}
-        <div className="space-y-2">
+        <div className="flex items-end gap-2 bg-surface border-[1.5px] border-border rounded-lg pl-3 pr-2 py-2">
           <Textarea
             placeholder={
               recording
-                ? 'Ask a question about this recording...'
+                ? 'Ask about this capture…'
                 : 'Select a recording first'
             }
             value={query}
             onChange={(e) => setQuery(e.target.value.slice(0, MAX_QUERY_LENGTH))}
             onKeyDown={handleKeyDown}
             disabled={!recording || isRateLimited}
-            className="resize-none"
-            rows={3}
+            className="flex-1 min-h-0 resize-none border-none bg-transparent px-0 py-1 shadow-none focus-visible:ring-0 text-[13px] text-ink"
+            rows={2}
           />
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              {query.length}/{MAX_QUERY_LENGTH}
-            </span>
-            <Button
-              size="sm"
-              onClick={handleQuerySubmit}
-              disabled={!canQuery}
-            >
-              Ask
-            </Button>
-          </div>
+          <Button
+            size="icon"
+            onClick={handleQuerySubmit}
+            disabled={!canQuery}
+            className="h-8 w-8 flex-none rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+            aria-label="Ask"
+          >
+            <Send className="h-[15px] w-[15px]" />
+          </Button>
+        </div>
+        <div className="flex items-center justify-end">
+          <span className="text-xs text-ink-muted">
+            {query.length}/{MAX_QUERY_LENGTH}
+          </span>
         </div>
       </div>
     </div>

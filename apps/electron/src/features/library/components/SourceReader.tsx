@@ -317,9 +317,9 @@ export function SourceReader({
 
   if (!recording) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <div className="text-center space-y-2">
-          <p className="text-lg font-medium">No recording selected</p>
+      <div className="flex h-full items-center justify-center bg-bg text-ink-muted">
+        <div className="space-y-2 text-center">
+          <p className="font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-ink">No recording selected</p>
           <p className="text-sm">Select a recording from the list to view details</p>
         </div>
       </div>
@@ -338,9 +338,9 @@ export function SourceReader({
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden bg-bg">
       {/* Header with comprehensive metadata */}
-      <div className="p-6 border-b space-y-4">
+      <div className="space-y-4 border-b border-border bg-surface p-[var(--space-5)]">
         <div>
           <div className="mb-4">
             {isEditingTitle ? (
@@ -352,7 +352,7 @@ export function SourceReader({
                     if (e.key === 'Enter') handleSaveTitle()
                     if (e.key === 'Escape') handleCancelTitle()
                   }}
-                  className="text-xl font-semibold h-auto py-1"
+                  className="h-auto py-1 font-display text-[1.75rem] font-semibold tracking-[-0.02em]"
                   autoFocus
                   disabled={isSavingTitle}
                   aria-label="Recording title"
@@ -366,7 +366,10 @@ export function SourceReader({
               </div>
             ) : (
               <div className="group flex items-center gap-2">
-                <h2 className="text-xl font-semibold truncate" title={recording.title || meeting?.subject || recording.filename}>
+                <h2
+                  className="truncate font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink"
+                  title={recording.title || meeting?.subject || recording.filename}
+                >
                   {recording.title || meeting?.subject || recording.filename}
                 </h2>
                 {recording.knowledgeCaptureId && (
@@ -375,11 +378,11 @@ export function SourceReader({
                       setIsEditingTitle(true)
                       setEditedTitle(recording.title || recording.filename)
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted"
+                    className="rounded-sm p-1 opacity-0 transition-opacity hover:bg-surface-hover group-hover:opacity-100"
                     aria-label="Edit title"
                     title="Edit title"
                   >
-                    <Pencil className="h-4 w-4 text-muted-foreground" />
+                    <Pencil className="h-4 w-4 text-ink-muted" />
                   </button>
                 )}
               </div>
@@ -387,35 +390,35 @@ export function SourceReader({
           </div>
 
           {/* Comprehensive Metadata Grid - same as SourceRowExpanded */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3 lg:grid-cols-4">
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Date Recorded</p>
-              <p>{(() => {
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Date Recorded</p>
+              <p className="text-foreground">{(() => {
                 const date = new Date(recording.dateRecorded)
                 return !isNaN(date.getTime()) ? formatDateTime(date.toISOString()) : 'Unknown'
               })()}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Duration</p>
-              <p>{recording.duration ? formatDuration(recording.duration) : 'Unknown'}</p>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Duration</p>
+              <p className="text-foreground">{recording.duration ? formatDuration(recording.duration) : 'Unknown'}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Size</p>
-              <p>{recording.size ? formatBytes(recording.size) : 'Unknown'}</p>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Size</p>
+              <p className="text-foreground">{recording.size ? formatBytes(recording.size) : 'Unknown'}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Quality</p>
-              <p className="capitalize">{recording.quality || 'Standard'}</p>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Quality</p>
+              <p className="capitalize text-foreground">{recording.quality || 'Standard'}</p>
             </div>
             {recording.knowledgeCaptureId ? (
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Category</p>
+                <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Category</p>
                 <Select
                   value={recording.category || ''}
                   onValueChange={handleCategoryChange}
                   disabled={isSavingCategory}
                 >
-                  <SelectTrigger className="h-7 text-sm w-[140px]">
+                  <SelectTrigger className="h-7 w-[140px] text-sm">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
@@ -429,35 +432,35 @@ export function SourceReader({
               </div>
             ) : recording.category ? (
               <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1">Category</p>
-                <p className="capitalize">{recording.category}</p>
+                <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Category</p>
+                <p className="capitalize text-foreground">{recording.category}</p>
               </div>
             ) : null}
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Location</p>
-              <p className="capitalize">{recording.location.replace('-', ' ')}</p>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Location</p>
+              <p className="capitalize text-foreground">{recording.location.replace('-', ' ')}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Transcription</p>
-              <p className="capitalize">{recording.transcriptionStatus}</p>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Transcription</p>
+              <p className="capitalize text-foreground">{recording.transcriptionStatus}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-1">Filename</p>
-              <p className="truncate" title={recording.filename}>{recording.filename}</p>
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Filename</p>
+              <p className="truncate text-foreground" title={recording.filename}>{recording.filename}</p>
             </div>
           </div>
 
           {/* Linked Meeting */}
           {meeting && (
-            <div className="mt-4 flex items-center gap-2 p-3 bg-muted/30 border rounded-lg">
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-surface-sunken p-3">
               <div
-                className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
+                className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 transition-opacity hover:opacity-80"
                 onClick={() => onNavigateToMeeting?.(meeting.id)}
               >
-                <Calendar className="h-4 w-4 text-primary shrink-0" />
+                <Calendar className="h-4 w-4 shrink-0 text-accent-2" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{meeting.subject}</p>
-                  <p className="text-xs text-muted-foreground">{formatDateTime(meeting.start_time)}</p>
+                  <p className="truncate text-sm font-medium text-ink">{meeting.subject}</p>
+                  <p className="font-mono text-[11px] text-ink-muted">{formatDateTime(meeting.start_time)}</p>
                 </div>
               </div>
               <Button
@@ -472,7 +475,7 @@ export function SourceReader({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                className="h-7 w-7 shrink-0 text-ink-muted hover:text-destructive"
                 onClick={(e) => { e.stopPropagation(); handleRemoveMeetingLink() }}
                 title="Remove meeting link"
               >
@@ -483,7 +486,7 @@ export function SourceReader({
 
           {/* Device-only notice */}
           {isDeviceOnly(recording) && (
-            <p className="mt-3 text-xs text-muted-foreground italic">
+            <p className="mt-3 text-xs italic text-ink-muted">
               Download this capture to play it and generate a transcript.
             </p>
           )}
@@ -491,7 +494,7 @@ export function SourceReader({
       </div>
 
       {/* Action Buttons Section */}
-      <div className="flex flex-wrap gap-2 px-6 py-3 border-b bg-muted/30">
+      <div className="flex flex-wrap gap-2 border-b border-border bg-surface-sunken px-[var(--space-5)] py-3">
         {/* Play/Stop Button - only for local recordings - LB-03 fix: Wire up onPlay callback */}
         {canPlay && onPlay && (
           isPlaying ? (
@@ -644,7 +647,7 @@ export function SourceReader({
             className="gap-2"
             title="Re-run transcription with speaker detection (replaces the current transcript)"
           >
-            <Wand2 className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4 text-accent-2" />
             Re-transcribe
           </Button>
         )}
@@ -675,18 +678,18 @@ export function SourceReader({
 
       {/* Audio Player — shown whenever recording has local file */}
       {canPlay && (
-        <div className="sticky top-0 bg-background z-10 border-b">
+        <div className="sticky top-0 z-10 border-b border-border bg-surface px-[var(--space-5)] py-3">
           <AudioPlayer key={recording.id} filename={recording.filename} onClose={onStop} />
         </div>
       )}
 
       {/* Transcript Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-[var(--space-5)]">
         {transcript ? (
           <>
             {summaryStale && (
-              <div className="mb-3 flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm">
-                <AlertCircle className="h-4 w-4 text-amber-600" />
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-[color-mix(in_oklch,var(--amber-600)_26%,transparent)] bg-warning-soft px-3 py-2 text-sm text-foreground">
+                <AlertCircle className="h-4 w-4 text-warning" />
                 <span>Summary uses generic speaker labels — re-summarize to attribute names.</span>
                 {onResummarize && (
                   <Button variant="link" size="sm" className="h-auto p-0" onClick={onResummarize}>
@@ -696,8 +699,8 @@ export function SourceReader({
               </div>
             )}
             {recording.transcriptionStatus === 'error' && (
-              <div className="mb-3 flex items-center gap-2 rounded-md border border-orange-300 bg-orange-50 dark:bg-orange-950/30 px-3 py-2 text-sm">
-                <AlertCircle className="h-4 w-4 text-orange-600" />
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-[color-mix(in_oklch,var(--amber-600)_26%,transparent)] bg-warning-soft px-3 py-2 text-sm text-foreground">
+                <AlertCircle className="h-4 w-4 text-warning" />
                 <span>Summary failed — the transcript is intact.</span>
                 {onResummarize && (
                   <Button variant="link" size="sm" className="h-auto p-0" onClick={onResummarize}>
@@ -708,7 +711,7 @@ export function SourceReader({
             )}
             {/* Phase 2B re-transcribe banner: speakers were re-lettered, confirm suggestions. */}
             {showSuggestionsBanner && (
-              <div className="mb-3 flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 dark:bg-blue-950/30 px-3 py-2 text-sm">
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-[color-mix(in_oklch,var(--accent-2)_22%,transparent)] bg-accent-2-soft px-3 py-2 text-sm text-foreground">
                 <span>Re-analyzed speakers after re-transcription — confirm the suggestions below.</span>
                 <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setShowSuggestionsBanner(false)}>
                   Dismiss
@@ -716,8 +719,8 @@ export function SourceReader({
               </div>
             )}
             {isLoadingSuggestions && (
-              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-                <RefreshCw className="h-4 w-4 animate-spin" />
+              <div className="mb-3 flex items-center gap-2 text-sm text-ink-muted">
+                <RefreshCw className="h-4 w-4 animate-spin text-accent-2" />
                 <span>Analyzing voices…</span>
               </div>
             )}
@@ -749,18 +752,18 @@ export function SourceReader({
             />
           </>
         ) : recording.transcriptionStatus === 'complete' ? (
-          <div className="text-center text-muted-foreground py-8">
+          <div className="py-8 text-center text-ink-muted">
             <p>Transcript not available</p>
           </div>
         ) : recording.transcriptionStatus === 'pending' || recording.transcriptionStatus === 'processing' ? (
-          <div className="text-center text-muted-foreground py-8">
+          <div className="py-8 text-center text-ink-muted">
             <p>Transcription in progress...</p>
           </div>
         ) : (
-          <div className="text-center text-muted-foreground py-8">
+          <div className="py-8 text-center text-ink-muted">
             <p>No transcript available</p>
             {canPlay && (
-              <p className="text-sm mt-2">
+              <p className="mt-2 text-sm">
                 Click &quot;Transcribe&quot; to generate a transcript
               </p>
             )}

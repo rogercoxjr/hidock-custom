@@ -8,9 +8,11 @@ import { ToastProvider } from '@/components/ui/toaster'
 import { getHiDockDeviceService } from '@/services/hidock-device'
 import { NavigationLogger, initInteractionLogger, initErrorLogger, cleanupQAMonitor } from '@/services/qa-monitor'
 import { lazyWithRetry } from '@/lib/lazyWithRetry'
+import { useApplyTheme } from '@/hooks/useApplyTheme'
 
 // Lazy load all page components for code splitting
 // Each page becomes a separate chunk, reducing initial bundle size
+const Home = lazyWithRetry(() => import('@/pages/Home'))
 const Calendar = lazyWithRetry(() => import('@/pages/Calendar'))
 const MeetingDetail = lazyWithRetry(() => import('@/pages/MeetingDetail'))
 const Chat = lazyWithRetry(() => import('@/pages/Chat'))
@@ -24,6 +26,9 @@ const Actionables = lazyWithRetry(() => import('@/pages/Actionables'))
 const Settings = lazyWithRetry(() => import('@/pages/Settings'))
 
 function App(): React.ReactElement {
+  // Apply Harbor theme (.dark class on <html>) from persisted UI store
+  useApplyTheme()
+
   // Initialize QA monitoring and auto-connect
   useEffect(() => {
     // Initialize QA Monitoring
@@ -76,7 +81,17 @@ function App(): React.ReactElement {
       <Layout>
         <NavigationLogger />
         <Routes>
-          <Route path="/" element={<Navigate to="/library" replace />} />
+          <Route path="/" element={<Navigate to="/home" replace />} />
+          <Route
+            path="/home"
+            element={
+              <ErrorBoundary>
+                <Suspense fallback={<LoadingSpinner message="Loading home..." />}>
+                  <Home />
+                </Suspense>
+              </ErrorBoundary>
+            }
+          />
           <Route
             path="/calendar"
             element={

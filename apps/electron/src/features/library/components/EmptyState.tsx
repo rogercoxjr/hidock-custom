@@ -12,11 +12,15 @@ export function EmptyState({ hasRecordings, onNavigateToDevice, onAddRecording }
   return (
     <Card>
       <CardContent className="py-16 text-center">
-        <Mic className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-sunken text-accent-2">
+          <Mic className="h-6 w-6" />
+        </div>
         {!hasRecordings ? (
           <>
-            <h3 className="text-lg font-medium mb-2">No Knowledge Captured Yet</h3>
-            <p className="text-muted-foreground mb-4">
+            <h3 className="font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-ink mb-2">
+              No Knowledge Captured Yet
+            </h3>
+            <p className="text-ink-muted mb-4">
               Connect your HiDock device to sync your captured conversations, or import audio files from your computer.
             </p>
             <div className="flex gap-2 justify-center">
@@ -29,8 +33,10 @@ export function EmptyState({ hasRecordings, onNavigateToDevice, onAddRecording }
           </>
         ) : (
           <>
-            <h3 className="text-lg font-medium mb-2">No Matching Captures</h3>
-            <p className="text-muted-foreground">Try changing your filter or search query.</p>
+            <h3 className="font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-ink mb-2">
+              No Matching Captures
+            </h3>
+            <p className="text-ink-muted">Try changing your filter or search query.</p>
           </>
         )}
       </CardContent>

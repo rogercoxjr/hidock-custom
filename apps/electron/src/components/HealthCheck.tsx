@@ -135,11 +135,11 @@ export function HealthCheck() {
   const getSeverityIcon = (severity: 'low' | 'medium' | 'high') => {
     switch (severity) {
       case 'high':
-        return <AlertCircle className="h-4 w-4 text-red-500" />
+        return <AlertCircle className="h-4 w-4 text-danger" />
       case 'medium':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />
+        return <AlertTriangle className="h-4 w-4 text-warning" />
       case 'low':
-        return <AlertCircle className="h-4 w-4 text-blue-500" />
+        return <AlertCircle className="h-4 w-4 text-accent-strong" />
     }
   }
 
@@ -181,18 +181,18 @@ export function HealthCheck() {
 
         {/* Error Display */}
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-400 text-sm">
+          <div className="p-3 bg-danger-soft border border-danger/30 rounded-lg text-danger text-sm">
             {error}
           </div>
         )}
 
         {/* Repair Results */}
         {repairResults.length > 0 && (
-          <div className="p-3 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900 rounded-lg text-sm">
-            <div className="font-medium text-green-700 dark:text-green-400 mb-1">
+          <div className="p-3 bg-success-soft border border-success/30 rounded-lg text-sm">
+            <div className="font-medium text-success mb-1">
               Repair Complete
             </div>
-            <div className="text-green-600 dark:text-green-500">
+            <div className="text-success">
               {repairResults.filter(r => r.success).length} of {repairResults.length} issues repaired successfully
             </div>
           </div>
@@ -200,16 +200,16 @@ export function HealthCheck() {
 
         {/* Cleanup Results */}
         {cleanupResult && (
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 rounded-lg text-sm">
-            <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
+          <div className="p-3 bg-warning-soft border border-warning/30 rounded-lg text-sm">
+            <div className="font-medium text-warning mb-1">
               Cleanup Complete
             </div>
-            <div className="text-amber-600 dark:text-amber-500 space-y-1">
+            <div className="text-warning space-y-1">
               <div>Deleted {cleanupResult.deletedFiles.length} wrongly-named files</div>
               <div>Cleared {cleanupResult.clearedDbRecords} sync records</div>
               <div>Kept {cleanupResult.keptFiles.length} correctly-named files</div>
             </div>
-            <div className="text-xs text-amber-500 dark:text-amber-400 mt-2">
+            <div className="text-xs text-warning mt-2">
               Reconnect your device to re-download files with correct names
             </div>
           </div>
@@ -219,9 +219,9 @@ export function HealthCheck() {
         {report && (
           <div className="space-y-3">
             {report.totalIssues === 0 ? (
-              <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900 rounded-lg">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-                <span className="text-green-700 dark:text-green-400">All data integrity checks passed</span>
+              <div className="flex items-center gap-2 p-3 bg-success-soft border border-success/30 rounded-lg">
+                <CheckCircle2 className="h-5 w-5 text-success" />
+                <span className="text-success">All data integrity checks passed</span>
               </div>
             ) : (
               <>
@@ -232,13 +232,13 @@ export function HealthCheck() {
                     <div className="text-xs text-muted-foreground">Total Issues</div>
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg text-center">
-                    <div className="text-2xl font-bold text-red-500">
+                    <div className="text-2xl font-bold text-danger">
                       {report.issuesBySeverity['high'] || 0}
                     </div>
                     <div className="text-xs text-muted-foreground">High Severity</div>
                   </div>
                   <div className="p-3 bg-muted/50 rounded-lg text-center">
-                    <div className="text-2xl font-bold text-green-500">
+                    <div className="text-2xl font-bold text-success">
                       {report.autoRepairableCount}
                     </div>
                     <div className="text-xs text-muted-foreground">Auto-Repairable</div>
@@ -300,7 +300,7 @@ export function HealthCheck() {
                             )}
                           </div>
                           {issue.autoRepairable && (
-                            <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-400 rounded">
+                            <span className="text-xs px-2 py-0.5 bg-success-soft text-success rounded">
                               Auto-fix
                             </span>
                           )}
@@ -342,11 +342,11 @@ export function HealthCheck() {
             <div className="mt-4 space-y-6 pl-2 border-l-2 border-muted ml-2">
               {/* Purge Result */}
               {purgeResult && (
-                <div className="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg text-sm">
-                  <div className="font-medium text-red-700 dark:text-red-400 mb-1">
+                <div className="p-3 bg-danger-soft border border-danger/30 rounded-lg text-sm">
+                  <div className="font-medium text-danger mb-1">
                     Purge Complete
                   </div>
-                  <div className="text-red-600 dark:text-red-500 space-y-1">
+                  <div className="text-danger space-y-1">
                     <div>Total records scanned: {purgeResult.totalRecords}</div>
                     <div>Deleted {purgeResult.deleted} orphaned records</div>
                     <div>Kept {purgeResult.kept} valid records</div>
@@ -356,7 +356,7 @@ export function HealthCheck() {
 
               {/* Purge Section - Nuclear Option */}
               <div>
-                <div className="text-sm font-medium mb-2 text-red-600 dark:text-red-400">Purge Orphaned Records</div>
+                <div className="text-sm font-medium mb-2 text-danger">Purge Orphaned Records</div>
                 <p className="text-xs text-muted-foreground mb-3">
                   Delete ALL database records where the audio file doesn't exist on disk.
                   Use this if Health Check finds no issues but the Library still shows deleted files.
@@ -374,16 +374,16 @@ export function HealthCheck() {
 
               {/* Cleanup Results */}
               {cleanupResult && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900 rounded-lg text-sm">
-                  <div className="font-medium text-amber-700 dark:text-amber-400 mb-1">
+                <div className="p-3 bg-warning-soft border border-warning/30 rounded-lg text-sm">
+                  <div className="font-medium text-warning mb-1">
                     Cleanup Complete
                   </div>
-                  <div className="text-amber-600 dark:text-amber-500 space-y-1">
+                  <div className="text-warning space-y-1">
                     <div>Deleted {cleanupResult.deletedFiles.length} wrongly-named files</div>
                     <div>Cleared {cleanupResult.clearedDbRecords} sync records</div>
                     <div>Kept {cleanupResult.keptFiles.length} correctly-named files</div>
                   </div>
-                  <div className="text-xs text-amber-500 dark:text-amber-400 mt-2">
+                  <div className="text-xs text-warning mt-2">
                     Reconnect your device to re-download files with correct names
                   </div>
                 </div>

@@ -3,10 +3,12 @@
  */
 
 import { memo } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw, Calendar as CalendarIcon, List } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, RotateCw, Calendar as CalendarIcon, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { SegmentedToggle } from '@/components/ui/segmented-toggle'
 import type { CalendarViewType } from '@/lib/calendar-utils'
 
 interface CalendarHeaderProps {
@@ -50,42 +52,53 @@ export const CalendarHeader = memo(function CalendarHeader({
   onCalendarViewChange,
 }: CalendarHeaderProps) {
   return (
-    <header className="flex items-center justify-between border-b px-6 py-4 flex-shrink-0">
-      <div className="flex items-center gap-4">
-        <h1 className="text-2xl font-bold">{title}</h1>
-        {/* Date navigation - only show in calendar view */}
-        {!showListView && (
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" onClick={onNavigatePrev}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={onGoToToday}>
-              Today
-            </Button>
-            <Button variant="outline" size="icon" onClick={onNavigateNext}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
+    <header className="flex flex-shrink-0 items-center gap-4 border-b border-border px-[var(--space-5)] pb-[var(--space-3)] pt-[var(--space-4)]">
+      <div className="min-w-0">
+        <Eyebrow>Calendar</Eyebrow>
+        <h1 className="mt-1 truncate font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">
+          {title}
+        </h1>
       </div>
+
+      {/* Date navigation - only show in calendar view */}
+      {!showListView && (
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={onNavigatePrev}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="sm" className="h-8" onClick={onGoToToday}>
+            Today
+          </Button>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={onNavigateNext}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      <div className="flex-1" />
 
       <div className="flex items-center gap-4">
         {/* Sync status */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 font-mono text-[11px] text-ink-muted">
           {calendarSyncing ? (
-            <span className="flex items-center gap-1">
-              <RefreshCw className="h-3 w-3 animate-spin" />
-              Syncing...
+            <span className="flex items-center gap-1.5">
+              <RefreshCw className="h-3 w-3 animate-spin text-accent-2" />
+              Syncing…
             </span>
           ) : (
             <>
-              {lastSync && <span>Synced {formatLastSync()}</span>}
+              {lastSync && (
+                <span className="flex items-center gap-1.5">
+                  <RotateCw className="h-[13px] w-[13px] text-success" />
+                  synced {formatLastSync()}
+                </span>
+              )}
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={onSync}
                 title="Clear cache and resync calendar"
-                className="h-6 px-2"
+                className="h-6 w-6 text-ink-muted hover:text-ink"
               >
                 <RefreshCw className="h-3 w-3" />
               </Button>
@@ -99,84 +112,52 @@ export const CalendarHeader = memo(function CalendarHeader({
           />
           <Label
             htmlFor="auto-sync-header"
-            className="text-xs cursor-pointer"
+            className="cursor-pointer font-mono text-[11px] text-ink-muted"
             title={syncIntervalMinutes ? `Auto-sync every ${syncIntervalMinutes} minutes` : 'Auto-sync'}
           >
-            Auto{syncIntervalMinutes ? ` (${syncIntervalMinutes}m)` : ''}
+            auto{syncIntervalMinutes ? ` (${syncIntervalMinutes}m)` : ''}
           </Label>
         </div>
 
         {/* Hide empty meetings toggle */}
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2">
           <Switch
             id="hide-empty"
             checked={hideEmptyMeetings}
             onCheckedChange={onHideEmptyToggle}
             className="scale-75"
           />
-          <Label htmlFor="hide-empty" className="text-muted-foreground cursor-pointer">
-            Hide empty
+          <Label htmlFor="hide-empty" className="cursor-pointer font-mono text-[11px] text-ink-muted">
+            hide empty
           </Label>
         </div>
 
         {/* Calendar/List toggle */}
-        <div className="flex items-center border rounded-md overflow-hidden">
-          <Button
-            variant={!showListView ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => onViewToggle(false)}
-            className="rounded-none border-0 px-2"
-            title="Calendar view"
-          >
-            <CalendarIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={showListView ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => onViewToggle(true)}
-            className="rounded-none border-0 border-l px-2"
-            title="List view"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
+        <SegmentedToggle<'calendar' | 'list'>
+          size="sm"
+          aria-label="Calendar or list view"
+          value={showListView ? 'list' : 'calendar'}
+          onChange={(v) => onViewToggle(v === 'list')}
+          options={[
+            { value: 'calendar', label: 'Week', icon: <CalendarIcon className="h-3.5 w-3.5" />, title: 'Calendar view' },
+            { value: 'list', label: 'List', icon: <List className="h-3.5 w-3.5" />, title: 'List view' },
+          ]}
+        />
 
         {/* View mode buttons (only for calendar view) */}
         {!showListView && (
-          <div className="flex items-center border rounded-md overflow-hidden">
-            <Button
-              variant={calendarView === 'day' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onCalendarViewChange('day')}
-              className="rounded-none border-0"
-            >
-              Day
-            </Button>
-            <Button
-              variant={calendarView === 'workweek' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onCalendarViewChange('workweek')}
-              className="rounded-none border-0 border-l"
-            >
-              Work
-            </Button>
-            <Button
-              variant={calendarView === 'week' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onCalendarViewChange('week')}
-              className="rounded-none border-0 border-l"
-            >
-              Week
-            </Button>
-            <Button
-              variant={calendarView === 'month' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => onCalendarViewChange('month')}
-              className="rounded-none border-0 border-l"
-            >
-              Month
-            </Button>
-          </div>
+          <SegmentedToggle<CalendarViewType>
+            size="sm"
+            aria-label="Calendar range"
+            value={calendarView}
+            onChange={onCalendarViewChange}
+            options={[
+              { value: 'day', label: 'Day' },
+              { value: 'workweek', label: 'Work' },
+              { value: 'week', label: 'Week' },
+              { value: 'month', label: 'Month' },
+            ]}
+          />
         )}
       </div>
     </header>

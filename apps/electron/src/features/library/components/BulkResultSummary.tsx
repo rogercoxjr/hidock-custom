@@ -45,7 +45,7 @@ function getTitle(result: BulkOperationResult, operation: string): string {
  */
 function ErrorIcon({ error }: { error: LibraryError }) {
   if (error.retryable) {
-    return <AlertCircle className="h-4 w-4 text-yellow-500 flex-shrink-0" aria-label="Retryable error" />
+    return <AlertCircle className="h-4 w-4 text-warning flex-shrink-0" aria-label="Retryable error" />
   }
   return <XCircle className="h-4 w-4 text-destructive flex-shrink-0" aria-label="Permanent error" />
 }
@@ -74,30 +74,30 @@ export function BulkResultSummary({ isOpen, onClose, operation, result, onRetryF
         {/* Summary Statistics */}
         <div className="grid grid-cols-3 gap-4 py-4">
           {/* Succeeded */}
-          <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-green-50 dark:bg-green-950/20">
-            <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400 mb-2" aria-hidden="true" />
-            <div className="text-2xl font-bold text-green-700 dark:text-green-300" aria-label="Succeeded count">
+          <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-success-soft">
+            <CheckCircle className="h-8 w-8 text-success mb-2" aria-hidden="true" />
+            <div className="text-2xl font-bold text-success" aria-label="Succeeded count">
               {result.succeeded.length}
             </div>
-            <div className="text-sm text-green-600 dark:text-green-400">Succeeded</div>
+            <div className="text-sm text-success">Succeeded</div>
           </div>
 
           {/* Failed */}
-          <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-red-50 dark:bg-red-950/20">
-            <XCircle className="h-8 w-8 text-red-600 dark:text-red-400 mb-2" aria-hidden="true" />
-            <div className="text-2xl font-bold text-red-700 dark:text-red-300" aria-label="Failed count">
+          <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-danger-soft">
+            <XCircle className="h-8 w-8 text-danger mb-2" aria-hidden="true" />
+            <div className="text-2xl font-bold text-danger" aria-label="Failed count">
               {result.failed.length}
             </div>
-            <div className="text-sm text-red-600 dark:text-red-400">Failed</div>
+            <div className="text-sm text-danger">Failed</div>
           </div>
 
           {/* Cancelled */}
-          <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-gray-50 dark:bg-gray-950/20">
-            <AlertCircle className="h-8 w-8 text-gray-600 dark:text-gray-400 mb-2" aria-hidden="true" />
-            <div className="text-2xl font-bold text-gray-700 dark:text-gray-300" aria-label="Cancelled count">
+          <div className="flex flex-col items-center justify-center p-4 rounded-lg bg-surface-sunken">
+            <AlertCircle className="h-8 w-8 text-ink-muted mb-2" aria-hidden="true" />
+            <div className="text-2xl font-bold text-ink" aria-label="Cancelled count">
               {result.cancelled.length}
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">Cancelled</div>
+            <div className="text-sm text-ink-muted">Cancelled</div>
           </div>
         </div>
 
@@ -123,7 +123,7 @@ export function BulkResultSummary({ isOpen, onClose, operation, result, onRetryF
                       <dd className="text-xs text-muted-foreground mt-1 italic">{item.error.details}</dd>
                     )}
                     {item.error.retryable && (
-                      <dd className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Can be retried</dd>
+                      <dd className="text-xs text-warning mt-1">Can be retried</dd>
                     )}
                   </div>
                 </div>

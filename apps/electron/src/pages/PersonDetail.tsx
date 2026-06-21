@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft,
+  ChevronLeft,
   Mail,
   Briefcase,
   Clock,
@@ -16,10 +16,19 @@ import {
   X,
   Trash2,
   User,
-  Volume2
+  AudioWaveform,
+  MoreHorizontal,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +44,9 @@ import type { Person, PersonType } from '@/types/knowledge'
 import type { Meeting } from '@/types'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { Badge } from '@/components/ui/badge'
+import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
 import { useConfigStore } from '@/store/domain/useConfigStore'
 import type { VoiceprintSummary } from '../../electron/main/types/database'
 
@@ -317,20 +329,20 @@ export function PersonDetail() {
     return new Set(voiceprints.filter((vp) => !vp.disabledAt).map((vp) => vp.sourceRecordingId).filter(Boolean)).size
   }, [voiceprints])
 
-  const getTypeColor = (type: PersonType) => {
+  const getTypeVariant = (type: PersonType): 'primary' | 'accent' | 'success' | 'warning' | 'default' => {
     switch (type) {
-      case 'team': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-      case 'candidate': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-      case 'customer': return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-      case 'external': return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-      default: return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+      case 'team': return 'primary'
+      case 'candidate': return 'accent'
+      case 'customer': return 'success'
+      case 'external': return 'warning'
+      default: return 'default'
     }
   }
 
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+        <RefreshCw className="h-8 w-8 animate-spin text-ink-muted" />
       </div>
     )
   }
@@ -338,55 +350,56 @@ export function PersonDetail() {
   if (!person) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-4">
-        <p className="text-muted-foreground">Person not found</p>
+        <p className="text-ink-muted">Person not found</p>
         <Button onClick={() => navigate('/people')}>Back to People</Button>
       </div>
     )
   }
 
+  const personColor = avatarColor(person.name)
+
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-bg">
       {/* Sticky Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/70">
+        <div className="flex items-center justify-between px-[var(--space-6)] py-4">
+          <div className="flex min-w-0 items-center gap-[var(--space-4)]">
             <Button variant="ghost" size="icon" onClick={() => navigate('/people')}>
-              <ArrowLeft className="h-5 w-5" />
+              <ChevronLeft className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold shadow-sm border",
-                getTypeColor(person.type)
-              )}>
-                {person.name.charAt(0)}
-              </div>
-              <div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                    className="text-xl font-bold leading-tight border rounded px-2 py-1 bg-background w-full"
-                    placeholder="Name..."
-                  />
-                ) : (
-                  <h1 className="text-xl font-bold leading-tight">{person.name}</h1>
-                )}
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                    getTypeColor(person.type)
-                  )}>
-                    {person.type}
-                  </span>
-                  {person.company && (
-                    <span className="text-xs text-muted-foreground">- {person.company}</span>
+            <PersonAvatar name={person.name} color={personColor} size={52} className="rounded-2xl text-[1.25rem]" />
+            <div className="min-w-0">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                  className="w-full rounded-md border border-border-brand bg-surface px-2 py-1 font-display text-[1.375rem] font-semibold leading-tight tracking-[-0.02em] text-ink outline-none"
+                  placeholder="Name..."
+                />
+              ) : (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="font-display text-[1.375rem] font-semibold leading-tight tracking-[-0.02em] text-ink">
+                    {person.name}
+                  </h1>
+                  {person.isSelf && (
+                    <span className="rounded-full bg-accent-2-soft px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.06em] text-accent-2">
+                      this is you
+                    </span>
                   )}
                 </div>
+              )}
+              <div className="mt-1 flex items-center gap-2">
+                <Badge variant={getTypeVariant(person.type)} className="uppercase tracking-[0.08em]">
+                  {person.type}
+                </Badge>
+                {person.company && (
+                  <span className="truncate text-xs text-ink-muted">· {person.company}</span>
+                )}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => loadDetails()} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
               Refresh
@@ -413,22 +426,37 @@ export function PersonDetail() {
                 </Button>
               </>
             ) : (
-              <>
-                {/* B-PPL-002: Disable edit button while loading */}
-                <Button size="sm" variant="default" onClick={() => setIsEditing(true)} disabled={loading}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => setDeleteDialogOpen(true)}
-                  disabled={loading}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-9 w-9"
+                    title="Contact options"
+                    disabled={loading}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[230px]">
+                  {/* B-PPL-002: Disable edit button while loading */}
+                  <DropdownMenuItem onSelect={() => setIsEditing(true)} disabled={loading}>
+                    <Edit className="mr-2 h-4 w-4 text-accent-2" />
+                    Edit contact
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => setDeleteDialogOpen(true)}
+                    disabled={loading}
+                    className="text-danger focus:text-danger"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete contact
+                  </DropdownMenuItem>
+                  <p className="px-2 pb-1 pt-2 text-[11px] leading-snug text-ink-muted">
+                    Deleting also removes this contact's voiceprints.
+                  </p>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -436,85 +464,85 @@ export function PersonDetail() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mx-auto max-w-5xl p-[var(--space-6)] space-y-[var(--space-5)]">
+          <div className="grid grid-cols-1 gap-[var(--space-5)] md:grid-cols-3">
             {/* Left Column: Info Card */}
-            <div className="space-y-6">
+            <div className="space-y-[var(--space-5)]">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Information</CardTitle>
+                  <Eyebrow tone="muted">Information</Eyebrow>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* B-PPL-003: Email is now editable */}
                   {(person.email || isEditing) && (
                     <div className="flex items-start gap-3">
-                      <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <Mail className="mt-0.5 h-4 w-4 text-accent-2" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-muted-foreground mb-0.5">Email</p>
+                        <p className="mb-0.5 text-xs text-ink-muted">Email</p>
                         {isEditing ? (
                           <input
                             type="email"
                             value={editForm.email}
                             onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
-                            className="text-sm font-medium w-full border rounded px-2 py-1 bg-background"
+                            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm font-medium text-ink outline-none focus:border-border-brand"
                             placeholder="Enter email..."
                           />
                         ) : (
-                          <p className="text-sm font-medium truncate">{person.email}</p>
+                          <p className="truncate text-sm font-medium text-ink">{person.email}</p>
                         )}
                       </div>
                     </div>
                   )}
                   {(person.role || isEditing) && (
                     <div className="flex items-start gap-3">
-                      <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <Briefcase className="mt-0.5 h-4 w-4 text-accent-2" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-muted-foreground mb-0.5">Role</p>
+                        <p className="mb-0.5 text-xs text-ink-muted">Role</p>
                         {isEditing ? (
                           <input
                             type="text"
                             value={editForm.role}
                             onChange={(e) => setEditForm((prev) => ({ ...prev, role: e.target.value }))}
-                            className="text-sm font-medium w-full border rounded px-2 py-1 bg-background"
+                            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm font-medium text-ink outline-none focus:border-border-brand"
                             placeholder="Enter role..."
                           />
                         ) : (
-                          <p className="text-sm font-medium truncate">{person.role}</p>
+                          <p className="truncate text-sm font-medium text-ink">{person.role}</p>
                         )}
                       </div>
                     </div>
                   )}
                   {(person.company || isEditing) && (
                     <div className="flex items-start gap-3">
-                      <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <Briefcase className="mt-0.5 h-4 w-4 text-accent-2" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-muted-foreground mb-0.5">Company</p>
+                        <p className="mb-0.5 text-xs text-ink-muted">Company</p>
                         {isEditing ? (
                           <input
                             type="text"
                             value={editForm.company}
                             onChange={(e) => setEditForm((prev) => ({ ...prev, company: e.target.value }))}
-                            className="text-sm font-medium w-full border rounded px-2 py-1 bg-background"
+                            className="w-full rounded-md border border-border bg-surface px-2 py-1 text-sm font-medium text-ink outline-none focus:border-border-brand"
                             placeholder="Enter company..."
                           />
                         ) : (
-                          <p className="text-sm font-medium truncate">{person.company}</p>
+                          <p className="truncate text-sm font-medium text-ink">{person.company}</p>
                         )}
                       </div>
                     </div>
                   )}
                   <div className="flex items-start gap-3">
-                    <Clock className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <Clock className="mt-0.5 h-4 w-4 text-accent-2" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs text-muted-foreground mb-0.5">Last Interaction</p>
-                      <p className="text-sm font-medium">{formatDateTime(person.lastSeenAt)}</p>
+                      <p className="mb-0.5 text-xs text-ink-muted">Last Interaction</p>
+                      <p className="text-sm font-medium text-ink">{formatDateTime(person.lastSeenAt)}</p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3 border-t pt-4">
-                    <MessageSquare className="h-4 w-4 text-primary mt-0.5" />
+                  <div className="flex items-start gap-3 border-t border-border pt-4">
+                    <MessageSquare className="mt-0.5 h-4 w-4 text-primary" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs text-muted-foreground mb-0.5">Total Interactions</p>
-                      <p className="text-sm font-bold">{person.interactionCount}</p>
+                      <p className="mb-0.5 text-xs text-ink-muted">Total Interactions</p>
+                      <p className="text-sm font-semibold text-ink">{person.interactionCount}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -523,15 +551,15 @@ export function PersonDetail() {
               {person.tags.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Tags</CardTitle>
+                    <Eyebrow tone="muted">Tags</Eyebrow>
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
                       {person.tags.map(tag => (
-                        <div key={tag} className="flex items-center gap-1.5 text-xs bg-secondary px-3 py-1 rounded-full border border-border/50">
-                          <Tag className="h-3 w-3" />
+                        <span key={tag} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-ink">
+                          <Tag className="h-3 w-3 text-accent-2" />
                           {tag}
-                        </div>
+                        </span>
                       ))}
                     </div>
                   </CardContent>
@@ -540,62 +568,54 @@ export function PersonDetail() {
             </div>
 
             {/* Right Column: Timeline & Knowledge */}
-            <div className="md:col-span-2 space-y-6">
+            <div className="space-y-[var(--space-5)] md:col-span-2">
               <div className="w-full">
-                <div className="grid w-full grid-cols-3 bg-muted/50 p-1 rounded-lg">
-                  <button
-                    onClick={() => setActiveTab('timeline')}
-                    className={cn(
-                      "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-all",
-                      activeTab === 'timeline' ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <Calendar className="h-4 w-4" />
-                    Timeline
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('knowledge')}
-                    className={cn(
-                      "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-all",
-                      activeTab === 'knowledge' ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <Bot className="h-4 w-4" />
-                    Knowledge Map
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('voices')}
-                    className={cn(
-                      "flex items-center justify-center gap-2 py-2 px-4 rounded-md text-sm font-medium transition-all",
-                      activeTab === 'voices' ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <Volume2 className="h-4 w-4" />
-                    Voices
-                  </button>
+                <div className="flex items-center gap-[var(--space-4)] border-b border-border">
+                  {([
+                    { id: 'timeline', label: 'Timeline', icon: Calendar },
+                    { id: 'knowledge', label: 'Knowledge Map', icon: Bot },
+                    { id: 'voices', label: 'Voices', icon: AudioWaveform }
+                  ] as const).map((tab) => {
+                    const active = activeTab === tab.id
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={cn(
+                          'flex items-center gap-2 border-b-2 pb-2.5 text-[13.5px] font-semibold transition-colors',
+                          active
+                            ? 'border-primary text-ink'
+                            : 'border-transparent text-ink-muted hover:text-ink'
+                        )}
+                      >
+                        <tab.icon className="h-4 w-4" />
+                        {tab.label}
+                      </button>
+                    )
+                  })}
                 </div>
 
                 {activeTab === 'timeline' && (
-                  <div className="mt-6 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="mt-[var(--space-5)] space-y-[var(--space-2)] animate-in fade-in slide-in-from-top-2 duration-300">
                     {meetings.length === 0 ? (
-                      <div className="text-center py-12 border rounded-xl bg-muted/5">
-                        <Calendar className="h-10 w-10 mx-auto text-muted-foreground opacity-20 mb-3" />
-                        <p className="text-sm text-muted-foreground">No meetings recorded with this person</p>
+                      <div className="rounded-lg border border-dashed border-border-strong py-12 text-center">
+                        <Calendar className="mx-auto mb-3 h-10 w-10 text-ink-muted opacity-40" />
+                        <p className="text-sm text-ink-muted">No meetings recorded with this person</p>
                       </div>
                     ) : (
                       meetings.map((meeting) => (
-                        <Card key={meeting.id} className="group hover:border-primary/30 transition-all cursor-pointer overflow-hidden shadow-sm" onClick={() => navigate(`/meeting/${meeting.id}`)}>
-                          <div className="flex items-stretch h-full">
-                            <div className="w-1 bg-muted group-hover:bg-primary transition-colors" />
-                            <div className="flex-1 p-4">
+                        <Card key={meeting.id} className="group cursor-pointer overflow-hidden shadow-xs transition-colors hover:border-border-brand" onClick={() => navigate(`/meeting/${meeting.id}`)}>
+                          <div className="flex h-full items-stretch">
+                            <div className="w-1 bg-border transition-colors group-hover:bg-primary" />
+                            <div className="flex-1 p-[var(--space-4)]">
                               <div className="flex items-start justify-between">
-                                <div>
-                                  <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">{meeting.subject}</h3>
-                                  <p className="text-xs text-muted-foreground mt-1">
+                                <div className="min-w-0">
+                                  <h3 className="text-[13.5px] font-semibold text-ink transition-colors group-hover:text-primary">{meeting.subject}</h3>
+                                  <p className="mt-1 font-mono text-[10.5px] text-ink-muted">
                                     {formatDateTime(meeting.start_time)}
                                   </p>
                                 </div>
-                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <ExternalLink className="h-3.5 w-3.5 text-ink-muted opacity-0 transition-opacity group-hover:opacity-100" />
                               </div>
                             </div>
                           </div>
@@ -606,12 +626,12 @@ export function PersonDetail() {
                 )}
 
                 {activeTab === 'knowledge' && (
-                  <div className="mt-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="mt-[var(--space-5)] animate-in fade-in slide-in-from-top-2 duration-300">
                     <Card>
                       <CardContent className="py-12 text-center">
-                        <Bot className="h-12 w-12 mx-auto text-primary opacity-20 mb-4" />
-                        <h3 className="text-lg font-medium mb-2">Knowledge Map</h3>
-                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                        <Bot className="mx-auto mb-4 h-12 w-12 text-accent-2 opacity-30" />
+                        <h3 className="mb-2 font-display text-[1.125rem] font-semibold text-ink">Knowledge Map</h3>
+                        <p className="mx-auto max-w-sm text-sm text-ink-muted">
                           AI visualization of topics and discussions related to {person.name} is coming soon.
                         </p>
                       </CardContent>
@@ -620,114 +640,129 @@ export function PersonDetail() {
                 )}
 
                 {activeTab === 'voices' && (
-                  <div className="mt-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <Card>
-                      <CardHeader>
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <CardTitle>Voiceprints</CardTitle>
-                            <CardDescription>
-                              Remembered from {rememberedRecordingCount} recording{rememberedRecordingCount === 1 ? '' : 's'}
-                            </CardDescription>
-                          </div>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setForgetVoiceDialogOpen(true)}
-                            disabled={loadingVoiceprints || voiceprints.length === 0}
-                          >
-                            Forget this voice
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {loadingVoiceprints ? (
-                          <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
-                            <RefreshCw className="h-5 w-5 animate-spin" />
-                            <span className="text-sm">Loading voiceprints...</span>
-                          </div>
-                        ) : voiceprints.length === 0 ? (
-                          <div className="text-center py-12 border rounded-xl bg-muted/5">
-                            <Volume2 className="h-10 w-10 mx-auto text-muted-foreground opacity-20 mb-3" />
-                            <p className="text-sm text-muted-foreground">
-                              No voiceprints yet. Assign this person to a speaker in a transcript to remember their voice.
-                            </p>
-                            {config?.privacy?.enableVoiceprintCapture === false && (
-                              <p className="text-xs text-muted-foreground mt-2">
-                                Voiceprint capture is disabled in Settings → Privacy.
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {voiceprints.map((vp) => (
-                              <div
-                                key={vp.id}
-                                className={cn(
-                                  "flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded-lg",
-                                  vp.disabledAt ? "opacity-60 bg-muted/30" : ""
-                                )}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium truncate">
-                                    {vp.sourceRecordingTitle ? (
-                                      vp.sourceRecordingId ? (
-                                        <button
-                                          className="hover:text-primary hover:underline text-left"
-                                          onClick={() => navigate(`/recording/${vp.sourceRecordingId}`)}
-                                        >
-                                          {vp.sourceRecordingTitle}
-                                        </button>
-                                      ) : (
-                                        vp.sourceRecordingTitle
-                                      )
-                                    ) : (
-                                      <span className="text-muted-foreground">from a deleted recording</span>
-                                    )}
-                                    {vp.sourceLabel && (
-                                      <span className="text-xs text-muted-foreground ml-2">
-                                        label {vp.sourceLabel}
-                                      </span>
-                                    )}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    Captured {formatDateTime(vp.createdAt)}
-                                    {vp.cleanSpeechMs != null && (
-                                      <> · {formatDuration(vp.cleanSpeechMs / 1000)} clean speech</>
-                                    )}
-                                    {vp.createdFrom && (
-                                      <span className="ml-2 text-[10px] uppercase bg-secondary px-1.5 py-0.5 rounded">
-                                        {vp.createdFrom}
-                                      </span>
-                                    )}
-                                    {vp.disabledAt && (
-                                      <span className="ml-2 text-[10px] text-amber-600 font-medium">Disabled</span>
-                                    )}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleToggleVoiceprint(vp, !!vp.disabledAt)}
-                                  >
-                                    {vp.disabledAt ? 'Enable' : 'Disable'}
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => setDeleteRowVp(vp)}
-                                  >
-                                    Delete
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                  <div className="mt-[var(--space-5)] flex flex-col gap-[var(--space-3)] animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2.5">
+                      <AudioWaveform className="h-4 w-4 text-accent-2" />
+                      <h2 className="font-display text-[1.125rem] font-semibold text-ink">Enrolled voices</h2>
+                      <span className="ml-auto flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-ink-muted">
+                          {rememberedRecordingCount} recording{rememberedRecordingCount === 1 ? '' : 's'}
+                        </span>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setForgetVoiceDialogOpen(true)}
+                          disabled={loadingVoiceprints || voiceprints.length === 0}
+                        >
+                          Forget this voice
+                        </Button>
+                      </span>
+                    </div>
+                    <p className="mb-1 text-[13px] leading-[1.55] text-ink-muted">
+                      Voice samples captured when this person was assigned in a recording. They&apos;re used to
+                      auto-match the same voice in future captures. Disable to pause matching; delete to remove
+                      the biometric data entirely.
+                    </p>
+
+                    {loadingVoiceprints ? (
+                      <div className="flex items-center justify-center gap-2 py-12 text-ink-muted">
+                        <RefreshCw className="h-5 w-5 animate-spin" />
+                        <span className="text-sm">Loading voiceprints...</span>
+                      </div>
+                    ) : voiceprints.length === 0 ? (
+                      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-strong px-[var(--space-4)] py-[var(--space-6)] text-center">
+                        <AudioWaveform className="h-[26px] w-[26px] text-ink-muted" />
+                        <div className="text-[13.5px] font-semibold text-ink">No voiceprint yet</div>
+                        <p className="max-w-sm text-[12.5px] text-ink-muted">
+                          Assign this person to a speaker in any recording and their voice will be enrolled
+                          here — if voice capture is on.
+                        </p>
+                        {config?.privacy?.enableVoiceprintCapture === false && (
+                          <p className="mt-1 text-xs text-ink-muted">
+                            Voiceprint capture is disabled in Settings → Privacy.
+                          </p>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    ) : (
+                      <div className="space-y-[var(--space-2)]">
+                        {voiceprints.map((vp) => (
+                          <div
+                            key={vp.id}
+                            className={cn(
+                              'flex flex-col gap-3 rounded-lg border border-border bg-surface p-[var(--space-4)] sm:flex-row sm:items-center',
+                              vp.disabledAt ? 'opacity-60' : ''
+                            )}
+                          >
+                            <AudioWaveform className="hidden h-[17px] w-[17px] shrink-0 text-accent-2 sm:block" />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13.5px] font-semibold text-ink">
+                                {vp.sourceRecordingTitle ? (
+                                  vp.sourceRecordingId ? (
+                                    <button
+                                      className="text-left hover:text-primary hover:underline"
+                                      onClick={() => navigate(`/recording/${vp.sourceRecordingId}`)}
+                                    >
+                                      {vp.sourceRecordingTitle}
+                                    </button>
+                                  ) : (
+                                    vp.sourceRecordingTitle
+                                  )
+                                ) : (
+                                  <span className="text-ink-muted">from a deleted recording</span>
+                                )}
+                                {vp.sourceLabel && (
+                                  <span className="ml-2 text-xs font-normal text-ink-muted">
+                                    label {vp.sourceLabel}
+                                  </span>
+                                )}
+                              </p>
+                              <p className="mt-0.5 font-mono text-[10.5px] text-ink-muted">
+                                {formatDateTime(vp.createdAt)}
+                                {' · '}{vp.modelId}
+                                {vp.cleanSpeechMs != null && (
+                                  <> · {formatDuration(vp.cleanSpeechMs / 1000)} clean speech</>
+                                )}
+                                {vp.createdFrom && (
+                                  <span className="ml-2 rounded bg-surface-sunken px-1.5 py-0.5 uppercase">
+                                    {vp.createdFrom}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <span
+                              className={cn(
+                                'rounded-full px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.04em]',
+                                vp.disabledAt
+                                  ? 'bg-surface-sunken text-ink-muted'
+                                  : 'bg-accent-2-soft text-accent-2'
+                              )}
+                            >
+                              {vp.disabledAt ? 'disabled' : 'active'}
+                            </span>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => handleToggleVoiceprint(vp, !!vp.disabledAt)}
+                              >
+                                {vp.disabledAt ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                {vp.disabledAt ? 'Enable' : 'Disable'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 text-danger hover:text-danger"
+                                title="Delete voiceprint"
+                                onClick={() => setDeleteRowVp(vp)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -735,18 +770,18 @@ export function PersonDetail() {
               {(person.notes || isEditing) && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Notes</CardTitle>
+                    <Eyebrow tone="muted">Notes</Eyebrow>
                   </CardHeader>
                   <CardContent>
                     {isEditing ? (
                       <textarea
                         value={editForm.notes}
                         onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
-                        className="text-sm w-full border rounded px-2 py-1 bg-background min-h-[80px] leading-relaxed"
+                        className="min-h-[80px] w-full rounded-md border border-border bg-surface px-2 py-1 text-sm leading-relaxed text-ink outline-none focus:border-border-brand"
                         placeholder="Add notes..."
                       />
                     ) : (
-                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{person.notes}</p>
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{person.notes}</p>
                     )}
                   </CardContent>
                 </Card>

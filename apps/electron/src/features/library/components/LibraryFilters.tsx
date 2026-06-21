@@ -1,5 +1,7 @@
 import { Filter, Cloud, HardDrive, Check, Search, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { SegmentedToggle } from '@/components/ui/segmented-toggle'
 import {
   FilterMode,
   SemanticLocationFilter,
@@ -37,6 +39,16 @@ interface LibraryFiltersProps {
 }
 
 const CATEGORIES = ['all', 'meeting', 'interview', '1:1', 'brainstorm', 'note'] as const
+
+// Harbor pill-chip (matches prototype `hd-chip`). Active = solid primary, inactive = surface + border.
+const chipBase =
+  'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border'
+const chipActive = 'border-transparent bg-primary text-primary-foreground'
+const chipInactive = 'border-border bg-surface text-foreground hover:border-border-strong hover:text-ink'
+
+// Harbor select control
+const selectClass =
+  'h-8 rounded-md border border-border bg-surface px-3 py-1 text-xs text-ink'
 
 export function LibraryFilters({
   stats,
@@ -78,57 +90,44 @@ export function LibraryFilters({
       <div className="flex flex-wrap items-center gap-4">
         {/* Active filter count badge */}
         {activeFilterCount > 0 && (
-          <span
-            className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-primary text-primary-foreground"
+          <Badge
+            variant="primary"
+            size="md"
             aria-label={`${activeFilterCount} filter${activeFilterCount !== 1 ? 's' : ''} active`}
           >
             {activeFilterCount} active
-          </span>
+          </Badge>
         )}
         {/* Filter mode toggle */}
         <div className="flex items-center gap-2" role="group" aria-label="Filter mode">
-          <span className="text-xs font-medium text-muted-foreground">Mode:</span>
-          <div className="flex gap-1 p-1 bg-muted rounded-lg">
-            <button
-              onClick={() => onFilterModeChange('semantic')}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                filterMode === 'semantic'
-                  ? 'bg-background shadow-sm'
-                  : 'hover:bg-background/50'
-              }`}
-              title="Show all files matching the filter (e.g., Device shows all files from any device)"
-              aria-pressed={filterMode === 'semantic'}
-              aria-label="Show all matching files"
-            >
-              All Matching
-            </button>
-            <button
-              onClick={() => onFilterModeChange('exclusive')}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                filterMode === 'exclusive'
-                  ? 'bg-background shadow-sm'
-                  : 'hover:bg-background/50'
-              }`}
-              title="Show only files in exact location (e.g., Device Only shows files not downloaded)"
-              aria-pressed={filterMode === 'exclusive'}
-              aria-label="Show exact location only"
-            >
-              Exact Only
-            </button>
-          </div>
+          <span className="text-xs font-medium text-ink-muted">Mode:</span>
+          <SegmentedToggle
+            size="sm"
+            aria-label="Filter mode"
+            value={filterMode}
+            onChange={onFilterModeChange}
+            options={[
+              {
+                value: 'semantic',
+                label: 'All Matching',
+                title: 'Show all files matching the filter (e.g., Device shows all files from any device)'
+              },
+              {
+                value: 'exclusive',
+                label: 'Exact Only',
+                title: 'Show only files in exact location (e.g., Device Only shows files not downloaded)'
+              }
+            ]}
+          />
         </div>
 
         {/* Location filter */}
         <div className="flex items-center gap-2" role="group" aria-label="Location filter">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <div className="flex rounded-lg border overflow-hidden" data-testid="location-filter">
+          <Filter className="h-4 w-4 text-ink-muted" />
+          <div className="flex flex-wrap gap-1.5" data-testid="location-filter">
             <button
               onClick={() => handleFilterChange('all' as SemanticLocationFilter & ExclusiveLocationFilter)}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeFilter === 'all'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted'
-              }`}
+              className={`${chipBase} ${activeFilter === 'all' ? chipActive : chipInactive}`}
               aria-pressed={activeFilter === 'all'}
               aria-label="All locations"
             >
@@ -138,11 +137,7 @@ export function LibraryFilters({
               <>
                 <button
                   onClick={() => onSemanticFilterChange('on-source')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
-                    semanticFilter === 'on-source'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
+                  className={`${chipBase} ${semanticFilter === 'on-source' ? chipActive : chipInactive}`}
                   aria-pressed={semanticFilter === 'on-source'}
                   aria-label="On device"
                 >
@@ -151,11 +146,7 @@ export function LibraryFilters({
                 </button>
                 <button
                   onClick={() => onSemanticFilterChange('locally-available')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
-                    semanticFilter === 'locally-available'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
+                  className={`${chipBase} ${semanticFilter === 'locally-available' ? chipActive : chipInactive}`}
                   aria-pressed={semanticFilter === 'locally-available'}
                   aria-label="Locally available"
                 >
@@ -164,11 +155,7 @@ export function LibraryFilters({
                 </button>
                 <button
                   onClick={() => onSemanticFilterChange('synced')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
-                    semanticFilter === 'synced'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
+                  className={`${chipBase} ${semanticFilter === 'synced' ? chipActive : chipInactive}`}
                   aria-pressed={semanticFilter === 'synced'}
                   aria-label="Synced to both"
                 >
@@ -180,11 +167,7 @@ export function LibraryFilters({
               <>
                 <button
                   onClick={() => onExclusiveFilterChange('source-only')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
-                    exclusiveFilter === 'source-only'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
+                  className={`${chipBase} ${exclusiveFilter === 'source-only' ? chipActive : chipInactive}`}
                   aria-pressed={exclusiveFilter === 'source-only'}
                   aria-label="Device only"
                 >
@@ -193,11 +176,7 @@ export function LibraryFilters({
                 </button>
                 <button
                   onClick={() => onExclusiveFilterChange('local-only')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
-                    exclusiveFilter === 'local-only'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
+                  className={`${chipBase} ${exclusiveFilter === 'local-only' ? chipActive : chipInactive}`}
                   aria-pressed={exclusiveFilter === 'local-only'}
                   aria-label="Local only"
                 >
@@ -206,11 +185,7 @@ export function LibraryFilters({
                 </button>
                 <button
                   onClick={() => onExclusiveFilterChange('synced')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${
-                    exclusiveFilter === 'synced'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
-                  }`}
+                  className={`${chipBase} ${exclusiveFilter === 'synced' ? chipActive : chipInactive}`}
                   aria-pressed={exclusiveFilter === 'synced'}
                   aria-label="Synced to both"
                 >
@@ -223,18 +198,12 @@ export function LibraryFilters({
         </div>
 
         {/* Category filter */}
-        <div className="flex rounded-lg border overflow-hidden" role="group" aria-label="Category filter">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Category filter">
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
               onClick={() => onCategoryFilterChange(cat)}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                cat !== 'all' ? 'border-l' : ''
-              } ${
-                categoryFilter === cat
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted'
-              }`}
+              className={`${chipBase} ${categoryFilter === cat ? chipActive : chipInactive}`}
               aria-pressed={categoryFilter === cat}
               aria-label={`Filter by ${cat}`}
             >
@@ -245,7 +214,7 @@ export function LibraryFilters({
 
         {/* Search */}
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-muted" />
           <Input
             placeholder="Search captures..."
             value={searchQuery}
@@ -260,12 +229,12 @@ export function LibraryFilters({
         {/* Sort Controls */}
         {onSortByChange && onSortOrderChange && (
           <div className="flex items-center gap-2">
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">Sort:</span>
+            <ArrowUpDown className="h-4 w-4 text-ink-muted" />
+            <span className="text-xs font-medium text-ink-muted">Sort:</span>
             <select
               value={sortBy ?? 'date'}
               onChange={(e) => onSortByChange(e.target.value as SortBy)}
-              className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs"
+              className={selectClass}
               aria-label="Sort by"
             >
               <option value="date">Date</option>
@@ -275,7 +244,7 @@ export function LibraryFilters({
             </select>
             <button
               onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="h-8 px-2 rounded-md border border-input bg-background text-xs font-medium hover:bg-muted transition-colors inline-flex items-center gap-1"
+              className="h-8 px-2 rounded-md border border-border bg-surface text-xs font-medium text-ink hover:bg-surface-hover transition-colors inline-flex items-center gap-1"
               aria-label={`Sort ${sortOrder === 'asc' ? 'ascending' : 'descending'}`}
               title={`Currently ${sortOrder === 'asc' ? 'ascending' : 'descending'} - click to toggle`}
             >
@@ -296,11 +265,11 @@ export function LibraryFilters({
 
         {/* Quality Filter */}
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Quality:</span>
+          <span className="text-xs font-medium text-ink-muted">Quality:</span>
           <select
             value={qualityFilter}
             onChange={(e) => onQualityFilterChange(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs"
+            className={selectClass}
             aria-label="Filter by quality rating"
           >
             <option value="all">All Ratings</option>
@@ -313,11 +282,11 @@ export function LibraryFilters({
 
         {/* Status Filter */}
         <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Status:</span>
+          <span className="text-xs font-medium text-ink-muted">Status:</span>
           <select
             value={statusFilter}
             onChange={(e) => onStatusFilterChange(e.target.value)}
-            className="h-8 rounded-md border border-input bg-background px-3 py-1 text-xs"
+            className={selectClass}
             aria-label="Filter by processing status"
           >
             <option value="all">All Statuses</option>

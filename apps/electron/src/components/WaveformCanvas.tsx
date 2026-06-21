@@ -39,11 +39,18 @@ export interface WaveformCanvasProps {
  *
  * Features:
  * - Vertical bars (3px wide, 1px gap) based on audio amplitude
- * - Monochromatic gray/blue by default (#94A3B8)
+ * - Harbor played/unplayed coloring: played=accent, unplayed=border-strong
  * - Sentiment coloring: Red (negative), Green (positive), Gray (neutral)
  * - Click-to-seek functionality
  * - Optional playhead indicator
  */
+
+/** Read a Harbor CSS custom property, with a safe fallback. */
+function readToken(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
 export function WaveformCanvas({
   audioData,
   sentimentData,
@@ -71,8 +78,12 @@ export function WaveformCanvas({
     // Clear canvas
     ctx.clearRect(0, 0, width, height)
 
-    // Default monochrome color (Tailwind slate-400)
-    const defaultColor = '#94A3B8'
+    // Harbor played/unplayed bar colors (resolved from CSS tokens at draw time so
+    // light/dark themes pick up the right values).
+    const playedColor = readToken('--accent', '#2f6fde') // blue primary
+    const unplayedColor = readToken('--border-strong', '#cbd2d9')
+    // Fraction of the track already played (drives played vs. unplayed coloring).
+    const playedFraction = duration > 0 && currentTime !== undefined ? currentTime / duration : 0
 
     // Draw bars
     for (let i = 0; i < barCount; i++) {
@@ -83,8 +94,9 @@ export function WaveformCanvas({
       const x = i * (barWidth + barGap)
       const y = (height - barHeight) / 2 // Center vertically
 
-      // Determine bar color based on sentiment (if available)
-      let barColor = defaultColor
+      // Determine bar color: sentiment overrides, otherwise played/unplayed split.
+      const barFraction = i / barCount
+      let barColor = barFraction <= playedFraction ? playedColor : unplayedColor
 
       if (sentimentData && sentimentData.length > 0) {
         const timeForBar = (i / barCount) * duration
@@ -94,28 +106,17 @@ export function WaveformCanvas({
 
         if (segment) {
           if (segment.sentiment === 'positive') {
-            barColor = '#22C55E' // Tailwind green-500
+            barColor = readToken('--success', '#22C55E')
           } else if (segment.sentiment === 'negative') {
-            barColor = '#EF4444' // Tailwind red-500
+            barColor = readToken('--danger', '#EF4444')
           }
-          // neutral stays default color
+          // neutral stays played/unplayed color
         }
       }
 
       // Draw bar
       ctx.fillStyle = barColor
       ctx.fillRect(x, y, barWidth, barHeight)
-    }
-
-    // Draw subtle playhead if currentTime provided
-    if (currentTime !== undefined && currentTime > 0 && duration > 0) {
-      const playheadX = (currentTime / duration) * width
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)' // Subtle dark line
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(playheadX, 0)
-      ctx.lineTo(playheadX, height)
-      ctx.stroke()
     }
   }, [audioData, sentimentData, currentTime, duration, height, width])
 

@@ -8,7 +8,11 @@
 
 import { useEffect, useRef, useMemo, useState } from 'react'
 import { TimeAnchor } from './TimeAnchor'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, ListOrdered, Users } from 'lucide-react'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
+import { SegmentedToggle } from '@/components/ui/segmented-toggle'
+import { formatTimestamp } from '../utils/formatTimestamp'
 import type { Turn } from '../types/turns'
 
 interface TranscriptViewerProps {
@@ -29,6 +33,8 @@ interface TranscriptSegment {
   text: string
   speaker?: string
 }
+
+type ViewMode = 'timeline' | 'by-speaker'
 
 /**
  * Parse speaker name from text.
@@ -127,20 +133,6 @@ function parseTranscriptSegments(transcript: string): TranscriptSegment[] {
   return segments
 }
 
-const SPEAKER_BADGE_CLASSES = [
-  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
-  'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300'
-]
-
-function speakerBadgeClass(label: string): string {
-  let hash = 0
-  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0
-  return SPEAKER_BADGE_CLASSES[Math.abs(hash) % SPEAKER_BADGE_CLASSES.length]
-}
-
 export function TranscriptViewer({
   transcript,
   turns,
@@ -158,6 +150,7 @@ export function TranscriptViewer({
   const [summaryExpanded, setSummaryExpanded] = useState(true)
   const [actionItemsExpanded, setActionItemsExpanded] = useState(true)
   const [transcriptExpanded, setTranscriptExpanded] = useState(true)
+  const [viewMode, setViewMode] = useState<ViewMode>('timeline')
 
   const hasStructuredTurns = !!turns && turns.length > 0
 
@@ -185,18 +178,59 @@ export function TranscriptViewer({
     })
   }, [segments, currentTimeMs])
 
-  // Auto-scroll to current segment during playback
+  // Group segments per speaker for the by-speaker view (presentation grouping
+  // derived from the same segment data — no extra data source).
+  const speakerGroups = useMemo(() => {
+    const order: string[] = []
+    const map = new Map<string, { label: string; durationMs: number; segments: TranscriptSegment[] }>()
+    let totalDurationMs = 0
+
+    for (const seg of segments) {
+      const key = seg.speaker ?? 'Unknown'
+      const segDuration = seg.endMs && seg.endMs > seg.startMs ? seg.endMs - seg.startMs : 0
+      totalDurationMs += segDuration
+      if (!map.has(key)) {
+        order.push(key)
+        map.set(key, { label: key, durationMs: 0, segments: [] })
+      }
+      const entry = map.get(key)!
+      entry.durationMs += segDuration
+      entry.segments.push(seg)
+    }
+
+    const groups = order.map((key) => {
+      const entry = map.get(key)!
+      const name = speakerNames?.[key] ?? key
+      return {
+        key,
+        name,
+        durationMs: entry.durationMs,
+        segCount: entry.segments.length,
+        pct: totalDurationMs > 0 ? entry.durationMs / totalDurationMs : 0,
+        color: avatarColor(name),
+        segments: entry.segments
+      }
+    })
+
+    return { groups, totalDurationMs }
+  }, [segments, speakerNames])
+
+  // Auto-scroll to current segment during playback (timeline view only)
   useEffect(() => {
-    if (currentSegmentIndex >= 0 && activeSegmentRef.current) {
+    if (viewMode === 'timeline' && currentSegmentIndex >= 0 && activeSegmentRef.current) {
       activeSegmentRef.current.scrollIntoView({
         behavior: 'smooth',
         block: 'center'
       })
     }
-  }, [currentSegmentIndex])
+  }, [currentSegmentIndex, viewMode])
 
   // If transcript has no timestamps, render as plain text
   const hasTimestamps = hasStructuredTurns || segments.length > 1 || (segments.length === 1 && segments[0].startMs > 0)
+
+  // The by-speaker grouping only makes sense for structured, timestamped turns.
+  const canGroupBySpeaker = hasStructuredTurns && hasTimestamps
+  const effectiveView: ViewMode = canGroupBySpeaker ? viewMode : 'timeline'
 
   return (
     <div className="space-y-4">
@@ -205,19 +239,19 @@ export function TranscriptViewer({
         <div>
           <button
             onClick={() => setSummaryExpanded(!summaryExpanded)}
-            className="flex items-center justify-between w-full p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
             aria-expanded={summaryExpanded}
           >
-            <span className="text-sm font-medium">Summary</span>
+            <Eyebrow tone="muted">Summary</Eyebrow>
             {summaryExpanded ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-4 w-4 text-ink-muted" />
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4 text-ink-muted" />
             )}
           </button>
           {summaryExpanded && (
-            <div className="p-3 mt-2 bg-muted rounded-lg">
-              <p className="text-sm whitespace-pre-wrap">{summary}</p>
+            <div className="mt-2 rounded-lg border border-border bg-surface p-3 shadow-xs">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{summary}</p>
             </div>
           )}
         </div>
@@ -228,19 +262,19 @@ export function TranscriptViewer({
         <div>
           <button
             onClick={() => setActionItemsExpanded(!actionItemsExpanded)}
-            className="flex items-center justify-between w-full p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
             aria-expanded={actionItemsExpanded}
           >
-            <span className="text-sm font-medium">Action Items</span>
+            <Eyebrow tone="muted">Action Items</Eyebrow>
             {actionItemsExpanded ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-4 w-4 text-ink-muted" />
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4 text-ink-muted" />
             )}
           </button>
           {actionItemsExpanded && (
-            <div className="p-3 mt-2 bg-muted rounded-lg">
-              <ul className="list-disc list-inside text-sm space-y-1">
+            <div className="mt-2 rounded-lg border border-border bg-surface p-3 shadow-xs">
+              <ul className="list-inside list-disc space-y-1 text-sm text-foreground">
                 {actionItems.map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
@@ -254,58 +288,158 @@ export function TranscriptViewer({
       <div>
         <button
           onClick={() => setTranscriptExpanded(!transcriptExpanded)}
-          className="flex items-center justify-between w-full p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+          className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
           aria-expanded={transcriptExpanded}
         >
-          <span className="text-sm font-medium">Full Transcript</span>
+          <Eyebrow tone="muted">Full Transcript</Eyebrow>
           {transcriptExpanded ? (
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="h-4 w-4 text-ink-muted" />
           ) : (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4 text-ink-muted" />
           )}
         </button>
         {transcriptExpanded && (
-          <div ref={containerRef} className="p-3 mt-2 bg-muted rounded-lg max-h-[60vh] overflow-y-auto">
+          <div ref={containerRef} className="mt-2 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-xs">
             {hasTimestamps ? (
               <div className="space-y-4">
-                {segments.map((segment, i) => (
-                  <div
-                    key={i}
-                    ref={i === currentSegmentIndex ? activeSegmentRef : null}
-                    className={`text-sm p-3 rounded-lg transition-colors ${
-                      i === currentSegmentIndex ? 'bg-primary/5 border-l-2 border-primary' : ''
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <TimeAnchor
-                        startMs={segment.startMs}
-                        endMs={segment.endMs}
-                        isActive={i === currentSegmentIndex}
-                        onSeek={onSeek}
-                      >
-                        {null}
-                      </TimeAnchor>
-                      {segment.speaker && (
-                        hasStructuredTurns ? (
-                          <span
-                            data-testid="speaker-badge"
-                            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${speakerBadgeClass(segment.speaker)}`}
-                          >
-                            {speakerNames?.[segment.speaker] ?? segment.speaker}
-                          </span>
-                        ) : (
-                          <span className="font-semibold text-foreground">
-                            {segment.speaker}
-                          </span>
-                        )
-                      )}
-                    </div>
-                    <p className="whitespace-pre-wrap leading-relaxed">{segment.text}</p>
+                {/* View-mode toggle (timeline / by speaker) — only when grouping is meaningful */}
+                {canGroupBySpeaker && (
+                  <div className="flex items-center justify-end">
+                    <SegmentedToggle<ViewMode>
+                      size="sm"
+                      aria-label="Transcript view"
+                      value={viewMode}
+                      onChange={setViewMode}
+                      options={[
+                        { value: 'timeline', label: 'Timeline', icon: <ListOrdered className="h-3.5 w-3.5" />, title: 'Timeline view' },
+                        { value: 'by-speaker', label: 'By speaker', icon: <Users className="h-3.5 w-3.5" />, title: 'Group by speaker' }
+                      ]}
+                    />
                   </div>
-                ))}
+                )}
+
+                {effectiveView === 'timeline' ? (
+                  /* ============ TIMELINE VIEW ============ */
+                  <div className="space-y-1">
+                    {segments.map((segment, i) => {
+                      const isActive = i === currentSegmentIndex
+                      const speakerLabel = segment.speaker
+                        ? (speakerNames?.[segment.speaker] ?? segment.speaker)
+                        : undefined
+                      const dotColor = segment.speaker ? avatarColor(speakerLabel ?? segment.speaker) : undefined
+                      return (
+                        <div
+                          key={i}
+                          ref={isActive ? activeSegmentRef : null}
+                          className={`flex gap-3 rounded-md border-l-2 px-3 py-2 transition-colors ${
+                            isActive
+                              ? 'border-primary bg-accent-strong-soft/40'
+                              : 'border-transparent hover:bg-surface-hover'
+                          }`}
+                        >
+                          {/* left gutter: mono accent timestamp */}
+                          <div className="flex w-12 flex-none flex-col items-start gap-1 pt-0.5">
+                            <TimeAnchor
+                              startMs={segment.startMs}
+                              endMs={segment.endMs}
+                              isActive={isActive}
+                              onSeek={onSeek}
+                              className="px-0 text-[11px] no-underline hover:underline"
+                            >
+                              {null}
+                            </TimeAnchor>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-0.5 flex items-center gap-2">
+                              {segment.speaker && (
+                                hasStructuredTurns ? (
+                                  <span data-testid="speaker-badge" className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+                                    <span
+                                      className="inline-block h-2 w-2 flex-none rounded-full"
+                                      style={{ background: dotColor }}
+                                    />
+                                    {speakerLabel}
+                                  </span>
+                                ) : (
+                                  <span className="text-[13px] font-semibold text-ink">
+                                    {segment.speaker}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                            <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-foreground">{segment.text}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  /* ============ BY-SPEAKER VIEW ============ */
+                  <div className="flex flex-col gap-4">
+                    {/* talk-time distribution */}
+                    <div className="rounded-lg border border-border bg-surface-sunken p-3">
+                      <div className="mb-2.5 flex items-center gap-2">
+                        <Users className="h-3.5 w-3.5 text-accent-2" />
+                        <Eyebrow tone="muted">Talk time</Eyebrow>
+                        <span className="ml-auto font-mono text-[11px] text-ink-muted">
+                          {speakerGroups.groups.length} speaker{speakerGroups.groups.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-surface">
+                        {speakerGroups.groups.map((g) => (
+                          <div
+                            key={g.key}
+                            className="h-full first:rounded-l-full last:rounded-r-full"
+                            style={{ width: `${Math.max(g.pct * 100, 1)}%`, background: g.color }}
+                            title={`${g.name} · ${Math.round(g.pct * 100)}%`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* per-speaker cards */}
+                    {speakerGroups.groups.map((g) => (
+                      <div key={g.key} className="rounded-lg border border-border bg-surface p-3 shadow-xs">
+                        <div className="mb-3 flex items-center gap-3">
+                          <PersonAvatar name={g.name} color={g.color} size={30} />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
+                              {g.name}
+                            </span>
+                            <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
+                              {formatTimestamp(g.durationMs / 1000)} · {g.segCount} segment{g.segCount === 1 ? '' : 's'} · {Math.round(g.pct * 100)}%
+                            </div>
+                          </div>
+                        </div>
+                        {/* per-speaker talk-time bar */}
+                        <div className="mb-3.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${Math.max(g.pct * 100, 1)}%`, background: g.color }}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {g.segments.map((seg, j) => (
+                            <div key={j} className="flex gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover">
+                              <TimeAnchor
+                                startMs={seg.startMs}
+                                endMs={seg.endMs}
+                                onSeek={onSeek}
+                                className="w-11 flex-none px-0 text-[11px] no-underline hover:underline"
+                              >
+                                {null}
+                              </TimeAnchor>
+                              <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-foreground">{seg.text}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
-              <p className="text-sm whitespace-pre-wrap">{transcript}</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcript}</p>
             )}
           </div>
         )}

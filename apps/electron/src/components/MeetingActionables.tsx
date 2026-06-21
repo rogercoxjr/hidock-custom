@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { CheckCircle2, Circle, AlertCircle, Clock } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import type { Actionable } from '@/types'
@@ -17,18 +19,11 @@ const STATUS_ICONS = {
 } as const
 
 const STATUS_COLORS = {
-  pending: 'text-gray-500',
-  in_progress: 'text-blue-500',
-  generated: 'text-green-500',
-  shared: 'text-green-500',
-  dismissed: 'text-red-500'
-} as const
-
-const PRIORITY_COLORS = {
-  low: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300',
-  medium: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300',
-  high: 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300',
-  urgent: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+  pending: 'text-ink-muted',
+  in_progress: 'text-accent-strong',
+  generated: 'text-success',
+  shared: 'text-success',
+  dismissed: 'text-danger'
 } as const
 
 export function MeetingActionables({ actionables }: MeetingActionablesProps) {
@@ -46,12 +41,10 @@ export function MeetingActionables({ actionables }: MeetingActionablesProps) {
 
   if (actionables.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Actionables</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-8">
+      <Card className="bg-surface">
+        <CardContent className="p-[var(--space-5)]">
+          <Eyebrow className="mb-3">Actionables</Eyebrow>
+          <p className="py-8 text-center text-sm text-ink-muted">
             No actionables found for this meeting.
           </p>
         </CardContent>
@@ -60,60 +53,60 @@ export function MeetingActionables({ actionables }: MeetingActionablesProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="bg-surface">
+      <CardContent className="space-y-4 p-[var(--space-5)]">
         <div className="flex items-center justify-between">
-          <CardTitle>Actionables</CardTitle>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Eyebrow>Actionables</Eyebrow>
+          <div className="flex items-center gap-2 font-mono text-[11px] text-ink-muted">
             <span>{actionables.length} total</span>
             {completedCount > 0 && (
-              <span>• {completedCount} completed</span>
+              <span>· {completedCount} completed</span>
             )}
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {actionables.map((actionable) => {
-          const StatusIcon = STATUS_ICONS[actionable.status] || Circle
-          const statusColor = STATUS_COLORS[actionable.status] || 'text-gray-500'
-          const priorityColor = PRIORITY_COLORS.medium
 
-          return (
-            <div
-              key={actionable.id}
-              className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-            >
-              <StatusIcon className={`h-5 w-5 mt-0.5 shrink-0 ${statusColor}`} />
+        <div className="space-y-2">
+          {actionables.map((actionable) => {
+            const StatusIcon = STATUS_ICONS[actionable.status] || Circle
+            const statusColor = STATUS_COLORS[actionable.status] || 'text-ink-muted'
 
-              <div className="flex-1 min-w-0 space-y-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium text-sm leading-tight">{actionable.title}</p>
-                  <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${priorityColor}`}>
-                    {actionable.type}
-                  </span>
-                </div>
+            return (
+              <div
+                key={actionable.id}
+                className="flex items-start gap-3 rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:border-border-strong"
+              >
+                <StatusIcon className={`mt-0.5 h-5 w-5 shrink-0 ${statusColor}`} />
 
-                {actionable.description && (
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {actionable.description}
-                  </p>
-                )}
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium leading-tight text-ink">{actionable.title}</p>
+                    <Badge variant="primary" size="sm" className="shrink-0 capitalize">
+                      {actionable.type}
+                    </Badge>
+                  </div>
 
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="capitalize">{actionable.status.replace('_', ' ')}</span>
-                  <span>•</span>
-                  <span>Created {formatDateTime(actionable.createdAt)}</span>
-                  {actionable.generatedAt && (
-                    <>
-                      <span>•</span>
-                      <span>Generated {formatDateTime(actionable.generatedAt)}</span>
-                    </>
+                  {actionable.description && (
+                    <p className="line-clamp-2 text-sm text-ink-muted">
+                      {actionable.description}
+                    </p>
                   )}
+
+                  <div className="flex items-center gap-2 font-mono text-[10.5px] text-ink-muted">
+                    <span className="capitalize">{actionable.status.replace('_', ' ')}</span>
+                    <span>·</span>
+                    <span>Created {formatDateTime(actionable.createdAt)}</span>
+                    {actionable.generatedAt && (
+                      <>
+                        <span>·</span>
+                        <span>Generated {formatDateTime(actionable.generatedAt)}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </CardContent>
     </Card>
   )

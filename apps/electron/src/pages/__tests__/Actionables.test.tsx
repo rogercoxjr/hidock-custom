@@ -74,7 +74,10 @@ describe('Actionables Page', () => {
 
     const item = await screen.findByText('Send meeting minutes')
     expect(item).toBeInTheDocument()
-    expect(screen.getByText('pending')).toBeInTheDocument()
+    // Harbor re-skin: the card now also shows a status Badge (a <span>) reading
+    // "pending", so the bare text is duplicated. Target the filter <button> by
+    // its accessible name to keep this assertion unambiguous.
+    expect(screen.getByRole('button', { name: 'pending' })).toBeInTheDocument()
   })
 
   it('should show filter buttons including in_progress', async () => {
@@ -86,10 +89,13 @@ describe('Actionables Page', () => {
 
     await screen.findByText('Send meeting minutes')
 
-    expect(screen.getByText('In Progress')).toBeInTheDocument()
-    expect(screen.getByText('pending')).toBeInTheDocument()
-    expect(screen.getByText('generated')).toBeInTheDocument()
-    expect(screen.getByText('dismissed')).toBeInTheDocument()
+    // Filter bar renders one <button> per status. Query by role/accessible name
+    // so the "pending" filter button isn't confused with the card's status Badge
+    // (a <span> reading "pending") added by the Harbor re-skin.
+    expect(screen.getByRole('button', { name: 'In Progress' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'pending' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'generated' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'dismissed' })).toBeInTheDocument()
   })
 
   // C-ACT-M06: Test that in_progress items show a disabled Processing button

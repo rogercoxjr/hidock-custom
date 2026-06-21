@@ -327,7 +327,10 @@ describe('SpeakersPanel (AC2/AC3)', () => {
           onChanged={onChanged}
         />
       )
-      expect(await screen.findByText(/Looks like Robyn \(Match\)/i)).toBeInTheDocument()
+      // The match-strength label is rendered in its own (colored) span, so assert
+      // the name and the "(Match)" qualifier independently rather than as one node.
+      expect(await screen.findByText(/Looks like Robyn/i)).toBeInTheDocument()
+      expect(screen.getByText(/\(Match\)/i)).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
       await waitFor(() =>
         expect(mockAssign).toHaveBeenCalledWith({

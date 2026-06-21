@@ -5,8 +5,9 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Download, Trash2, AlertCircle, CheckCircle, HardDrive, Volume2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Download, Trash2, AlertCircle, CheckCircle, HardDrive, Volume2, ChevronUp, ChevronDown, Mic } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   AlertDialog,
@@ -84,7 +85,7 @@ function DeviceFileRow({
   const showDownloadButton = recording.location === 'device-only' && !isDownloading
 
   return (
-    <div className="grid items-center gap-2 px-2 py-2 border-b last:border-0 hover:bg-muted/30 transition-colors"
+    <div className={`grid items-center gap-2 px-[var(--space-4)] py-2.5 border-b border-border last:border-0 transition-colors ${selected ? 'bg-accent-strong-soft' : 'hover:bg-surface-hover'}`}
       style={{ gridTemplateColumns: '2rem 1fr 6rem 6rem 9rem 7rem' }}>
 
       {/* Checkbox */}
@@ -93,59 +94,62 @@ function DeviceFileRow({
         checked={selected}
         onChange={() => onToggleSelect(recording.id)}
         aria-label={`Select ${filename}`}
-        className="h-4 w-4 rounded border-border"
+        className="h-4 w-4 rounded border-border-strong accent-[var(--primary)]"
       />
 
       {/* Filename + badges */}
       <div className="min-w-0">
-        <p className="font-medium text-sm truncate">{filename}</p>
-        <div className="flex items-center gap-1.5 mt-0.5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Mic className="h-[15px] w-[15px] shrink-0 text-accent-2" />
+          <p className="text-[13px] text-ink truncate">{filename}</p>
+        </div>
+        <div className="flex items-center gap-1.5 mt-1 pl-[25px]">
           {isDownloading ? (
-            <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+            <Badge variant="warning" size="sm" className="gap-1">
               <Download className="h-3 w-3" />
               {downloadProgress ?? 0}%
-            </span>
+            </Badge>
           ) : (
             recording.location === 'device-only' ? (
-              <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+              <Badge variant="default" size="sm" className="gap-1">
                 <HardDrive className="h-3 w-3" />
                 On Device
-              </span>
+              </Badge>
             ) : recording.location === 'both' ? (
-              <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+              <Badge variant="primary" size="sm" className="gap-1">
                 <CheckCircle className="h-3 w-3" />
                 Downloaded
-              </span>
+              </Badge>
             ) : (
-              <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+              <Badge variant="success" size="sm" className="gap-1">
                 <CheckCircle className="h-3 w-3" />
                 Synced
-              </span>
+              </Badge>
             )
           )}
           {hasError && (
-            <span className="flex items-center gap-1 text-xs text-destructive">
+            <Badge variant="danger" size="sm" className="gap-1">
               <AlertCircle className="h-3 w-3" />
               Error
-            </span>
+            </Badge>
           )}
           {isCurrentlyPlaying && (
-            <span className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400">
+            <Badge variant="accent" size="sm" className="gap-1">
               <Volume2 className="h-3 w-3" />
               Playing
-            </span>
+            </Badge>
           )}
         </div>
       </div>
 
       {/* Size */}
-      <span className="text-xs text-muted-foreground">{formatBytes(recording.size)}</span>
+      <span className="font-mono text-xs text-foreground">{formatBytes(recording.size)}</span>
 
       {/* Duration */}
-      <span className="text-xs text-muted-foreground">{durationDisplay}</span>
+      <span className="font-mono text-xs text-foreground">{durationDisplay}</span>
 
       {/* Date */}
-      <span className="text-xs text-muted-foreground">{recording.dateRecorded?.toLocaleDateString()}</span>
+      <span className="font-mono text-xs text-ink-muted">{recording.dateRecorded?.toLocaleDateString()}</span>
 
       {/* Actions */}
       <div className="flex items-center gap-1 justify-end">
@@ -159,7 +163,7 @@ function DeviceFileRow({
         <Button size="sm" variant="outline" className="h-7 w-7 p-0"
           onClick={() => onDeleteClick(filename)}
           title="Delete from device">
-          <Trash2 className="h-3 w-3 text-destructive" />
+          <Trash2 className="h-3 w-3 text-danger" />
         </Button>
       </div>
     </div>
@@ -310,7 +314,7 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
   const headerCell = (col: SortColumn, label: string) => (
     <button
       onClick={() => handleSortClick(col)}
-      className="flex items-center gap-0.5 text-xs text-muted-foreground font-medium cursor-pointer select-none hover:text-foreground transition-colors"
+      className="flex items-center gap-0.5 font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-muted font-medium cursor-pointer select-none hover:text-ink transition-colors"
     >
       {label}<SortIcon col={col} />
     </button>
@@ -348,7 +352,7 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
         </CardHeader>
         <CardContent className="p-0">
           {/* Sticky column header */}
-          <div className="grid items-center gap-2 px-2 py-1.5 border-b bg-muted/30 sticky top-0"
+          <div className="grid items-center gap-2 px-[var(--space-4)] py-2.5 border-b border-border bg-surface-sunken sticky top-0 z-10"
             style={{ gridTemplateColumns: '2rem 1fr 6rem 6rem 9rem 7rem' }}>
             <input
               type="checkbox"
@@ -356,13 +360,13 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
               ref={el => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < sortedRecordings.length }}
               onChange={handleSelectAll}
               aria-label="Select all recordings"
-              className="h-4 w-4 rounded border-border"
+              className="h-4 w-4 rounded border-border-strong accent-[var(--primary)]"
             />
-            {headerCell('filename', 'Filename')}
+            {headerCell('filename', 'Name')}
             {headerCell('size', 'Size')}
             {headerCell('duration', 'Duration')}
             {headerCell('dateRecorded', 'Date')}
-            <span className="text-xs text-muted-foreground font-medium">Actions</span>
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-muted font-medium">Actions</span>
           </div>
 
           {/* Scrollable rows */}
@@ -398,7 +402,7 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
                 This action cannot be undone. The file will be permanently removed from the device.
               </span>
               {hasLocalCopy && (
-                <span className="block mt-2 text-green-600 dark:text-green-400">
+                <span className="block mt-2 text-success">
                   Note: A local copy exists in your library.
                 </span>
               )}

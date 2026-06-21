@@ -35,7 +35,7 @@ export function ContextPicker({ onSelect, selectedIds, className }: ContextPicke
     loadKnowledge()
   }, [loadKnowledge])
 
-  const filteredKnowledge = knowledge.filter(k => 
+  const filteredKnowledge = knowledge.filter(k =>
     k.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     k.summary?.toLowerCase().includes(searchQuery.toLowerCase())
   )
@@ -43,7 +43,7 @@ export function ContextPicker({ onSelect, selectedIds, className }: ContextPicke
   return (
     <div className={cn("flex flex-col gap-4", className)}>
       <div className="relative">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-ink-muted" />
         <Input
           placeholder="Search knowledge..."
           value={searchQuery}
@@ -54,20 +54,20 @@ export function ContextPicker({ onSelect, selectedIds, className }: ContextPicke
 
       <div className="h-[300px] overflow-auto pr-2 space-y-1 custom-scrollbar">
         {loading ? (
-          <p className="text-center text-sm text-muted-foreground py-8">Loading knowledge...</p>
+          <p className="text-center text-sm text-ink-muted py-8">Loading knowledge...</p>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
-            <p className="text-sm text-muted-foreground">{error}</p>
+            <p className="text-sm text-ink-muted">{error}</p>
             <button
               onClick={loadKnowledge}
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-accent-2 hover:underline"
             >
               <RefreshCw className="h-3 w-3" />
               Retry
             </button>
           </div>
         ) : filteredKnowledge.length === 0 ? (
-          <p className="text-center text-sm text-muted-foreground py-8">No results found</p>
+          <p className="text-center text-sm text-ink-muted py-8">No results found</p>
         ) : (
           filteredKnowledge.map((item) => {
             const isSelected = selectedIds.includes(item.id)
@@ -77,20 +77,20 @@ export function ContextPicker({ onSelect, selectedIds, className }: ContextPicke
                 onClick={() => onSelect(item.id)}
                 className={cn(
                   "w-full text-left p-3 rounded-lg border transition-all flex items-start gap-3 group",
-                  isSelected 
-                    ? "bg-primary/5 border-primary ring-1 ring-primary/20" 
-                    : "hover:bg-muted border-transparent"
+                  isSelected
+                    ? "bg-accent-strong-soft border-border-brand ring-1 ring-[var(--border-brand)]"
+                    : "hover:bg-surface-hover border-transparent"
                 )}
               >
                 <div className={cn(
                   "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border",
-                  isSelected ? "bg-primary border-primary text-primary-foreground" : "bg-background border-border text-muted-foreground"
+                  isSelected ? "bg-primary border-primary text-primary-foreground" : "bg-surface border-border text-accent-2"
                 )}>
                   {isSelected ? <Check className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{item.title}</p>
-                  <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+                  <p className="text-sm font-medium text-ink truncate">{item.title}</p>
+                  <div className="flex items-center gap-2 mt-1 font-mono text-[10px] text-ink-muted">
                     <Clock className="h-3 w-3" />
                     <span>{formatDateTime(item.capturedAt)}</span>
                   </div>

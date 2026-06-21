@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState, useRef } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import {
-  FileText,
+  Home,
   Users,
   Folder,
   Calendar,
@@ -11,11 +11,9 @@ import {
   Compass,
   ListTodo,
   Settings,
+  Anchor,
   ChevronLeft,
   ChevronRight,
-  CheckCircle2,
-  Loader2,
-  XCircle,
   RotateCcw,
   Terminal,
   ChevronDown,
@@ -31,7 +29,7 @@ import {
 } from '@/store/useAppStore'
 import { useConfigStore } from '@/store/domain/useConfigStore'
 
-type LucideIcon = typeof FileText
+type LucideIcon = typeof BookOpen
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
 import { OperationController } from '@/components/OperationController'
@@ -43,7 +41,7 @@ interface LayoutProps {
   children: ReactNode
 }
 
-// Navigation structure with sections
+// Navigation structure with sections (Harbor groups)
 type NavigationSection = {
   title: string
   items: Array<{ name: string; href: string; icon: LucideIcon }>
@@ -51,15 +49,20 @@ type NavigationSection = {
 
 const navigationSections: NavigationSection[] = [
   {
-    title: 'KNOWLEDGE',
+    title: 'Knowledge',
     items: [
+      { name: 'Home', href: '/home', icon: Home },
       { name: 'Library', href: '/library', icon: BookOpen },
       { name: 'Assistant', href: '/assistant', icon: Bot },
       { name: 'Explore', href: '/explore', icon: Compass }
     ]
   },
   {
-    title: 'ORGANIZATION',
+    title: 'Capture',
+    items: [{ name: 'Sync', href: '/sync', icon: CloudDownload }]
+  },
+  {
+    title: 'Organization',
     items: [
       { name: 'People', href: '/people', icon: Users },
       { name: 'Projects', href: '/projects', icon: Folder },
@@ -67,16 +70,8 @@ const navigationSections: NavigationSection[] = [
     ]
   },
   {
-    title: 'ACTIONS',
-    items: [
-      { name: 'Actionables', href: '/actionables', icon: ListTodo }
-    ]
-  },
-  {
-    title: 'DEVICE',
-    items: [
-      { name: 'Sync', href: '/sync', icon: CloudDownload }
-    ]
+    title: 'Actions',
+    items: [{ name: 'Actionables', href: '/actionables', icon: ListTodo }]
   }
 ]
 
@@ -207,146 +202,152 @@ export function Layout({ children }: LayoutProps) {
   const isConnecting = connectionStatus.step !== 'idle' && connectionStatus.step !== 'ready' && connectionStatus.step !== 'error'
   const isScanning = connectionStatus.step === 'counting-files'
   const deviceModel = deviceState.model?.replace('hidock-', '').toUpperCase() || 'Device'
+  const isSettingsActive = location.pathname.startsWith('/settings')
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-background text-foreground">
       {/* Background operations controller - never unmounts, handles ALL operations */}
       <OperationController />
 
-      {/* Dark Sidebar */}
+      {/* Sidebar (Harbor) */}
       <aside
         className={cn(
-          'flex flex-col border-r border-slate-700 bg-slate-900 text-slate-100 transition-all duration-300',
-          sidebarOpen ? 'w-56' : 'w-16'
+          'flex flex-col border-r border-border bg-surface transition-all duration-300',
+          sidebarOpen ? 'w-[248px]' : 'w-[66px]'
         )}
       >
-        {/* Logo/Header - matching page header height (text-2xl + py-4 = ~85px) */}
-        <div className="flex h-[85px] items-center justify-between border-b border-slate-700 px-4 titlebar-drag-region">
+        {/* Brand / collapse */}
+        <div
+          className={cn(
+            'flex items-center gap-2.5 px-4 pb-3 pt-4 titlebar-drag-region',
+            !sidebarOpen && 'justify-center px-0'
+          )}
+        >
+          <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-brand-navy text-white titlebar-no-drag">
+            <Anchor className="h-5 w-5" />
+          </div>
           {sidebarOpen && (
-            <span className="font-bold text-2xl titlebar-no-drag">HiDock Next</span>
+            <div className="min-w-0 flex-1 leading-tight titlebar-no-drag">
+              <div className="font-display text-[19px] font-semibold tracking-[-0.01em] text-ink">HiDock</div>
+              <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-accent-2">calm from the noise</div>
+            </div>
           )}
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 titlebar-no-drag text-slate-300 hover:text-white hover:bg-slate-800"
+            className="h-8 w-8 shrink-0 titlebar-no-drag text-ink-muted hover:text-ink"
             onClick={toggleSidebar}
           >
             {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </Button>
         </div>
 
-        {/* Device Connection Status */}
-        <Link
-          to="/sync"
-          className={cn(
-            'mx-2 mt-2 flex items-center gap-2 rounded-lg px-3 py-2 transition-colors',
-            isConnected
-              ? 'bg-emerald-900/30 border border-emerald-700/50 hover:bg-emerald-900/50'
-              : isConnecting
-                ? 'bg-amber-900/30 border border-amber-700/50 hover:bg-amber-900/50'
-                : 'bg-slate-800/50 border border-slate-700/50 hover:bg-slate-800'
-          )}
-        >
-          {isConnected && isScanning ? (
-            <Loader2 className="h-4 w-4 flex-shrink-0 text-emerald-400 animate-spin" />
-          ) : isConnected ? (
-            <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-400" />
-          ) : isConnecting ? (
-            <Loader2 className="h-4 w-4 flex-shrink-0 text-amber-400 animate-spin" />
-          ) : (
-            <XCircle className="h-4 w-4 flex-shrink-0 text-slate-500" />
-          )}
-          {sidebarOpen && (
-            <div className="flex flex-col min-w-0">
-              <span className={cn(
-                'text-xs font-medium truncate',
-                isConnected ? 'text-emerald-300' : isConnecting ? 'text-amber-300' : 'text-slate-400'
-              )}>
-                {isConnected ? deviceModel : isConnecting ? 'Connecting...' : 'Disconnected'}
+        {/* Device status pill */}
+        <div className={cn('shrink-0 px-3 pb-3', !sidebarOpen && 'px-2')}>
+          <Link
+            to="/sync"
+            title={`${isConnected ? deviceModel : isConnecting ? 'Connecting…' : 'Disconnected'}`}
+            className={cn(
+              'flex w-full items-center gap-2.5 rounded-lg border border-border bg-surface-sunken px-3 py-2.5 text-left transition-colors hover:border-border-strong',
+              !sidebarOpen && 'justify-center px-0'
+            )}
+          >
+            <span className="relative flex h-[9px] w-[9px] shrink-0 items-center justify-center">
+              {isConnected ? (
+                <span className="h-[9px] w-[9px] rounded-full bg-success shadow-[0_0_0_3px_var(--success-soft)]" />
+              ) : isConnecting ? (
+                <span className="h-[9px] w-[9px] animate-pulse rounded-full bg-warning" />
+              ) : (
+                <span className="h-[9px] w-[9px] rounded-full bg-border-strong" />
+              )}
+            </span>
+            {sidebarOpen && (
+              <span className="min-w-0 flex-1">
+                <span className="block text-[12.5px] font-semibold text-ink">
+                  {isConnected ? `hidock-${deviceModel.toLowerCase()}` : isConnecting ? 'Connecting…' : 'Disconnected'}
+                </span>
+                <span className="block truncate font-mono text-[10px] text-ink-muted">
+                  {isConnected && isScanning
+                    ? connectionStatus.message
+                    : isConnected
+                      ? `connected${deviceState.recordingCount > 0 ? ` · ${deviceState.recordingCount} files` : ''}`
+                      : isConnecting
+                        ? 'establishing link'
+                        : 'click to connect'}
+                </span>
               </span>
-              {isConnected && isScanning && (
-                <span className="text-[10px] text-amber-400 truncate">
-                  {connectionStatus.message}
-                </span>
-              )}
-              {isConnected && !isScanning && deviceState.recordingCount > 0 && (
-                <span className="text-[10px] text-slate-500">
-                  {deviceState.recordingCount} recordings
-                </span>
-              )}
-              {!isConnected && !isConnecting && (
-                <span className="text-[10px] text-slate-600">
-                  Click to connect
-                </span>
-              )}
-            </div>
-          )}
-        </Link>
+            )}
+          </Link>
+        </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-2 space-y-4 overflow-y-auto">
-          {navigationSections.map((section, sectionIdx) => (
+        <nav className="flex-1 space-y-4 overflow-y-auto px-3">
+          {navigationSections.map((section) => (
             <div key={section.title}>
-              {/* Section Header */}
               {sidebarOpen && (
-                <div className="px-3 mb-2 text-[10px] font-semibold text-slate-500 tracking-wider">
+                <div className="px-2.5 pb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-muted">
                   {section.title}
                 </div>
               )}
-              {/* Section Items */}
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const isActive = location.pathname.startsWith(item.href)
                   return (
                     <Link
                       key={item.href}
                       to={item.href}
+                      title={item.name}
                       className={cn(
-                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                        'flex items-center gap-3 rounded-md px-2.5 py-2 text-[13.5px] transition-colors',
+                        !sidebarOpen && 'justify-center px-0',
                         isActive
-                          ? 'bg-slate-700 text-white font-medium'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                          ? 'bg-accent-strong-soft font-semibold text-[var(--accent-soft-text)]'
+                          : 'font-medium text-foreground hover:bg-surface-hover hover:text-ink'
                       )}
                     >
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
-                      {sidebarOpen && <span>{item.name}</span>}
+                      <item.icon className="h-[18px] w-[18px] shrink-0" />
+                      {sidebarOpen && <span className="flex-1">{item.name}</span>}
                     </Link>
                   )
                 })}
               </div>
-              {/* Section Divider (except for last section) */}
-              {sectionIdx < navigationSections.length - 1 && (
-                <div className="mt-3 border-t border-slate-800" />
-              )}
             </div>
           ))}
-
-          {/* Settings at bottom - separate from sections */}
-          <div className="pt-2 border-t border-slate-800">
-            <Link
-              to="/settings"
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                location.pathname.startsWith('/settings')
-                  ? 'bg-slate-700 text-white font-medium'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-              )}
-            >
-              <Settings className="h-5 w-5 flex-shrink-0" />
-              {sidebarOpen && <span>Settings</span>}
-            </Link>
-          </div>
         </nav>
+
+        {/* User / Settings row */}
+        <Link
+          to="/settings"
+          title="Settings"
+          className={cn(
+            'mx-3 mb-1 mt-2 flex items-center gap-3 rounded-md px-2 py-2 transition-colors',
+            !sidebarOpen && 'mx-2 justify-center px-0',
+            isSettingsActive ? 'bg-accent-strong-soft' : 'hover:bg-surface-hover'
+          )}
+        >
+          <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-[var(--blue-600)] text-[12px] font-semibold text-white">
+            RC
+          </span>
+          {sidebarOpen && (
+            <>
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block text-[12.5px] font-semibold text-ink">Roger Cox</span>
+                <span className="block text-[10.5px] text-ink-muted">workspace owner</span>
+              </span>
+              <Settings className="h-4 w-4 shrink-0 text-ink-muted" />
+            </>
+          )}
+        </Link>
 
         {/* Operations Panel - Downloads + Transcriptions */}
         <OperationsPanel sidebarOpen={sidebarOpen} />
 
         {/* AL-001: Global Activity Log — accessible from all pages */}
-        <div className="border-t border-slate-700">
+        <div className="border-t border-border">
           {sidebarOpen ? (
             <div>
               <button
-                className="flex w-full items-center justify-between px-3 py-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                className="flex w-full items-center justify-between px-3 py-2 text-xs text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
                 onClick={() => setLogExpanded(p => !p)}
               >
                 <span className="flex items-center gap-1.5">
@@ -354,8 +355,8 @@ export function Layout({ children }: LayoutProps) {
                   Activity Log
                   {activityLog.length > 0 && (
                     <span className={cn(
-                      'text-[10px] px-1 rounded',
-                      hasErrors ? 'bg-red-900/50 text-red-400' : 'bg-slate-700 text-slate-400'
+                      'rounded px-1 text-[10px]',
+                      hasErrors ? 'bg-danger-soft text-danger' : 'bg-surface-sunken text-ink-muted'
                     )}>
                       {activityLog.length}
                     </span>
@@ -363,7 +364,7 @@ export function Layout({ children }: LayoutProps) {
                 </span>
                 <span className="flex items-center gap-1">
                   <span
-                    className="text-[10px] hover:text-slate-300"
+                    className="text-[10px] hover:text-ink"
                     onClick={(e) => {
                       e.stopPropagation()
                       useAppStore.getState().clearActivityLog?.()
@@ -376,27 +377,27 @@ export function Layout({ children }: LayoutProps) {
               {logExpanded && (
                 <div
                   ref={logContainerRef}
-                  className="max-h-40 overflow-y-auto bg-slate-950 px-2 py-1 font-mono"
+                  className="max-h-40 overflow-y-auto bg-bg-sunken px-2 py-1 font-mono"
                 >
                   {activityLog.length === 0 ? (
-                    <p className="text-[10px] text-slate-600 py-1">No activity</p>
+                    <p className="py-1 text-[10px] text-ink-muted">No activity</p>
                   ) : (
                     activityLog.map((entry, i) => (
                       <div key={`${entry.timestamp.getTime()}-${i}`}
                         className={cn(
-                          'text-[10px] leading-4 py-0.5',
-                          entry.type === 'error' ? 'text-red-400'
-                          : entry.type === 'success' ? 'text-green-400'
-                          : entry.type === 'warning' ? 'text-amber-400'
-                          : entry.type === 'usb-out' ? 'text-blue-400'
-                          : entry.type === 'usb-in' ? 'text-purple-400'
-                          : 'text-slate-400'
+                          'py-0.5 text-[10px] leading-4',
+                          entry.type === 'error' ? 'text-danger'
+                          : entry.type === 'success' ? 'text-success'
+                          : entry.type === 'warning' ? 'text-warning'
+                          : entry.type === 'usb-out' ? 'text-[var(--blue-500)]'
+                          : entry.type === 'usb-in' ? 'text-accent-2'
+                          : 'text-ink-muted'
                         )}>
-                        <span className="text-slate-600 mr-1">
+                        <span className="mr-1 text-ink-muted/70">
                           {entry.timestamp.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </span>
                         {entry.message}
-                        {entry.details && <span className="text-slate-600 ml-1">— {entry.details}</span>}
+                        {entry.details && <span className="ml-1 text-ink-muted/70">— {entry.details}</span>}
                       </div>
                     ))
                   )}
@@ -405,20 +406,20 @@ export function Layout({ children }: LayoutProps) {
             </div>
           ) : hasErrors ? (
             <div className="flex justify-center py-2" title="Activity log has errors or warnings">
-              <Terminal className="h-4 w-4 text-amber-400" />
+              <Terminal className="h-4 w-4 text-warning" />
             </div>
           ) : null}
         </div>
 
         {/* Dev Tools */}
         {isDevMode && (
-          <div className="border-t border-slate-700 p-3 space-y-2">
+          <div className="space-y-2 border-t border-border p-3">
             <Button
               variant="ghost"
               size="sm"
               className={cn(
-                'w-full gap-2 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white',
-                !sidebarOpen && 'px-0 justify-center'
+                'w-full gap-2 bg-surface-sunken text-ink hover:bg-surface-hover',
+                !sidebarOpen && 'justify-center px-0'
               )}
               onClick={() => window.electronAPI?.app?.restart()}
               title="Restart App"
@@ -428,7 +429,7 @@ export function Layout({ children }: LayoutProps) {
             </Button>
             {sidebarOpen && (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">QA Logs</span>
+                <span className="text-xs text-ink-muted">QA Logs</span>
                 <Switch
                   checked={qaLogsEnabled}
                   onCheckedChange={setQaLogsEnabled}

@@ -82,14 +82,14 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
   if (!hasAnyOperations) return null
 
   return (
-    <div className="border-t border-slate-700 px-2 py-2 space-y-2">
+    <div className="border-t border-border px-2 py-2 space-y-2">
       {/* Downloads Section */}
       {/* TODO: DL-04: Individual ad-hoc downloads should show aggregate progress. */}
       {(hasDownloads || hasFailedDownloads) && (
         <div className="space-y-1">
           <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 text-xs text-slate-300">
-              <Download className={`h-3 w-3 ${hasDownloads ? 'text-emerald-400 animate-pulse' : 'text-amber-400'}`} />
+            <div className="flex items-center gap-1.5 text-xs text-ink">
+              <Download className={`h-3 w-3 ${hasDownloads ? 'text-success animate-pulse' : 'text-warning'}`} />
               {sidebarOpen ? (
                 <span>
                   {hasDownloads ? 'Downloads' : 'Downloads'}{' '}
@@ -100,7 +100,7 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                       : `(${failedDownloadCount} failed)`}
                 </span>
               ) : (
-                <span className={`text-[10px] ${hasDownloads ? 'text-emerald-400' : 'text-amber-400'}`}>
+                <span className={`text-[10px] ${hasDownloads ? 'text-success' : 'text-warning'}`}>
                   {hasDownloads ? downloadQueue.size : failedDownloadCount}
                 </span>
               )}
@@ -112,7 +112,7 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 text-slate-400 hover:text-red-400"
+                      className="h-5 w-5 text-ink-muted hover:text-danger"
                       onClick={cancelAllDownloads}
                     >
                       <X className="h-3 w-3" />
@@ -135,13 +135,13 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                     const pct = Number.isFinite(rawPct) ? Math.round(rawPct) : 0
                     return (
                       <>
-                        <div className="flex justify-between text-[10px] text-slate-400 mb-0.5">
+                        <div className="flex justify-between text-[10px] text-ink-muted mb-0.5">
                           <span>Overall</span>
                           <span>{pct}%</span>
                         </div>
-                        <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-surface-sunken rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-emerald-500 transition-all duration-200"
+                            className="h-full bg-success transition-all duration-200"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
@@ -149,7 +149,7 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                     )
                   })()}
                   {deviceSyncEta != null && deviceSyncEta > 0 && (
-                    <div className="text-[10px] text-slate-500 mt-0.5">~{formatEta(deviceSyncEta)}</div>
+                    <div className="text-[10px] text-ink-muted mt-0.5">~{formatEta(deviceSyncEta)}</div>
                   )}
                 </div>
               )}
@@ -157,7 +157,7 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
               {Array.from(downloadQueue.entries()).slice(0, 2).map(([id, item]) => (
                 <div key={id} className="space-y-0.5">
                   <div className="flex justify-between text-[10px]">
-                    <span className="text-slate-400 truncate max-w-[140px]" title={item.filename}>
+                    <span className="text-ink-muted truncate max-w-[140px]" title={item.filename}>
                       {/* DL-03: Preserve date portion of HiDock filenames (e.g. REC_20260225_143012.wav) */}
                       {(() => {
                         const name = item.filename.replace(/\.(hda|wav|mp3|m4a)$/i, '')
@@ -165,25 +165,25 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                       })()}
                     </span>
                     {/* C-004: NaN guard on individual file progress */}
-                    <span className="text-slate-500">{Number.isFinite(item.progress) ? item.progress : 0}%</span>
+                    <span className="text-ink-muted">{Number.isFinite(item.progress) ? item.progress : 0}%</span>
                   </div>
-                  <div className="h-1 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-1 bg-surface-sunken rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-blue-500 transition-all duration-200"
+                      className="h-full bg-primary transition-all duration-200"
                       style={{ width: `${Number.isFinite(item.progress) ? item.progress : 0}%` }}
                     />
                   </div>
                 </div>
               ))}
               {downloadQueue.size > 2 && (
-                <div className="text-[10px] text-slate-500">+{downloadQueue.size - 2} more in queue</div>
+                <div className="text-[10px] text-ink-muted">+{downloadQueue.size - 2} more in queue</div>
               )}
               {/* DL-15: Retry Failed button for failed downloads outside Device page */}
               {failedDownloadCount > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-full h-6 text-[10px] text-amber-400 hover:text-amber-300"
+                  className="w-full h-6 text-[10px] text-warning hover:text-warning"
                   onClick={handleRetryFailed}
                 >
                   <RotateCcw className="h-2.5 w-2.5 mr-1" />
@@ -199,15 +199,15 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
       {hasTranscriptions && (
         <div className="space-y-1">
           <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 text-xs text-slate-300">
-              <Sparkles className="h-3 w-3 text-purple-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 text-xs text-ink">
+              <Sparkles className="h-3 w-3 text-accent-2 animate-pulse" />
               {sidebarOpen ? (
                 <span>
                   Transcriptions ({transcriptionStats.processing + transcriptionStats.pending}
                   {transcriptionStats.failed > 0 && `, ${transcriptionStats.failed} failed`})
                 </span>
               ) : (
-                <span className="text-[10px] text-purple-400">
+                <span className="text-[10px] text-accent-2">
                   {transcriptionStats.processing + transcriptionStats.pending}
                 </span>
               )}
@@ -219,7 +219,7 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 text-slate-400 hover:text-red-400"
+                      className="h-5 w-5 text-ink-muted hover:text-danger"
                       onClick={cancelAllTranscriptions}
                     >
                       <X className="h-3 w-3" />
@@ -234,13 +234,13 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
           {/* Aggregate progress bar */}
           {sidebarOpen && (transcriptionStats.processing + transcriptionStats.pending > 0) && (
             <div className="px-1">
-              <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-surface-sunken rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-purple-500 rounded-full transition-all duration-300"
+                  className="h-full bg-accent-2 rounded-full transition-all duration-300"
                   style={{ width: `${transcriptionStats.aggregateProgress}%` }}
                 />
               </div>
-              <div className="text-[9px] text-slate-500 mt-0.5 text-right">
+              <div className="text-[9px] text-ink-muted mt-0.5 text-right">
                 {transcriptionStats.aggregateProgress}% overall
               </div>
             </div>
@@ -254,15 +254,15 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                 .map((item) => (
                   <div key={item.id} className="flex items-center gap-1.5 text-[10px]">
                     {item.status === 'processing' && (
-                      <RefreshCw className="h-2.5 w-2.5 text-purple-400 animate-spin shrink-0" />
+                      <RefreshCw className="h-2.5 w-2.5 text-accent-2 animate-spin shrink-0" />
                     )}
                     {item.status === 'pending' && (
-                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/60 shrink-0" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-warning/60 shrink-0" />
                     )}
                     {item.status === 'failed' && (
-                      <AlertCircle className="h-2.5 w-2.5 text-red-400 shrink-0" />
+                      <AlertCircle className="h-2.5 w-2.5 text-danger shrink-0" />
                     )}
-                    <span className="text-slate-400 truncate flex-1" title={item.filename}>
+                    <span className="text-ink-muted truncate flex-1" title={item.filename}>
                       {item.filename.length > 18 ? `${item.filename.slice(0, 15)}...` : item.filename}
                     </span>
                     {item.status === 'failed' && (
@@ -270,7 +270,7 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              className="text-slate-500 hover:text-slate-300"
+                              className="text-ink-muted hover:text-ink"
                               onClick={() => useTranscriptionStore.getState().retry(item.id)}
                             >
                               <RotateCcw className="h-2.5 w-2.5" />
@@ -285,7 +285,7 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                     )}
                     {(item.status === 'pending' || item.status === 'processing') && (
                       <button
-                        className="text-slate-500 hover:text-red-400"
+                        className="text-ink-muted hover:text-danger"
                         onClick={() => cancelTranscription(item.recordingId)}
                       >
                         <X className="h-2.5 w-2.5" />

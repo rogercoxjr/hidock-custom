@@ -103,10 +103,10 @@ function ToastItem({ toast: t, onClose }: { toast: Toast; onClose: () => void })
 
   const iconColor = {
     default: 'text-muted-foreground',
-    success: 'text-green-500',
+    success: 'text-success',
     error: 'text-destructive',
-    warning: 'text-yellow-500',
-    info: 'text-blue-500'
+    warning: 'text-warning',
+    info: 'text-accent-2'
   }[t.variant || 'default']
 
   return (
@@ -117,9 +117,9 @@ function ToastItem({ toast: t, onClose }: { toast: Toast; onClose: () => void })
         'data-[state=closed]:fade-out-80 data-[state=open]:slide-in-from-bottom-full',
         'data-[state=closed]:slide-out-to-right-full',
         t.variant === 'error' && 'border-destructive/50',
-        t.variant === 'success' && 'border-green-500/50',
-        t.variant === 'warning' && 'border-yellow-500/50',
-        t.variant === 'info' && 'border-blue-500/50'
+        t.variant === 'success' && 'border-success/50',
+        t.variant === 'warning' && 'border-warning/50',
+        t.variant === 'info' && 'border-accent-2/50'
       )}
       duration={t.duration}
     >

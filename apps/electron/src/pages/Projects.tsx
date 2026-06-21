@@ -18,6 +18,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { SegmentedToggle } from '@/components/ui/segmented-toggle'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { PersonAvatar } from '@/components/harbor/PersonAvatar'
 import {
   Dialog,
   DialogContent,
@@ -239,20 +243,23 @@ export function Projects() {
   }
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-full bg-bg">
       {/* Sidebar - Projects List */}
-      <aside className="w-80 border-r flex flex-col bg-muted/10">
-        <div className="p-4 border-b space-y-4">
+      <aside className="w-80 border-r border-border flex flex-col bg-surface">
+        <div className="p-4 border-b border-border space-y-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold">Projects</h1>
-            <Button onClick={openCreateDialog} size="sm" className="h-8 gap-1">
+            <div className="min-w-0">
+              <Eyebrow>Organization</Eyebrow>
+              <h1 className="font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">Projects</h1>
+            </div>
+            <Button onClick={openCreateDialog} size="sm" className="h-8 gap-1 shrink-0">
               <Plus className="h-4 w-4" />
               New
             </Button>
           </div>
 
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-ink-muted" />
             <Input
               placeholder="Search projects..."
               value={searchQuery}
@@ -261,31 +268,29 @@ export function Projects() {
             />
           </div>
 
-          <div className="flex gap-1 p-1 bg-muted rounded-lg">
-            {(['all', 'active', 'archived'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={cn(
-                  "flex-1 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
-                  statusFilter === s ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
+          <SegmentedToggle
+            size="sm"
+            className="flex w-full [&>button]:flex-1"
+            aria-label="Filter projects by status"
+            value={statusFilter}
+            onChange={(s) => setStatusFilter(s)}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'active', label: 'Active' },
+              { value: 'archived', label: 'Archived' }
+            ]}
+          />
         </div>
 
         <div className="flex-1 overflow-auto p-2">
           {loading && projects.length === 0 ? (
             <div className="flex items-center justify-center py-12">
-              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+              <RefreshCw className="h-6 w-6 animate-spin text-ink-muted" />
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="text-center py-12 px-4">
-              <Folder className="h-8 w-8 mx-auto text-muted-foreground opacity-20 mb-3" />
-              <p className="text-xs text-muted-foreground mb-3">
+              <Folder className="h-8 w-8 mx-auto text-ink-muted opacity-20 mb-3" />
+              <p className="text-xs text-ink-muted mb-3">
                 {searchQuery
                   ? `No projects matching "${searchQuery}"`
                   : statusFilter === 'all'
@@ -301,34 +306,40 @@ export function Projects() {
             </div>
           ) : (
             <div className="space-y-1">
-              {filteredProjects.map((project) => (
-                <div
-                  key={project.id}
-                  onClick={() => handleSelectProject(project)}
-                  className={cn(
-                    "w-full text-left p-3 rounded-xl transition-all cursor-pointer group",
-                    activeProject?.id === project.id
-                      ? "bg-primary text-primary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={cn(
-                      "w-10 h-10 rounded-xl flex items-center justify-center border shadow-sm",
-                      activeProject?.id === project.id ? "bg-primary-foreground/10 border-primary-foreground/20" : "bg-background border-border"
-                    )}>
-                      <Folder className={cn("h-5 w-5", activeProject?.id === project.id ? "text-primary-foreground" : "text-muted-foreground")} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold truncate">{project.name}</p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] opacity-70">
-                        <Clock className="h-3 w-3" />
-                        <span>{new Date(project.createdAt).toLocaleDateString()}</span>
+              {filteredProjects.map((project) => {
+                const isActive = activeProject?.id === project.id
+                return (
+                  <div
+                    key={project.id}
+                    onClick={() => handleSelectProject(project)}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg border transition-colors cursor-pointer group",
+                      isActive
+                        ? "bg-accent-strong-soft border-border-brand"
+                        : "border-transparent hover:bg-surface-hover"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "w-10 h-10 rounded-lg flex items-center justify-center border shadow-xs shrink-0",
+                        isActive ? "bg-surface border-border-brand" : "bg-surface-sunken border-border"
+                      )}>
+                        <Folder className={cn("h-5 w-5", isActive ? "text-accent-2" : "text-ink-muted")} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className={cn(
+                          "text-sm font-semibold truncate",
+                          isActive ? "text-[var(--accent-soft-text)]" : "text-ink"
+                        )}>{project.name}</p>
+                        <div className="flex items-center gap-1.5 mt-1 font-mono text-[10px] text-ink-muted">
+                          <Clock className="h-3 w-3" />
+                          <span>{new Date(project.createdAt).toLocaleDateString()}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -338,27 +349,25 @@ export function Projects() {
       <main className="flex-1 flex flex-col min-w-0">
         {activeProject && detailLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center">
-            <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-            <p className="text-sm text-muted-foreground">Loading project details...</p>
+            <RefreshCw className="h-8 w-8 animate-spin text-ink-muted mb-4" />
+            <p className="text-sm text-ink-muted">Loading project details...</p>
           </div>
         ) : activeProject ? (
           <div className="flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-right-2 duration-300">
             {/* Header */}
-            <header className="border-b px-8 py-6 h-[120px] flex items-center justify-between">
+            <header className="border-b border-border bg-surface px-8 py-6 h-[120px] flex items-center justify-between">
               <div className="flex items-center gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shadow-inner">
-                  <Folder className="h-7 w-7 text-primary" />
+                <div className="w-14 h-14 rounded-xl bg-accent-2-soft border border-border-brand flex items-center justify-center shrink-0">
+                  <Folder className="h-7 w-7 text-accent-2" />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-2xl font-bold truncate">{activeProject.name}</h2>
+                  <Eyebrow tone="muted">Project</Eyebrow>
+                  <h2 className="font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink truncate">{activeProject.name}</h2>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className={cn(
-                      "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-                      activeProject.status === 'active' ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-slate-500/10 text-slate-600 border-slate-500/20"
-                    )}>
+                    <Badge variant={activeProject.status === 'active' ? 'success' : 'default'} className="uppercase tracking-[0.08em]">
                       {activeProject.status}
-                    </span>
-                    <span className="text-xs text-muted-foreground">Created {new Date(activeProject.createdAt).toLocaleDateString()}</span>
+                    </Badge>
+                    <span className="text-xs text-ink-muted">Created {new Date(activeProject.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
               </div>
@@ -388,7 +397,7 @@ export function Projects() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                  className="h-9 w-9 text-ink-muted hover:text-danger"
                   onClick={() => setDeleteDialogOpen(true)}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -397,50 +406,48 @@ export function Projects() {
             </header>
 
             {/* Content */}
-            <div className="flex-1 overflow-auto p-8">
-              <div className="max-w-4xl mx-auto space-y-8">
+            <div className="flex-1 overflow-auto p-[var(--space-6)]">
+              <div className="max-w-4xl mx-auto space-y-[var(--space-6)]">
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Card className="bg-muted/5">
+                  <Card className="bg-surface">
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Knowledge</p>
-                        <FileText className="h-4 w-4 text-primary" />
+                        <Eyebrow tone="muted">Knowledge</Eyebrow>
+                        <FileText className="h-4 w-4 text-accent-2" />
                       </div>
-                      <p className="text-2xl font-bold mt-2">{activeProject.knowledgeIds?.length ?? '\u2014'} {activeProject.knowledgeIds ? 'Items' : ''}</p>
+                      <p className="font-display text-[1.75rem] font-semibold tracking-[-0.01em] text-ink mt-2">{activeProject.knowledgeIds?.length ?? '\u2014'} {activeProject.knowledgeIds ? 'Items' : ''}</p>
                     </CardContent>
                   </Card>
-                  <Card className="bg-muted/5">
+                  <Card className="bg-surface">
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">People</p>
-                        <Users className="h-4 w-4 text-primary" />
+                        <Eyebrow tone="muted">People</Eyebrow>
+                        <Users className="h-4 w-4 text-accent-2" />
                       </div>
-                      <p className="text-2xl font-bold mt-2">{activeProject.personIds?.length ?? '\u2014'} {activeProject.personIds ? 'Involved' : ''}</p>
+                      <p className="font-display text-[1.75rem] font-semibold tracking-[-0.01em] text-ink mt-2">{activeProject.personIds?.length ?? '\u2014'} {activeProject.personIds ? 'Involved' : ''}</p>
                       {projectMembers.length > 0 && (
                         <div className="mt-3 space-y-1.5">
                           {projectMembers.slice(0, 5).map((member) => (
                             <div key={member.id} className="flex items-center gap-2 text-xs">
-                              <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold">
-                                {member.name.charAt(0).toUpperCase()}
-                              </div>
-                              <span className="truncate">{member.name}</span>
+                              <PersonAvatar name={member.name} size={20} />
+                              <span className="truncate text-foreground">{member.name}</span>
                             </div>
                           ))}
                           {projectMembers.length > 5 && (
-                            <p className="text-[10px] text-muted-foreground pl-7">+{projectMembers.length - 5} more</p>
+                            <p className="text-[10px] text-ink-muted pl-7">+{projectMembers.length - 5} more</p>
                           )}
                         </div>
                       )}
                     </CardContent>
                   </Card>
-                  <Card className="bg-muted/5">
+                  <Card className="bg-surface">
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</p>
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
+                        <Eyebrow tone="muted">Actions</Eyebrow>
+                        <CheckCircle2 className="h-4 w-4 text-accent-2" />
                       </div>
-                      <p className="text-2xl font-bold mt-2">{'\u2014'}</p>
+                      <p className="font-display text-[1.75rem] font-semibold tracking-[-0.01em] text-ink mt-2">{'\u2014'}</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -448,7 +455,7 @@ export function Projects() {
                 {/* Description (inline editable) */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Description</h3>
+                    <Eyebrow tone="muted">Description</Eyebrow>
                     {!isEditingDescription && (
                       <Button
                         variant="ghost"
@@ -469,7 +476,7 @@ export function Projects() {
                       <textarea
                         value={editDescription}
                         onChange={(e) => setEditDescription(e.target.value)}
-                        className="w-full text-sm border rounded-xl px-4 py-3 bg-background min-h-[80px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring"
+                        className="w-full text-sm border border-border rounded-md px-4 py-3 bg-surface text-foreground min-h-[80px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring"
                         placeholder="Add a project description..."
                         autoFocus
                       />
@@ -485,27 +492,27 @@ export function Projects() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm leading-relaxed text-muted-foreground bg-muted/20 p-4 rounded-xl border italic">
+                    <p className="text-sm leading-relaxed text-ink-muted bg-surface-sunken p-4 rounded-lg border border-border italic">
                       {activeProject.description || "No description provided for this project."}
                     </p>
                   )}
                 </div>
 
                 {/* AI Suggestions */}
-                <Card className="border-primary/20 bg-primary/5">
+                <Card className="border-border-brand bg-accent-2-soft">
                   <CardContent className="p-6">
                     <div className="flex items-center gap-2 mb-4">
-                      <Bot className="h-5 w-5 text-primary" />
-                      <h3 className="font-bold text-sm uppercase tracking-wider">AI Project Insight</h3>
+                      <Bot className="h-5 w-5 text-accent-2" />
+                      <Eyebrow>AI Project Insight</Eyebrow>
                     </div>
-                    <p className="text-sm leading-relaxed text-muted-foreground italic">
+                    <p className="text-sm leading-relaxed text-ink-muted italic">
                       AI-generated insights for "{activeProject.name}" will appear here once knowledge items are linked to this project.
                     </p>
                     <div className="mt-4 flex gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 text-xs bg-background"
+                        className="h-8 text-xs bg-surface"
                         disabled
                         title="Coming soon"
                         onClick={() => toast.info('Coming soon', 'Report generation is not yet available.')}
@@ -515,7 +522,7 @@ export function Projects() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 text-xs bg-background"
+                        className="h-8 text-xs bg-surface"
                         disabled
                         title="Coming soon"
                         onClick={() => toast.info('Coming soon', 'Decision summarization is not yet available.')}
@@ -527,7 +534,7 @@ export function Projects() {
                 </Card>
 
                 {/* Placeholder for tabs content */}
-                <div className="pt-4 text-center py-20 border-2 border-dashed rounded-3xl opacity-30">
+                <div className="pt-4 text-center py-20 border-2 border-dashed border-border rounded-xl text-ink-muted opacity-50">
                   <Folder className="h-12 w-12 mx-auto mb-4" />
                   <p className="text-sm">Knowledge Timeline and Related People visualization will appear here.</p>
                 </div>
@@ -535,11 +542,11 @@ export function Projects() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8">
-            <div className="w-20 h-20 rounded-3xl bg-muted/20 flex items-center justify-center mb-6">
-              <Folder className="h-10 w-10 opacity-20" />
+          <div className="flex-1 flex flex-col items-center justify-center text-ink-muted p-8">
+            <div className="w-20 h-20 rounded-xl bg-surface-sunken flex items-center justify-center mb-6">
+              <Folder className="h-10 w-10 opacity-30" />
             </div>
-            <h2 className="text-xl font-bold text-foreground mb-2">Select a Project</h2>
+            <h2 className="font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-ink mb-2">Select a Project</h2>
             <p className="text-sm max-w-xs text-center leading-relaxed">
               Choose a project from the sidebar to view aggregated knowledge, people, and AI insights.
             </p>
@@ -562,7 +569,7 @@ export function Projects() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <label className="text-sm font-medium mb-1 block">Project Name</label>
+              <label className="text-sm font-medium text-ink mb-1 block">Project Name</label>
               <Input
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
@@ -576,12 +583,12 @@ export function Projects() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Description (optional)</label>
+              <label className="text-sm font-medium text-ink mb-1 block">Description (optional)</label>
               <textarea
                 value={createDescription}
                 onChange={(e) => setCreateDescription(e.target.value)}
                 placeholder="Brief description..."
-                className="w-full text-sm border rounded px-3 py-2 bg-background min-h-[60px]"
+                className="w-full text-sm border border-border rounded-md px-3 py-2 bg-surface text-foreground min-h-[60px] focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </div>

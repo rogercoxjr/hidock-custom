@@ -26,6 +26,9 @@ interface CalendarStatsBarProps {
   onSortChange: (sort: SortOption) => void
 }
 
+const chipBase =
+  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[11px] transition-colors'
+
 export const CalendarStatsBar = memo(function CalendarStatsBar({
   stats,
   locationFilter,
@@ -36,18 +39,19 @@ export const CalendarStatsBar = memo(function CalendarStatsBar({
   onSortChange,
 }: CalendarStatsBarProps) {
   return (
-    <div className="flex items-center gap-2 px-6 py-2 bg-muted/30 text-xs border-b flex-shrink-0">
+    <div className="flex flex-shrink-0 items-center gap-[var(--space-4)] border-b border-border bg-surface-sunken px-[var(--space-5)] py-[9px] font-mono text-[11px] text-ink-muted">
       {/* All recordings chip */}
       <button
         onClick={() => onLocationFilterChange('all')}
         className={cn(
-          'flex items-center gap-1 px-2 py-1 rounded-full transition-colors',
+          chipBase,
           locationFilter === 'all'
-            ? 'bg-primary text-primary-foreground'
-            : 'hover:bg-muted text-muted-foreground'
+            ? 'bg-accent-strong-soft text-[var(--accent-soft-text)]'
+            : 'text-ink-muted hover:bg-surface-hover'
         )}
       >
-        {stats.total} recording{stats.total !== 1 ? 's' : ''}
+        <span className="font-semibold text-ink">{stats.total}</span>
+        recording{stats.total !== 1 ? 's' : ''}
       </button>
 
       {/* Device-only chip */}
@@ -55,13 +59,13 @@ export const CalendarStatsBar = memo(function CalendarStatsBar({
         <button
           onClick={() => onLocationFilterChange(locationFilter === 'device-only' ? 'all' : 'device-only')}
           className={cn(
-            'flex items-center gap-1 px-2 py-1 rounded-full transition-colors',
+            chipBase,
             locationFilter === 'device-only'
-              ? 'bg-orange-500 text-white'
-              : 'hover:bg-orange-100 dark:hover:bg-orange-900/30 text-orange-600'
+              ? 'bg-warning-soft text-warning'
+              : 'text-ink-muted hover:bg-surface-hover'
           )}
         >
-          <Cloud className="h-3 w-3" />
+          <Cloud className="h-3 w-3 text-warning" />
           {stats.deviceOnly} on device
         </button>
       )}
@@ -71,13 +75,13 @@ export const CalendarStatsBar = memo(function CalendarStatsBar({
         <button
           onClick={() => onLocationFilterChange(locationFilter === 'local-only' ? 'all' : 'local-only')}
           className={cn(
-            'flex items-center gap-1 px-2 py-1 rounded-full transition-colors',
+            chipBase,
             locationFilter === 'local-only'
-              ? 'bg-blue-500 text-white'
-              : 'hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600'
+              ? 'bg-accent-strong-soft text-[var(--accent-soft-text)]'
+              : 'text-ink-muted hover:bg-surface-hover'
           )}
         >
-          <HardDrive className="h-3 w-3" />
+          <HardDrive className="h-3 w-3 text-accent-strong" />
           {stats.localOnly} downloaded
         </button>
       )}
@@ -87,32 +91,44 @@ export const CalendarStatsBar = memo(function CalendarStatsBar({
         <button
           onClick={() => onLocationFilterChange(locationFilter === 'both' ? 'all' : 'both')}
           className={cn(
-            'flex items-center gap-1 px-2 py-1 rounded-full transition-colors',
+            chipBase,
             locationFilter === 'both'
-              ? 'bg-green-500 text-white'
-              : 'hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600'
+              ? 'bg-success-soft text-success'
+              : 'text-ink-muted hover:bg-surface-hover'
           )}
         >
-          <Check className="h-3 w-3" />
+          <Check className="h-3 w-3 text-success" />
           {stats.both} synced
         </button>
       )}
 
-      {!deviceConnected && (
-        <span className="text-muted-foreground ml-2">(device not connected)</span>
-      )}
+      {!deviceConnected && <span className="ml-1 text-ink-muted">(device not connected)</span>}
 
       {/* Spacer */}
       <div className="flex-1" />
 
+      {/* Legend — only in calendar view */}
+      {!showListView && (
+        <div className="hidden items-center gap-[var(--space-4)] md:flex">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-[11px] w-[11px] rounded-[3px] bg-accent-strong" />
+            recording
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-[11px] w-[11px] rounded-[3px] border-[1.5px] border-dashed border-border-strong" />
+            meeting · no recording
+          </span>
+        </div>
+      )}
+
       {/* Sort dropdown - only in list view */}
       {showListView && (
         <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Sort:</span>
+          <span className="text-ink-muted">Sort:</span>
           <select
             value={sortBy}
             onChange={(e) => onSortChange(e.target.value as SortOption)}
-            className="bg-transparent border rounded px-2 py-1 text-xs"
+            className="rounded-md border border-border bg-surface px-2 py-1 font-mono text-[11px] text-ink"
           >
             <option value="date-desc">Newest first</option>
             <option value="date-asc">Oldest first</option>
