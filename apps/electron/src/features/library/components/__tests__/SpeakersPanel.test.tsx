@@ -137,6 +137,8 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     ]
     render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={onChanged} />)
 
+    // The per-turn list is collapsed by default — expand it first.
+    fireEvent.click(await screen.findByRole('button', { name: /turns \(3\)/i }))
     // Open the per-turn reassign control for the turn whose text is "second".
     fireEvent.click(await screen.findByRole('button', { name: /reassign turn: second/i }))
     // Pick target label B.
@@ -153,6 +155,23 @@ describe('SpeakersPanel (AC2/AC3)', () => {
       })
     )
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('collapses the per-turn list by default and expands on toggle (AC3 collapse)', async () => {
+    const turns: Turn[] = [
+      { speaker: 'A', startMs: 0, endMs: 1000, text: 'first' },
+      { speaker: 'B', startMs: 1000, endMs: 2000, text: 'second' },
+    ]
+    render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
+
+    const toggle = await screen.findByRole('button', { name: /turns \(2\)/i })
+    // Collapsed by default: reassign controls are not rendered.
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: /reassign turn: first/i })).not.toBeInTheDocument()
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(await screen.findByRole('button', { name: /reassign turn: first/i })).toBeInTheDocument()
   })
 
   it('talk-time merges overlapping intervals (no double-count) (AC3)', async () => {
@@ -327,7 +346,10 @@ describe('SpeakersPanel (AC2/AC3)', () => {
           onChanged={onChanged}
         />
       )
-      expect(await screen.findByText(/Looks like Robyn \(Match\)/i)).toBeInTheDocument()
+      // The match-strength label is rendered in its own (colored) span, so assert
+      // the name and the "(Match)" qualifier independently rather than as one node.
+      expect(await screen.findByText(/Looks like Robyn/i)).toBeInTheDocument()
+      expect(screen.getByText(/\(Match\)/i)).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
       await waitFor(() =>
         expect(mockAssign).toHaveBeenCalledWith({

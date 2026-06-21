@@ -12,7 +12,7 @@ export function StatusIcon({ recording, showError = false, showLabel = false }: 
   if (showError) {
     return (
       <div
-        className="flex items-center gap-1 text-destructive"
+        className="flex items-center gap-1 text-danger"
         role="img"
         aria-label="Processing error"
         title="Processing error"
@@ -27,7 +27,7 @@ export function StatusIcon({ recording, showError = false, showLabel = false }: 
     case 'device-only':
       return (
         <div
-          className="flex items-center gap-1 text-orange-600 dark:text-orange-400"
+          className="flex items-center gap-1 text-warning"
           role="img"
           aria-label="On device only"
           title="On device only"
@@ -39,7 +39,7 @@ export function StatusIcon({ recording, showError = false, showLabel = false }: 
     case 'local-only':
       return (
         <div
-          className="flex items-center gap-1 text-blue-600 dark:text-blue-400"
+          className="flex items-center gap-1 text-accent-strong"
           role="img"
           aria-label="Downloaded"
           title="Downloaded"
@@ -51,7 +51,7 @@ export function StatusIcon({ recording, showError = false, showLabel = false }: 
     case 'both':
       return (
         <div
-          className="flex items-center gap-1 text-green-600 dark:text-green-400"
+          className="flex items-center gap-1 text-success"
           role="img"
           aria-label="Synced"
           title="Synced"

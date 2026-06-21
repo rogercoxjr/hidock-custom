@@ -82,10 +82,10 @@ function CurrentTimeIndicator({ startHour, hourHeight }: { startHour: number; ho
 
   return (
     <div
-      className="absolute left-0 right-0 border-t-2 border-red-500 z-20 pointer-events-none"
+      className="pointer-events-none absolute left-0 right-0 z-20 border-t-2 border-[var(--coral-600)]"
       style={{ top }}
     >
-      <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
+      <div className="absolute -left-1.5 -top-1.5 h-3 w-3 rounded-full bg-[var(--coral-600)]" />
     </div>
   )
 }
@@ -696,12 +696,12 @@ export function Calendar() {
       {/* Main Content */}
       {(meetingsLoading || recordingsLoading) && meetings.length === 0 && unifiedRecordings.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-ink-muted">Loading...</p>
         </div>
       ) : showListView ? (
         /* C-CAL-003: Show subtle sync indicator when resyncing with existing data */
         <>{calendarSyncing && (
-          <div className="flex items-center gap-2 px-6 py-1.5 bg-blue-50 dark:bg-blue-950/30 border-b text-xs text-blue-600 dark:text-blue-400 flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-accent-strong-soft px-[var(--space-5)] py-1.5 font-mono text-[11px] text-[var(--accent-soft-text)]">
             <RefreshCw className="h-3 w-3 animate-spin" />
             <span>Syncing calendar...</span>
           </div>
@@ -710,8 +710,8 @@ export function Calendar() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Bulk Actions Bar */}
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-4 px-6 py-2 bg-primary/10 border-b flex-shrink-0">
-              <span className="text-sm font-medium">{selectedIds.size} selected</span>
+            <div className="flex flex-shrink-0 items-center gap-4 border-b border-border bg-accent-strong-soft px-[var(--space-5)] py-2">
+              <span className="text-sm font-medium text-ink">{selectedIds.size} selected</span>
               <Button variant="outline" size="sm" onClick={clearSelection}>Clear</Button>
               <Button
                 variant="default"
@@ -726,7 +726,7 @@ export function Calendar() {
           )}
 
           {/* View Mode Toggle */}
-          <div className="flex items-center justify-between px-6 py-2 border-b flex-shrink-0">
+          <div className="flex flex-shrink-0 items-center justify-between border-b border-border px-[var(--space-5)] py-2">
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={selectAll} className="h-7 text-xs">
                 Select All
@@ -757,10 +757,10 @@ export function Calendar() {
           {/* Content */}
           <div className="flex-1 overflow-auto p-4">
             {filteredRecordings.length === 0 ? (
-              <div className="text-center py-16">
-                <Mic className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <h3 className="text-lg font-medium mb-2">No Recordings</h3>
-                <p className="text-muted-foreground">
+              <div className="py-16 text-center">
+                <Mic className="mx-auto mb-4 h-12 w-12 text-ink-muted opacity-50" />
+                <h3 className="mb-2 font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-ink">No Recordings</h3>
+                <p className="text-ink-muted">
                   {locationFilter !== 'all' ? 'No recordings match the current filter.' : 'No recordings found.'}
                 </p>
               </div>
@@ -776,16 +776,16 @@ export function Calendar() {
                       key={recording.id}
                       onClick={() => toggleSelection(recording.id)}
                       className={cn(
-                        'relative p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md',
-                        isSelected ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/50'
+                        'relative cursor-pointer rounded-lg border border-border p-3 transition-all hover:shadow-md',
+                        isSelected ? 'ring-2 ring-accent-strong bg-accent-strong-soft' : 'hover:bg-surface-hover'
                       )}
                     >
                       {/* Selection indicator */}
-                      <div className="absolute top-2 right-2">
+                      <div className="absolute right-2 top-2">
                         {isSelected ? (
-                          <CheckSquare className="h-4 w-4 text-primary" />
+                          <CheckSquare className="h-4 w-4 text-accent-strong" />
                         ) : (
-                          <Square className="h-4 w-4 text-muted-foreground/30" />
+                          <Square className="h-4 w-4 text-ink-muted/40" />
                         )}
                       </div>
 
@@ -795,16 +795,16 @@ export function Calendar() {
                       </div>
 
                       {/* Date */}
-                      <div className="text-xs font-medium">
+                      <div className="text-xs font-medium text-ink">
                         {formatShortDate(recording.dateRecorded)}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-ink-muted">
                         {formatShortTime(recording.dateRecorded)}
                       </div>
 
                       {/* Duration */}
                       {recording.duration > 0 && (
-                        <div className="text-xs text-muted-foreground mt-1">
+                        <div className="mt-1 text-xs text-ink-muted">
                           {formatDuration(recording.duration)}
                         </div>
                       )}
@@ -812,10 +812,10 @@ export function Calendar() {
                       {/* Transcription status */}
                       {recording.transcriptionStatus !== 'none' && (
                         <div className={cn(
-                          'mt-2 text-xs px-1.5 py-0.5 rounded text-center',
-                          recording.transcriptionStatus === 'complete' && 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-                          recording.transcriptionStatus === 'processing' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-                          recording.transcriptionStatus === 'error' && 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                          'mt-2 rounded px-1.5 py-0.5 text-center text-xs',
+                          recording.transcriptionStatus === 'complete' && 'bg-success-soft text-success',
+                          recording.transcriptionStatus === 'processing' && 'bg-warning-soft text-warning',
+                          recording.transcriptionStatus === 'error' && 'bg-danger-soft text-danger'
                         )}>
                           {recording.transcriptionStatus === 'complete' ? <FileText className="h-3 w-3 inline" /> : recording.transcriptionStatus}
                         </div>
@@ -846,7 +846,7 @@ export function Calendar() {
                         )}
                         {/* Transcribe button */}
                         {hasLocalPath(recording) && recording.transcriptionStatus !== 'complete' && recording.transcriptionStatus !== 'processing' && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-600"
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-accent-strong hover:text-accent-strong-hover"
                             onClick={() => handleTranscribe(recording)}
                             disabled={transcribing === recording.id}
                             title="Transcribe">
@@ -864,7 +864,7 @@ export function Calendar() {
                         )}
                         {/* Delete - local-only: delete local file */}
                         {recording.location === 'local-only' && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-orange-500 hover:text-orange-600"
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-warning hover:text-warning"
                             onClick={() => handleDeleteLocal(recording)}
                             disabled={deleting === recording.id}
                             title="Delete local file">
@@ -873,7 +873,7 @@ export function Calendar() {
                         )}
                         {/* Delete - both: delete local copy only */}
                         {recording.location === 'both' && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-orange-500"
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-ink-muted hover:text-warning"
                             onClick={() => handleDeleteLocal(recording)}
                             disabled={deleting === recording.id}
                             title="Delete local copy">
@@ -896,16 +896,16 @@ export function Calendar() {
                     <div
                       key={recording.id}
                       className={cn(
-                        'flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-sm',
-                        isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'
+                        'flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm',
+                        isSelected ? 'bg-accent-strong-soft' : 'hover:bg-surface-hover'
                       )}
                     >
                       {/* Checkbox */}
                       <button onClick={() => toggleSelection(recording.id)} className="flex-shrink-0">
                         {isSelected ? (
-                          <CheckSquare className="h-4 w-4 text-primary" />
+                          <CheckSquare className="h-4 w-4 text-accent-strong" />
                         ) : (
-                          <Square className="h-4 w-4 text-muted-foreground/50" />
+                          <Square className="h-4 w-4 text-ink-muted/50" />
                         )}
                       </button>
 
@@ -913,29 +913,29 @@ export function Calendar() {
                       <StatusIcon location={recording.location} />
 
                       {/* Date */}
-                      <span className="w-20 flex-shrink-0 text-muted-foreground text-xs">
+                      <span className="w-20 flex-shrink-0 text-xs text-ink-muted">
                         {formatShortDate(recording.dateRecorded)}
                       </span>
 
                       {/* Time */}
-                      <span className="w-16 flex-shrink-0 text-muted-foreground text-xs">
+                      <span className="w-16 flex-shrink-0 text-xs text-ink-muted">
                         {formatShortTime(recording.dateRecorded)}
                       </span>
 
                       {/* Filename */}
-                      <span className="flex-1 truncate font-mono text-xs" title={recording.filename}>
+                      <span className="flex-1 truncate font-mono text-xs text-ink" title={recording.filename}>
                         {recording.filename}
                       </span>
 
                       {/* Duration */}
-                      <span className="w-14 flex-shrink-0 text-right text-xs text-muted-foreground">
+                      <span className="w-14 flex-shrink-0 text-right text-xs text-ink-muted">
                         {recording.duration ? formatDuration(recording.duration) : '—'}
                       </span>
 
                       {/* Status icon */}
                       <span className="w-6 flex-shrink-0 text-center">
-                        {recording.transcriptionStatus === 'complete' && <FileText className="h-3 w-3 text-green-500 inline" />}
-                        {recording.transcriptionStatus === 'processing' && <RefreshCw className="h-3 w-3 text-yellow-500 animate-spin inline" />}
+                        {recording.transcriptionStatus === 'complete' && <FileText className="inline h-3 w-3 text-success" />}
+                        {recording.transcriptionStatus === 'processing' && <RefreshCw className="inline h-3 w-3 animate-spin text-warning" />}
                       </span>
 
                       {/* Actions */}
@@ -964,7 +964,7 @@ export function Calendar() {
                         )}
                         {/* Transcribe button - show for local recordings without transcript */}
                         {hasLocalPath(recording) && recording.transcriptionStatus !== 'complete' && recording.transcriptionStatus !== 'processing' && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-600"
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-accent-strong hover:text-accent-strong-hover"
                             onClick={(e) => { e.stopPropagation(); handleTranscribe(recording) }}
                             disabled={transcribing === recording.id}
                             title="Transcribe">
@@ -982,7 +982,7 @@ export function Calendar() {
                         )}
                         {/* Delete local - only for local-only recordings */}
                         {recording.location === 'local-only' && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-orange-500 hover:text-orange-600"
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-warning hover:text-warning"
                             onClick={(e) => { e.stopPropagation(); handleDeleteLocal(recording) }}
                             disabled={deleting === recording.id}
                             title="Delete local file">
@@ -991,7 +991,7 @@ export function Calendar() {
                         )}
                         {/* Delete for synced recordings (both locations) - deletes local copy only */}
                         {recording.location === 'both' && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-orange-500"
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-ink-muted hover:text-warning"
                             onClick={(e) => { e.stopPropagation(); handleDeleteLocal(recording) }}
                             disabled={deleting === recording.id}
                             title="Delete local copy (keeps on device)">
@@ -1008,7 +1008,7 @@ export function Calendar() {
 
           {/* Audio player */}
           {currentlyPlayingId && (
-            <div className="border-t bg-background p-4 flex-shrink-0">
+            <div className="flex-shrink-0 border-t border-border bg-surface p-4">
               {(() => {
                 const rec = filteredRecordings.find(r => r.id === currentlyPlayingId)
                 if (rec && hasLocalPath(rec)) {
@@ -1034,17 +1034,17 @@ export function Calendar() {
         <div className="flex-1 flex flex-col min-h-0">
           {/* C-CAL-003: Sync indicator for calendar views */}
           {calendarSyncing && (
-            <div className="flex items-center gap-2 px-6 py-1.5 bg-blue-50 dark:bg-blue-950/30 border-b text-xs text-blue-600 dark:text-blue-400 flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-accent-strong-soft px-[var(--space-5)] py-1.5 font-mono text-[11px] text-[var(--accent-soft-text)]">
               <RefreshCw className="h-3 w-3 animate-spin" />
               <span>Syncing calendar...</span>
             </div>
           )}
           {/* Day of Week Headers */}
-          <div className="grid grid-cols-7 border-b flex-shrink-0">
+          <div className="grid flex-shrink-0 grid-cols-7 border-b border-border">
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
               <div key={day} className={cn(
-                'text-center py-2 text-xs font-medium border-l first:border-l-0',
-                !workDays.includes(idx) && 'text-muted-foreground bg-muted/30'
+                'border-l border-border py-2 text-center font-mono text-[10px] uppercase tracking-[0.08em] first:border-l-0',
+                !workDays.includes(idx) ? 'bg-surface-sunken text-ink-muted' : 'text-ink-muted'
               )}>
                 {day}
               </div>
@@ -1070,24 +1070,24 @@ export function Calendar() {
                   <div
                     key={key}
                     className={cn(
-                      'border-l border-b first:border-l-0 p-1 min-h-[100px]',
-                      !isCurrentMonth && 'bg-muted/30',
-                      isWeekend && isCurrentMonth && 'bg-slate-50 dark:bg-slate-900/30',
-                      today && 'ring-2 ring-inset ring-primary/30'
+                      'min-h-[100px] border-b border-l border-border p-1 first:border-l-0',
+                      !isCurrentMonth && 'bg-surface-sunken',
+                      isWeekend && isCurrentMonth && 'bg-bg-sunken',
+                      today && 'ring-2 ring-inset ring-accent-strong/30'
                     )}
                   >
                     {/* Date Number with recording count badge */}
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="mb-1 flex items-center justify-between">
                       <div className={cn(
-                        'text-sm font-medium',
-                        !isCurrentMonth && 'text-muted-foreground',
-                        today && 'bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center'
+                        'text-sm font-medium text-ink',
+                        !isCurrentMonth && 'text-ink-muted',
+                        today && 'flex h-6 w-6 items-center justify-center rounded-full bg-accent-strong text-[var(--on-accent)]'
                       )}>
                         {date.getDate()}
                       </div>
                       {/* C-CAL-006: Recording count indicator */}
                       {dayRecordingCount > 0 && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                        <span className="flex items-center gap-0.5 font-mono text-[10px] text-accent-strong">
                           <Mic className="h-2.5 w-2.5" />
                           {dayRecordingCount}
                         </span>
@@ -1114,13 +1114,13 @@ export function Calendar() {
                             }
                           }}
                           className={cn(
-                            'w-full text-left text-xs p-1 rounded truncate transition-colors',
+                            'w-full truncate rounded p-1 text-left text-xs transition-colors',
                             'hover:ring-1 hover:ring-ring',
-                            meeting.hasRecording && !meeting.isPlaceholder && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
-                            meeting.isPlaceholder && 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 border-dashed border border-amber-300',
-                            meeting.recordingLocation === 'device-only' && 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300',
-                            !meeting.hasRecording && !meeting.isPlaceholder && 'bg-gray-50/50 text-gray-400 dark:bg-gray-800/30 dark:text-gray-500 opacity-50 border border-dashed border-gray-300',
-                            meeting.hasConflicts && 'ring-1 ring-orange-400'
+                            meeting.hasRecording && !meeting.isPlaceholder && 'bg-success-soft text-success',
+                            meeting.isPlaceholder && 'border border-dashed border-warning/40 bg-warning-soft text-warning',
+                            meeting.recordingLocation === 'device-only' && 'bg-warning-soft text-warning',
+                            !meeting.hasRecording && !meeting.isPlaceholder && 'border border-dashed border-border-strong bg-surface-sunken text-ink-muted opacity-60',
+                            meeting.hasConflicts && 'ring-1 ring-warning'
                           )}
                         >
                           <span className="flex items-center gap-1">
@@ -1135,7 +1135,7 @@ export function Calendar() {
                         </button>
                       ))}
                       {dayMeetings.length > 3 && (
-                        <div className="text-xs text-muted-foreground pl-1">
+                        <div className="pl-1 text-xs text-ink-muted">
                           +{dayMeetings.length - 3} more
                         </div>
                       )}
@@ -1151,13 +1151,13 @@ export function Calendar() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* C-CAL-003: Sync indicator for week/day views */}
           {calendarSyncing && (
-            <div className="flex items-center gap-2 px-6 py-1.5 bg-blue-50 dark:bg-blue-950/30 border-b text-xs text-blue-600 dark:text-blue-400 flex-shrink-0">
+            <div className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-accent-strong-soft px-[var(--space-5)] py-1.5 font-mono text-[11px] text-[var(--accent-soft-text)]">
               <RefreshCw className="h-3 w-3 animate-spin" />
               <span>Syncing calendar...</span>
             </div>
           )}
           {/* Day Headers - fixed, with scrollbar gutter to match content */}
-          <div className="flex border-b flex-shrink-0 overflow-y-scroll" style={{ scrollbarGutter: 'stable' }}>
+          <div className="flex flex-shrink-0 overflow-y-scroll border-b border-border" style={{ scrollbarGutter: 'stable' }}>
             <div className="w-14 flex-shrink-0" />
             {viewDates.map((date) => {
               const key = date.toISOString().split('T')[0]
@@ -1168,21 +1168,18 @@ export function Calendar() {
                 <div
                   key={key}
                   className={cn(
-                    'flex-1 text-center py-3 border-l',
-                    isWeekend && 'bg-slate-50 dark:bg-slate-900/30',
-                    today && 'ring-2 ring-inset ring-primary/30'
+                    'flex-1 border-l border-border py-3 text-center',
+                    isWeekend && 'bg-surface-sunken',
+                    today && 'ring-2 ring-inset ring-accent-strong/30'
                   )}
                 >
-                  <div className={cn(
-                    'text-xs font-medium uppercase tracking-wide',
-                    isWeekend ? 'text-muted-foreground' : 'text-muted-foreground'
-                  )}>
+                  <div className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-muted">
                     {date.toLocaleDateString('en-US', { weekday: calendarView === 'day' ? 'long' : 'short' })}
                   </div>
                   <div
                     className={cn(
-                      'text-xl font-semibold mt-1',
-                      today && 'bg-primary text-primary-foreground rounded-full w-8 h-8 flex items-center justify-center mx-auto'
+                      'mt-1 font-display text-[17px] font-semibold text-ink',
+                      today && 'mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-accent-strong text-[var(--on-accent)]'
                     )}
                   >
                     {date.getDate()}
@@ -1196,14 +1193,14 @@ export function Calendar() {
           <div ref={scrollContainerRef} className="flex-1 overflow-auto" style={{ scrollbarGutter: 'stable' }}>
             <div className="flex min-h-full">
               {/* Time Labels - B-CAL-003: Uses dynamic visibleHours */}
-              <div className="w-14 flex-shrink-0 bg-background">
+              <div className="w-14 flex-shrink-0 bg-bg">
                 {visibleHours.map((hour) => (
                   <div
                     key={hour}
                     className="relative"
                     style={{ height: HOUR_HEIGHT }}
                   >
-                    <span className="absolute -top-2 right-2 text-xs text-muted-foreground font-medium">
+                    <span className="absolute -top-2 right-2 font-mono text-[10px] text-ink-muted">
                       {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
                     </span>
                   </div>
@@ -1223,9 +1220,9 @@ export function Calendar() {
                   <div
                     key={key}
                     className={cn(
-                      'flex-1 border-l relative',
-                      isWeekend && 'bg-slate-50/50 dark:bg-slate-900/20',
-                      today && 'ring-2 ring-inset ring-primary/20'
+                      'relative flex-1 border-l border-border',
+                      isWeekend && 'bg-surface-sunken/50',
+                      today && 'ring-2 ring-inset ring-accent-strong/20'
                     )}
                   >
                     {/* Hour Lines with office hours shading - B-CAL-003: dynamic hours */}
@@ -1233,8 +1230,8 @@ export function Calendar() {
                       <div
                         key={hour}
                         className={cn(
-                          'border-b border-border/30',
-                          !isOfficeHour(hour) && !isWeekend && 'bg-slate-100/50 dark:bg-slate-800/30'
+                          'border-b border-border/40',
+                          !isOfficeHour(hour) && !isWeekend && 'bg-surface-sunken/60'
                         )}
                         style={{ height: HOUR_HEIGHT }}
                       />
@@ -1263,11 +1260,11 @@ export function Calendar() {
                             <button
                               onClick={() => handleMeetingClick({ id: meeting.id } as Meeting)}
                               className={cn(
-                                'absolute w-[calc(100%-8px)] left-1 rounded-md px-2 py-1 text-xs overflow-hidden transition-all text-left',
-                                'border-2 border-dashed border-slate-300 dark:border-slate-600',
-                                'bg-slate-50/30 dark:bg-slate-800/20 text-slate-400 dark:text-slate-500',
-                                'hover:bg-slate-100/50 dark:hover:bg-slate-700/30 hover:border-slate-400',
-                                'opacity-60 hover:opacity-80'
+                                'absolute left-1 w-[calc(100%-8px)] overflow-hidden rounded-md px-2 py-1 text-left text-xs transition-all',
+                                'border-[1.5px] border-dashed border-border-strong',
+                                'bg-surface text-ink-muted',
+                                'hover:border-border-strong hover:bg-surface-hover',
+                                'opacity-70 hover:opacity-100'
                               )}
                               style={{
                                 top,
@@ -1317,18 +1314,18 @@ export function Calendar() {
                             <button
                               onClick={() => handleRecordingClick(recording)}
                               className={cn(
-                                'absolute w-[calc(100%-8px)] left-1 rounded-md px-2 py-1 text-xs overflow-hidden transition-all text-left',
-                                'hover:ring-2 hover:ring-ring hover:z-30 hover:shadow-lg',
-                                'shadow-sm',
-                                // Synced/downloaded recording (green)
+                                'absolute left-1 w-[calc(100%-8px)] overflow-hidden rounded-sm px-2 py-1 text-left text-xs transition-all',
+                                'hover:z-30 hover:shadow-lg hover:ring-2 hover:ring-ring',
+                                'shadow-xs',
+                                // Synced/downloaded recording (primary accent — matches prototype)
                                 (recording.location === 'both' || recording.location === 'local-only') &&
-                                  'bg-emerald-500 text-white border-l-4 border-emerald-700',
-                                // Device-only recording (orange)
+                                  'border-l-[3px] border-accent-strong bg-accent-strong-soft text-[var(--accent-soft-text)]',
+                                // Device-only recording (warning)
                                 recording.location === 'device-only' &&
-                                  'bg-orange-500 text-white border-l-4 border-orange-700',
-                                // No linked meeting - slightly different shade
+                                  'border-l-[3px] border-warning bg-warning-soft text-warning',
+                                // No linked meeting - teal voice/match cue
                                 !recording.linkedMeeting && recording.location !== 'device-only' &&
-                                  'bg-amber-500 text-white border-l-4 border-amber-700'
+                                  'border-l-[3px] border-accent-2 bg-accent-2-soft text-accent-2'
                               )}
                               style={{
                                 top,

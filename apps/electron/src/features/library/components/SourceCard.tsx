@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { formatDateTime, formatDuration, formatBytes } from '@/lib/utils'
 import { parseJsonArray, Transcript, Meeting } from '@/types'
@@ -22,6 +23,12 @@ import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-re
 import { StatusIcon } from './StatusIcon'
 import { TranscriptionStatusBadge } from './TranscriptionStatusBadge'
 import { useLibraryStore } from '@/store/useLibraryStore'
+
+// Harbor Badge variant per quality rating.
+const QUALITY_VARIANT: Record<string, 'accent' | 'default'> = {
+  valuable: 'accent',
+  archived: 'default'
+}
 
 interface SourceCardProps {
   recording: UnifiedRecording
@@ -89,7 +96,7 @@ export const SourceCard = memo(function SourceCard({
 
   return (
     <Card
-      className={`${isSelected ? 'ring-2 ring-primary' : ''} cursor-pointer`}
+      className={`${isSelected ? 'border-border-brand shadow-sm bg-accent-strong-soft' : ''} cursor-pointer transition-colors`}
       onClick={handleCardClick}
       data-testid="source-card"
       role="option"
@@ -107,30 +114,32 @@ export const SourceCard = memo(function SourceCard({
                 className="shrink-0"
               />
             )}
-            <StatusIcon recording={recording} />
-            <div>
-              <CardTitle className="text-base">{recording.title || recording.filename}</CardTitle>
-              <CardDescription>
+            {/* Icon tile — selected uses bg-primary; otherwise surface-sunken w/ location-colored status icon */}
+            <div
+              className={[
+                'flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md',
+                isSelected ? 'bg-primary text-primary-foreground' : 'bg-surface-sunken'
+              ].join(' ')}
+            >
+              <StatusIcon recording={recording} />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
+                {recording.title || recording.filename}
+              </CardTitle>
+              <CardDescription className="font-mono text-[11px] text-ink-muted">
                 {formatDateTime(recording.dateRecorded.toISOString())}
-                {recording.size && ` • ${formatBytes(recording.size)}`}
-                {recording.duration && ` • ${formatDuration(recording.duration)}`}
+                {recording.size && ` · ${formatBytes(recording.size)}`}
+                {recording.duration && ` · ${formatDuration(recording.duration)}`}
               </CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {/* Quality badge */}
             {recording.quality && (
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${
-                  recording.quality === 'valuable'
-                    ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
-                    : recording.quality === 'archived'
-                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                    : 'bg-secondary'
-                }`}
-              >
+              <Badge variant={QUALITY_VARIANT[recording.quality] ?? 'default'}>
                 {recording.quality}
-              </span>
+              </Badge>
             )}
 
             <Button variant="ghost" size="icon" onClick={onAskAssistant} title="Ask Assistant about this capture">
@@ -168,7 +177,7 @@ export const SourceCard = memo(function SourceCard({
             {/* Download button for device-only recordings */}
             {isDeviceOnly(recording) &&
               (isDownloading ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-ink-muted">
                   <RefreshCw className="h-4 w-4 animate-spin" />
                   {downloadProgress ?? 0}%
                 </div>
@@ -215,8 +224,8 @@ export const SourceCard = memo(function SourceCard({
                 recording.location === 'device-only'
                   ? 'text-destructive hover:text-destructive'
                   : recording.location === 'local-only'
-                  ? 'text-orange-500 hover:text-orange-600'
-                  : 'text-muted-foreground hover:text-orange-500'
+                  ? 'text-warning hover:text-warning'
+                  : 'text-ink-muted hover:text-warning'
               }
               onClick={onDelete}
               disabled={(recording.location === 'device-only' && !deviceConnected) || isDeleting}
@@ -242,49 +251,49 @@ export const SourceCard = memo(function SourceCard({
         {/* Linked Meeting */}
         {meeting && (
           <div
-            className="flex items-center gap-2 p-3 bg-muted rounded-lg cursor-pointer hover:bg-muted/80"
+            className="flex items-center gap-2 p-3 bg-surface-sunken rounded-lg cursor-pointer hover:bg-surface-hover"
             onClick={() => onNavigateToMeeting(meeting.id)}
           >
-            <Calendar className="h-4 w-4 text-primary" />
+            <Calendar className="h-4 w-4 text-accent-2" />
             <div>
-              <p className="text-sm font-medium">{meeting.subject}</p>
-              <p className="text-xs text-muted-foreground">{formatDateTime(meeting.start_time)}</p>
+              <p className="text-sm font-medium text-ink">{meeting.subject}</p>
+              <p className="font-mono text-[11px] text-ink-muted">{formatDateTime(meeting.start_time)}</p>
             </div>
           </div>
         )}
 
         {/* Transcript */}
         {transcript && (
-          <div className="border rounded-lg">
+          <div className="border border-border rounded-lg">
             <button
-              className="w-full flex items-center justify-between p-3 hover:bg-muted/50"
+              className="w-full flex items-center justify-between p-3 hover:bg-surface-hover"
               onClick={onToggleTranscript}
             >
               <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                <span className="font-medium text-sm">Transcript</span>
+                <FileText className="h-4 w-4 text-ink-muted" />
+                <span className="font-medium text-sm text-ink">Transcript</span>
                 {transcript.word_count && (
-                  <span className="text-xs text-muted-foreground">({transcript.word_count} words)</span>
+                  <span className="font-mono text-[11px] text-ink-muted">({transcript.word_count} words)</span>
                 )}
               </div>
-              {isTranscriptExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              {isTranscriptExpanded ? <ChevronUp className="h-4 w-4 text-ink-muted" /> : <ChevronDown className="h-4 w-4 text-ink-muted" />}
             </button>
 
             {isTranscriptExpanded && (
               <div className="p-3 pt-0 space-y-3">
                 {/* Summary */}
                 {transcript.summary && (
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Summary</p>
-                    <p className="text-sm">{transcript.summary}</p>
+                  <div className="p-3 bg-surface-sunken rounded-lg">
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-muted mb-1">Summary</p>
+                    <p className="text-sm text-foreground">{transcript.summary}</p>
                   </div>
                 )}
 
                 {/* Action Items */}
                 {transcript.action_items && (
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Action Items</p>
-                    <ul className="list-disc list-inside text-sm space-y-1">
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-muted mb-1">Action Items</p>
+                    <ul className="list-disc list-inside text-sm space-y-1 text-foreground">
                       {parseJsonArray<string>(transcript.action_items).map((item, i) => (
                         <li key={i}>{item}</li>
                       ))}
@@ -295,8 +304,8 @@ export const SourceCard = memo(function SourceCard({
                 {/* Key Points */}
                 {transcript.key_points && (
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Key Points</p>
-                    <ul className="list-disc list-inside text-sm space-y-1">
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-muted mb-1">Key Points</p>
+                    <ul className="list-disc list-inside text-sm space-y-1 text-foreground">
                       {parseJsonArray<string>(transcript.key_points).map((item, i) => (
                         <li key={i}>{item}</li>
                       ))}
@@ -307,12 +316,12 @@ export const SourceCard = memo(function SourceCard({
                 {/* Topics */}
                 {transcript.topics && (
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Topics</p>
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-muted mb-1">Topics</p>
                     <div className="flex flex-wrap gap-1">
                       {parseJsonArray<string>(transcript.topics).map((topic, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-secondary text-xs rounded-full">
+                        <Badge key={i} variant="default" size="sm">
                           {topic}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   </div>
@@ -320,14 +329,14 @@ export const SourceCard = memo(function SourceCard({
 
                 {/* Full Text */}
                 <details className="mt-2">
-                  <summary className="text-sm text-primary cursor-pointer hover:underline">View full transcript</summary>
-                  <p className="mt-2 text-sm whitespace-pre-wrap bg-muted p-3 rounded-lg max-h-64 overflow-auto">
+                  <summary className="text-sm text-accent-2 cursor-pointer hover:underline">View full transcript</summary>
+                  <p className="mt-2 text-sm whitespace-pre-wrap bg-surface-sunken p-3 rounded-lg max-h-64 overflow-auto text-foreground">
                     {transcript.full_text}
                   </p>
                 </details>
 
                 {/* Metadata */}
-                <div className="flex gap-4 text-xs text-muted-foreground pt-2 border-t">
+                <div className="flex gap-4 font-mono text-[11px] text-ink-muted pt-2 border-t border-border">
                   {transcript.language && <span>Language: {transcript.language}</span>}
                   {transcript.transcription_provider && <span>Provider: {transcript.transcription_provider}</span>}
                 </div>
@@ -338,7 +347,7 @@ export const SourceCard = memo(function SourceCard({
 
         {/* Device-only notice */}
         {isDeviceOnly(recording) && (
-          <p className="text-xs text-muted-foreground italic">
+          <p className="text-xs text-ink-muted italic">
             Download this capture to play it and generate a transcript.
           </p>
         )}

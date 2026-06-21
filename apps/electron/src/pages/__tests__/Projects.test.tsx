@@ -106,10 +106,11 @@ describe('Projects Page', () => {
 
     await screen.findByText('Project Alpha')
 
-    // Text content is lowercase; uppercase is applied via CSS
-    expect(screen.getByText('all')).toBeInTheDocument()
-    expect(screen.getByText('active')).toBeInTheDocument()
-    expect(screen.getByText('archived')).toBeInTheDocument()
+    // Harbor re-skin: filters are a SegmentedToggle whose labels are title-cased
+    // text nodes ("All"/"Active"/"Archived"); the all-caps look is CSS only.
+    expect(screen.getByRole('tab', { name: 'All' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Active' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Archived' })).toBeInTheDocument()
   })
 
   it('should show empty state with guidance when no projects', async () => {

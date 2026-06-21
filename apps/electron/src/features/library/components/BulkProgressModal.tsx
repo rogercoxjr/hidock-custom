@@ -35,7 +35,7 @@ function StatusIcon({ status }: { status: BulkItemStatus }) {
 
   switch (status) {
     case 'success':
-      return <CheckCircle2 {...iconProps} className="h-4 w-4 text-green-500" />
+      return <CheckCircle2 {...iconProps} className="h-4 w-4 text-success" />
     case 'failed':
       return <XCircle {...iconProps} className="h-4 w-4 text-destructive" />
     case 'pending':

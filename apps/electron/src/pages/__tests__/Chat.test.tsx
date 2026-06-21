@@ -78,7 +78,7 @@ describe('Chat Component', () => {
     )
 
     // Wait for initial load
-    await screen.findByText('HISTORY')
+    await screen.findByText('History')
 
     const addContextBtn = await screen.findByTitle(/Add Context/i)
     fireEvent.click(addContextBtn)
@@ -112,7 +112,7 @@ describe('Chat Component', () => {
       </MemoryRouter>
     )
 
-    await screen.findByText('HISTORY')
+    await screen.findByText('History')
 
     // Character counter should show 0/4000 initially
     expect(screen.getByText('0/4000')).toBeInTheDocument()
@@ -125,9 +125,10 @@ describe('Chat Component', () => {
       </MemoryRouter>
     )
 
-    await screen.findByText('HISTORY')
+    await screen.findByText('History')
 
-    const input = screen.getByPlaceholderText(/Ask me anything/)
+    // Harbor re-skin reworded the composer placeholder (ready state).
+    const input = screen.getByPlaceholderText(/Ask about anything/i)
     fireEvent.change(input, { target: { value: 'Hello' } })
 
     expect(screen.getByText('5/4000')).toBeInTheDocument()

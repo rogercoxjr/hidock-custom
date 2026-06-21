@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { RefreshCw, AlertCircle } from 'lucide-react'
 import { toast } from '@/components/ui/toaster'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { useUnifiedRecordings } from '@/hooks/useUnifiedRecordings'
 import {
   UnifiedRecording,
@@ -767,6 +768,11 @@ export function Library() {
 
   // Handle row click for tri-pane layout
   const handleRowClick = useCallback((recording: UnifiedRecording) => {
+    // Clicking the already-selected row deselects it (closes detail pane)
+    if (selectedSourceId === recording.id) {
+      setSelectedSourceId(null)
+      return
+    }
     audioControls.stop()
     selectSingle(recording.id)
 
@@ -774,7 +780,7 @@ export function Library() {
     if (hasLocalPath(recording) && waveformLoadedForId !== recording.id) {
       audioControls.loadWaveformOnly(recording.id, recording.localPath)
     }
-  }, [selectSingle, audioControls])
+  }, [selectedSourceId, setSelectedSourceId, selectSingle, audioControls])
 
   // C-005: Keep openDetailRef in sync with handleRowClick + filteredRecordings
   openDetailRef.current = (id: string) => {
@@ -810,27 +816,28 @@ export function Library() {
   if (loading && recordings.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <header className="border-b px-6 py-4">
-          <h1 className="text-2xl font-bold">Knowledge Library</h1>
-          <p className="text-sm text-muted-foreground">Loading your captured conversations...</p>
+        <header className="border-b border-border px-6 pb-3 pt-4">
+          <Eyebrow>Knowledge</Eyebrow>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">Library</h1>
+          <p className="text-sm text-ink-muted">Loading your captured conversations...</p>
         </header>
         {/* Skeleton filter bar */}
         <div className="px-6 py-4 flex gap-3">
-          <div className="h-8 w-24 rounded-md bg-muted animate-pulse" />
-          <div className="h-8 w-32 rounded-md bg-muted animate-pulse" />
-          <div className="h-8 w-28 rounded-md bg-muted animate-pulse" />
-          <div className="h-8 flex-1 max-w-xs rounded-md bg-muted animate-pulse" />
+          <div className="h-8 w-24 rounded-md bg-surface-sunken animate-pulse" />
+          <div className="h-8 w-32 rounded-md bg-surface-sunken animate-pulse" />
+          <div className="h-8 w-28 rounded-md bg-surface-sunken animate-pulse" />
+          <div className="h-8 flex-1 max-w-xs rounded-md bg-surface-sunken animate-pulse" />
         </div>
         {/* Skeleton rows */}
         <div className="flex-1 overflow-hidden px-6 py-2 space-y-3" aria-busy="true" aria-label="Loading recordings">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
-              <div className="h-5 w-5 rounded bg-muted animate-pulse shrink-0" />
+            <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-surface">
+              <div className="h-5 w-5 rounded bg-surface-sunken animate-pulse shrink-0" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 w-2/3 rounded bg-muted animate-pulse" />
-                <div className="h-3 w-1/3 rounded bg-muted animate-pulse" />
+                <div className="h-4 w-2/3 rounded bg-surface-sunken animate-pulse" />
+                <div className="h-3 w-1/3 rounded bg-surface-sunken animate-pulse" />
               </div>
-              <div className="h-7 w-7 rounded bg-muted animate-pulse shrink-0" />
+              <div className="h-7 w-7 rounded bg-surface-sunken animate-pulse shrink-0" />
             </div>
           ))}
         </div>
@@ -847,10 +854,10 @@ export function Library() {
     >
       {/* Drag-and-drop overlay */}
       {isDragOver && (
-        <div className="absolute inset-0 z-50 bg-primary/10 border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-50 bg-accent-strong-soft border-2 border-dashed border-border-brand rounded-lg flex items-center justify-center pointer-events-none">
           <div className="text-center">
-            <p className="text-lg font-medium text-primary">Drop audio files to import</p>
-            <p className="text-sm text-muted-foreground mt-1">Supported: .mp3, .wav, .m4a, .ogg, .flac, .webm, .hda</p>
+            <p className="font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-accent-strong">Drop audio files to import</p>
+            <p className="text-sm text-ink-muted mt-1">Supported: .mp3, .wav, .m4a, .ogg, .flac, .webm, .hda</p>
           </div>
         </div>
       )}
@@ -910,7 +917,7 @@ export function Library() {
         </div>
         {isFilterPending && (
           <div className="absolute top-2 right-2 pointer-events-none">
-            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+            <RefreshCw className="h-4 w-4 animate-spin text-ink-muted" />
           </div>
         )}
       </div>
@@ -931,7 +938,7 @@ export function Library() {
 
       {/* Error display */}
       {error && (
-        <div className="flex items-center gap-2 px-6 py-3 bg-destructive/10 text-destructive">
+        <div className="flex items-center gap-2 px-6 py-3 bg-danger-soft text-danger">
           <AlertCircle className="h-4 w-4" />
           <p className="text-sm">{error}</p>
         </div>
@@ -1106,71 +1113,68 @@ export function Library() {
             </div>
           }
           centerPanel={
-            /* Center Panel: Source Reader */
-            <SourceReader
-              recording={selectedRecording ?? null}
-              transcript={selectedTranscript}
-              meeting={selectedMeeting}
-              isPlaying={selectedRecording ? currentlyPlayingId === selectedRecording.id : false}
-              currentTimeMs={playbackCurrentTime * 1000}
-              onPlay={() => {
-                if (selectedRecording && hasLocalPath(selectedRecording)) {
-                  handlePlayCallback(selectedRecording.id, selectedRecording.localPath)
-                }
-              }}
-              onStop={handleStopCallback}
-              onSeek={(startMs) => {
-                if (selectedRecording && hasLocalPath(selectedRecording)) {
-                  audioControls.seek(startMs / 1000)
-                }
-              }}
-              // Action button callbacks
-              onDownload={() => {
-                if (selectedRecording) handleDownloadCallback(selectedRecording)
-              }}
-              onTranscribe={(force?: boolean) => {
-                if (selectedRecording) queueTranscription(selectedRecording, { force })
-              }}
-              onResummarize={() => {
-                if (!selectedRecording) return
-                const recId = selectedRecording.id
-                window.electronAPI.recordings
-                  .resummarize(recId)
-                  .then(async (r) => {
-                    if (!r.success) {
-                      toast.error('Re-summarize failed', r.error)
-                      return
+            /* Center Panel: Source Reader — only mounted when a recording is selected */
+            selectedRecording
+              ? (
+                <SourceReader
+                  recording={selectedRecording}
+                  transcript={selectedTranscript}
+                  meeting={selectedMeeting}
+                  isPlaying={currentlyPlayingId === selectedRecording.id}
+                  currentTimeMs={playbackCurrentTime * 1000}
+                  onPlay={() => {
+                    if (hasLocalPath(selectedRecording)) {
+                      handlePlayCallback(selectedRecording.id, selectedRecording.localPath)
                     }
-                    // Refetch the transcript so the `transcript` prop reference
-                    // changes; this re-runs SourceReader's staleness effect and
-                    // clears the "generic speaker labels" badge once the summary
-                    // is re-stamped (D5-T3 live-clear path).
-                    const updated = await window.electronAPI.transcripts.getByRecordingId(recId)
-                    if (updated) {
-                      setTranscripts((prev) => new Map(prev).set(recId, updated))
+                  }}
+                  onStop={handleStopCallback}
+                  onSeek={(startMs) => {
+                    if (hasLocalPath(selectedRecording)) {
+                      audioControls.seek(startMs / 1000)
                     }
-                  })
-                  .catch((err) => {
-                    toast.error('Re-summarize failed', err instanceof Error ? err.message : String(err))
-                  })
-              }}
-              onDelete={() => {
-                if (selectedRecording) handleDeleteCallback(selectedRecording)
-              }}
-              // State for button disabling
-              deviceConnected={deviceConnected}
-              isDownloading={selectedRecording && isDeviceOnly(selectedRecording)
-                ? isDownloading(selectedRecording.deviceFilename)
-                : false}
-              downloadProgress={selectedRecording && isDeviceOnly(selectedRecording)
-                ? downloadQueue.get(selectedRecording.deviceFilename)?.progress
-                : undefined}
-              isDeleting={selectedRecording ? deleting === selectedRecording.id : false}
-              // Navigation
-              onNavigateToMeeting={handleNavigateToMeeting}
-              // Metadata editing
-              onMetadataEdited={() => refresh(false)}
-            />
+                  }}
+                  // Action button callbacks
+                  onDownload={() => handleDownloadCallback(selectedRecording)}
+                  onTranscribe={(force?: boolean) => queueTranscription(selectedRecording, { force })}
+                  onResummarize={() => {
+                    const recId = selectedRecording.id
+                    window.electronAPI.recordings
+                      .resummarize(recId)
+                      .then(async (r) => {
+                        if (!r.success) {
+                          toast.error('Re-summarize failed', r.error)
+                          return
+                        }
+                        // Refetch the transcript so the `transcript` prop reference
+                        // changes; this re-runs SourceReader's staleness effect and
+                        // clears the "generic speaker labels" badge once the summary
+                        // is re-stamped (D5-T3 live-clear path).
+                        const updated = await window.electronAPI.transcripts.getByRecordingId(recId)
+                        if (updated) {
+                          setTranscripts((prev) => new Map(prev).set(recId, updated))
+                        }
+                      })
+                      .catch((err) => {
+                        toast.error('Re-summarize failed', err instanceof Error ? err.message : String(err))
+                      })
+                  }}
+                  onDelete={() => handleDeleteCallback(selectedRecording)}
+                  // State for button disabling
+                  deviceConnected={deviceConnected}
+                  isDownloading={isDeviceOnly(selectedRecording)
+                    ? isDownloading(selectedRecording.deviceFilename)
+                    : false}
+                  downloadProgress={isDeviceOnly(selectedRecording)
+                    ? downloadQueue.get(selectedRecording.deviceFilename)?.progress
+                    : undefined}
+                  isDeleting={deleting === selectedRecording.id}
+                  // Navigation
+                  onNavigateToMeeting={handleNavigateToMeeting}
+                  // Metadata editing
+                  onMetadataEdited={() => refresh(false)}
+                />
+              )
+              : null
           }
           rightPanel={
             /* Right Panel: AI Assistant */

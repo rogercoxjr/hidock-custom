@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { toast } from '@/components/ui/toaster'
 import { ContextPicker } from '@/components/ContextPicker'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { cn, getRelativeTime } from '@/lib/utils'
 import type { Message, Conversation, KnowledgeCapture } from '@/types/knowledge'
 
@@ -748,10 +749,10 @@ export function Chat() {
 
   if (initialLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center bg-bg">
         <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-          <p className="text-muted-foreground">Initializing Knowledge Assistant...</p>
+          <RefreshCw className="h-8 w-8 animate-spin text-accent-2" />
+          <p className="font-mono text-[12px] uppercase tracking-[0.1em] text-ink-muted">Initializing Knowledge Assistant…</p>
         </div>
       </div>
     )
@@ -759,11 +760,11 @@ export function Chat() {
 
   if (initError) {
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-4 max-w-md text-center">
-          <AlertCircle className="h-12 w-12 text-destructive" />
-          <h2 className="text-lg font-medium">Failed to Initialize</h2>
-          <p className="text-muted-foreground">{initError}</p>
+      <div className="flex h-full items-center justify-center bg-bg p-[var(--space-6)]">
+        <div className="flex max-w-md flex-col items-center gap-4 text-center">
+          <AlertCircle className="h-12 w-12 text-danger" />
+          <h2 className="font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-ink">Failed to Initialize</h2>
+          <p className="text-ink-muted">{initError}</p>
           <Button onClick={() => window.location.reload()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Reload Page
@@ -774,7 +775,7 @@ export function Chat() {
   }
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-full bg-bg">
       {/* B-CHAT-003: Radix AlertDialog for delete confirmation */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -798,185 +799,188 @@ export function Chat() {
 
       {/* Sidebar - Conversations History (C-CHAT: Resizable) */}
       <aside
-        className="border-r flex flex-col bg-muted/10 relative"
+        className="relative flex flex-col border-r border-border bg-surface"
         style={{ width: `${sidebarWidth}px` }}
       >
-        <div className="p-4 border-b">
+        <div className="shrink-0 p-[var(--space-3)]">
           <Button onClick={handleNewChat} className="w-full gap-2" variant="default">
             <Plus className="h-4 w-4" />
             New Chat
           </Button>
         </div>
-        <div className="flex-1 overflow-auto">
-          <div className="p-2 space-y-1">
-            <div className="px-2 py-2 text-xs font-semibold text-muted-foreground flex items-center gap-2">
-              <History className="h-3 w-3" />
-              HISTORY
-            </div>
+        <div className="flex shrink-0 items-center gap-[7px] px-[var(--space-3)] pb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+          <History className="h-3 w-3" />
+          History
+        </div>
+        <div className="flex-1 overflow-y-auto px-[var(--space-3)] pb-[var(--space-3)]">
+          <div className="space-y-[3px]">
             {conversations.length === 0 ? (
-              <p className="text-xs text-center text-muted-foreground py-4">No history yet</p>
+              <p className="py-4 text-center text-xs text-ink-muted">No history yet</p>
             ) : (
-              conversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => handleSelectConversation(conv)}
-                  className={cn(
-                    "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between group cursor-pointer",
-                    activeConversation?.id === conv.id
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <div className="flex flex-col gap-0.5 overflow-hidden flex-1">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <MessageSquare className={cn("h-4 w-4 flex-shrink-0", activeConversation?.id === conv.id ? "text-primary-foreground" : "text-muted-foreground")} />
-                      <span className="truncate">{conv.title || 'Untitled'}</span>
-                    </div>
-                    <span className={cn(
-                      "text-[10px] pl-6",
-                      activeConversation?.id === conv.id ? "text-primary-foreground/60" : "text-muted-foreground/60"
-                    )}>
-                      {getRelativeTime(conv.updatedAt)}
-                    </span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+              conversations.map((conv) => {
+                const isActive = activeConversation?.id === conv.id
+                return (
+                  <div
+                    key={conv.id}
+                    onClick={() => handleSelectConversation(conv)}
                     className={cn(
-                      "h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0",
-                      activeConversation?.id === conv.id ? "text-primary-foreground hover:bg-primary-foreground/20" : "hover:text-destructive"
+                      "group flex cursor-pointer items-start justify-between gap-2 rounded-md px-2.5 py-2 transition-colors",
+                      isActive
+                        ? "bg-accent-strong-soft"
+                        : "hover:bg-surface-hover"
                     )}
-                    onClick={(e) => handleDeleteClick(e, conv.id)}
                   >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))
+                    <div className="flex min-w-0 flex-1 items-start gap-2.5 overflow-hidden">
+                      <MessageSquare className={cn(
+                        "mt-0.5 h-[15px] w-[15px] flex-shrink-0",
+                        isActive ? "text-[var(--accent-soft-text)]" : "text-ink-muted"
+                      )} />
+                      <span className="min-w-0 flex-1">
+                        <span className={cn(
+                          "block truncate text-[12.5px] font-semibold",
+                          isActive ? "text-[var(--accent-soft-text)]" : "text-ink"
+                        )}>
+                          {conv.title || 'Untitled'}
+                        </span>
+                        <span className="mt-px block font-mono text-[10px] text-ink-muted">
+                          {getRelativeTime(conv.updatedAt)}
+                        </span>
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 flex-shrink-0 text-ink-muted opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                      onClick={(e) => handleDeleteClick(e, conv.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )
+              })
             )}
           </div>
         </div>
 
         {/* C-CHAT: Resize handle */}
         <div
-          className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary"
+          className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[var(--border-brand)] active:bg-accent-2"
           onMouseDown={handleMouseDown}
         >
           <div className="absolute right-0 top-1/2 -translate-y-1/2 -translate-x-1/2">
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
+            <GripVertical className="h-4 w-4 text-ink-muted" />
           </div>
         </div>
       </aside>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col bg-bg">
         {/* Header */}
-        <header className="flex items-center justify-between border-b px-6 py-4 h-[85px]">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold">Knowledge Assistant</h1>
-            <p className="text-sm text-muted-foreground truncate">
-              {activeConversation ? activeConversation.title : 'Knowledge-powered AI conversations'}
-            </p>
+        <header className="flex shrink-0 items-center gap-[var(--space-3)] border-b border-border px-[var(--space-5)] py-[var(--space-4)]">
+          <div className="min-w-0 flex-1">
+            <Eyebrow>Assistant</Eyebrow>
+            <h1 className="mt-[3px] truncate font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">
+              {activeConversation ? (activeConversation.title || 'Knowledge assistant') : 'Knowledge assistant'}
+            </h1>
           </div>
-          <div className="flex items-center gap-2">
-            {/* C-CHAT: Search within conversation */}
-            {activeConversation && messages.length > 0 && (
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search messages..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 w-48"
-                />
-              </div>
-            )}
 
-            {/* C-CHAT: Export conversation */}
-            {activeConversation && messages.length > 0 && (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleExportConversation}
-                title="Export conversation"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
-            {status && (
-              <div className="flex items-center gap-2 text-xs">
-                {status.ready ? (
-                  <div className="hidden sm:flex items-center gap-1.5 text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>{status.documentCount} chunks indexed</span>
-                  </div>
-                ) : !status.ollamaAvailable ? (
-                  <div className="hidden sm:flex items-center gap-1.5 text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded-full border border-yellow-500/20">
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    <span>Ollama offline</span>
-                  </div>
-                ) : (
-                  <div className="hidden sm:flex items-center gap-1.5 text-yellow-600 dark:text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded-full border border-yellow-500/20">
-                    <Database className="h-3.5 w-3.5" />
-                    <span>Empty knowledge base</span>
-                  </div>
-                )}
-              </div>
-            )}
+          {/* C-CHAT: Search within conversation */}
+          {activeConversation && messages.length > 0 && (
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+              <Input
+                type="text"
+                placeholder="Search messages..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-48 pl-8"
+              />
+            </div>
+          )}
 
-            {/* Context Picker */}
-            <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 h-8" disabled={!activeConversation} title="Add Context">
-                  <Layers className="h-4 w-4" />
-                  <span className="hidden md:inline">Context</span>
-                  {contextIds.length > 0 && (
-                    <span className="bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px]">
-                      {contextIds.length}
-                    </span>
-                  )}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                  <DialogTitle>Select Knowledge Context</DialogTitle>
-                </DialogHeader>
-                <ContextPicker
-                  onSelect={handleToggleContext}
-                  selectedIds={contextIds}
-                />
-              </DialogContent>
-            </Dialog>
-
+          {/* C-CHAT: Export conversation */}
+          {activeConversation && messages.length > 0 && (
             <Button
-              variant={showChunks ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={toggleChunksView}
-              className="h-8 gap-2"
+              variant="outline"
+              size="icon"
+              onClick={handleExportConversation}
+              title="Export conversation"
             >
-              <FileText className="h-4 w-4" />
-              <span className="hidden md:inline">Chunks</span>
+              <Download className="h-4 w-4" />
             </Button>
-          </div>
+          )}
+
+          {status && (
+            <div className="hidden items-center text-xs sm:flex">
+              {status.ready ? (
+                <span className="inline-flex items-center gap-[7px] whitespace-nowrap rounded-full bg-success-soft px-[11px] py-[5px] font-mono text-[11px] text-success">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  {status.documentCount} chunks indexed
+                </span>
+              ) : !status.ollamaAvailable ? (
+                <span className="inline-flex items-center gap-[7px] whitespace-nowrap rounded-full bg-warning-soft px-[11px] py-[5px] font-mono text-[11px] text-warning">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Ollama offline
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-[7px] whitespace-nowrap rounded-full bg-warning-soft px-[11px] py-[5px] font-mono text-[11px] text-warning">
+                  <Database className="h-3.5 w-3.5" />
+                  Empty knowledge base
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Context Picker */}
+          <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-2" disabled={!activeConversation} title="Add Context">
+                <Layers className="h-4 w-4 text-accent-2" />
+                <span className="hidden md:inline">Context</span>
+                {contextIds.length > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 font-mono text-[10px] text-primary-foreground">
+                    {contextIds.length}
+                  </span>
+                )}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Select Knowledge Context</DialogTitle>
+              </DialogHeader>
+              <ContextPicker
+                onSelect={handleToggleContext}
+                selectedIds={contextIds}
+              />
+            </DialogContent>
+          </Dialog>
+
+          <Button
+            variant={showChunks ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={toggleChunksView}
+            className="h-8 gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            <span className="hidden md:inline">Chunks</span>
+          </Button>
         </header>
 
         {/* Recording Context Loading */}
         {contextLoading && (
-          <div className="px-4 py-2 bg-muted/30 border-b flex items-center gap-2">
-            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Loading recording context...</span>
+          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface-sunken px-[var(--space-5)] py-2">
+            <RefreshCw className="h-4 w-4 animate-spin text-ink-muted" />
+            <span className="text-sm text-ink-muted">Loading recording context...</span>
           </div>
         )}
 
         {/* Recording Context Banner */}
         {contextRecording && !contextLoading && (
-          <div className="px-4 py-2 bg-primary/10 border-b flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-accent-strong-soft px-[var(--space-5)] py-2">
             <div className="flex items-center gap-2">
-              <FileAudio className="h-4 w-4 text-primary" />
-              <span className="text-sm">
-                Chatting about: <strong>{contextRecording.title || 'Recording'}</strong>
+              <FileAudio className="h-4 w-4 text-accent-2" />
+              <span className="text-sm text-ink">
+                Chatting about: <strong className="font-semibold">{contextRecording.title || 'Recording'}</strong>
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -996,10 +1000,10 @@ export function Chat() {
 
         {/* Context Error Banner */}
         {contextError && (
-          <div className="px-4 py-2 bg-destructive/10 border-b flex items-center justify-between">
+          <div className="flex shrink-0 items-center justify-between border-b border-border bg-danger-soft px-[var(--space-5)] py-2">
             <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-destructive" />
-              <span className="text-sm text-destructive">{contextError}</span>
+              <AlertCircle className="h-4 w-4 text-danger" />
+              <span className="text-sm text-danger">{contextError}</span>
             </div>
             <Button variant="ghost" size="sm" onClick={() => navigate('/library')}>
               Return to Library
@@ -1009,42 +1013,42 @@ export function Chat() {
 
         {/* Chunks Viewer Panel */}
         {showChunks && (
-          <div className="border-b bg-muted/30 max-h-80 overflow-auto">
-            <div className="px-6 py-3">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium text-sm">Indexed Chunks ({chunks.length})</h3>
+          <div className="max-h-80 shrink-0 overflow-auto border-b border-border bg-surface-sunken">
+            <div className="px-[var(--space-6)] py-3">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-ink">Indexed Chunks ({chunks.length})</h3>
                 <Button variant="ghost" size="sm" onClick={loadChunks} disabled={loadingChunks}>
-                  <RefreshCw className={cn('h-3 w-3 mr-1', loadingChunks && 'animate-spin')} />
+                  <RefreshCw className={cn('mr-1 h-3 w-3', loadingChunks && 'animate-spin')} />
                   Refresh
                 </Button>
               </div>
               {loadingChunks ? (
                 <div className="flex items-center justify-center py-8">
-                  <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <RefreshCw className="h-5 w-5 animate-spin text-ink-muted" />
                 </div>
               ) : chunks.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground text-sm">
+                <div className="py-8 text-center text-sm text-ink-muted">
                   No chunks indexed yet. Transcribe recordings to populate the knowledge base.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pb-4">
+                <div className="grid grid-cols-1 gap-2 pb-4 md:grid-cols-2">
                   {chunks.map((chunk) => (
                     <div
                       key={chunk.id}
-                      className="p-3 bg-background rounded-lg border text-sm"
+                      className="rounded-lg border border-border bg-surface p-3 text-sm shadow-xs"
                     >
-                      <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
-                        <span className="px-1.5 py-0.5 bg-secondary rounded font-mono">
+                      <div className="mb-2 flex items-center gap-2 text-xs text-ink-muted">
+                        <span className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-accent-2">
                           #{chunk.chunkIndex}
                         </span>
                         {chunk.subject && (
-                          <span className="truncate font-medium">{chunk.subject}</span>
+                          <span className="truncate font-medium text-ink">{chunk.subject}</span>
                         )}
-                        <span className="ml-auto text-xs opacity-60">
+                        <span className="ml-auto font-mono text-[10px] text-ink-muted">
                           {chunk.embeddingDimensions}d
                         </span>
                       </div>
-                      <p className="text-xs line-clamp-3 text-muted-foreground italic">
+                      <p className="line-clamp-3 text-xs italic text-ink-muted">
                         "{chunk.content}"
                       </p>
                     </div>
@@ -1057,15 +1061,15 @@ export function Chat() {
 
         {/* Attached Context Bar */}
         {contextItems.length > 0 && (
-          <div className="bg-muted/30 border-b px-6 py-2 flex flex-wrap gap-2 items-center">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mr-1">Context:</span>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface-sunken px-[var(--space-5)] py-[9px]">
+            <span className="mr-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Context</span>
             {contextItems.map(item => (
-              <div key={item.id} className="flex items-center gap-1.5 bg-background border rounded-full pl-2 pr-1 py-0.5 text-[10px] shadow-sm animate-in fade-in zoom-in duration-200">
-                <BookOpen className="h-3 w-3 text-primary" />
+              <div key={item.id} className="flex items-center gap-1.5 rounded-full border border-border bg-surface py-0.5 pl-[9px] pr-1 text-[11.5px] text-ink animate-in fade-in zoom-in duration-200">
+                <BookOpen className="h-3 w-3 text-accent-2" />
                 <span className="max-w-[150px] truncate">{item.title}</span>
                 <button
                   onClick={() => handleToggleContext(item.id)}
-                  className="hover:bg-muted rounded-full p-0.5 transition-colors"
+                  className="rounded-full p-0.5 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -1090,7 +1094,7 @@ export function Chat() {
                   }
                 }
               }}
-              className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-auto"
+              className="ml-auto text-[10px] text-ink-muted underline underline-offset-2 hover:text-ink"
             >
               Clear all
             </button>
@@ -1098,16 +1102,20 @@ export function Chat() {
         )}
 
         {/* Messages List */}
-        <div className="flex-1 overflow-auto p-6 scroll-smooth">
-          <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex-1 scroll-smooth overflow-auto px-[var(--space-6)] py-[var(--space-5)]">
+          <div className="mx-auto max-w-[760px] space-y-[var(--space-4)]">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-                <Bot className="h-16 w-12 text-muted-foreground/30 mb-4" />
-                <h2 className="text-xl font-semibold mb-2">Knowledge Assistant</h2>
-                <p className="text-muted-foreground max-w-sm mb-8">
-                  I can answer questions based on your captured knowledge and recorded meetings.
+              <div className="flex flex-col items-center py-[var(--space-7)] text-center animate-in fade-in duration-300">
+                <div className="mb-[var(--space-4)] inline-flex h-[60px] w-[60px] items-center justify-center rounded-xl bg-accent-2-soft text-accent-2">
+                  <Bot className="h-[30px] w-[30px]" />
+                </div>
+                <h2 className="mb-2 font-display text-[1.75rem] font-semibold tracking-[-0.01em] text-ink">
+                  Ask across everything you've captured
+                </h2>
+                <p className="mx-auto mb-[var(--space-5)] max-w-[430px] text-sm leading-relaxed text-ink-muted">
+                  I draw on every transcript, document, and note in your library — and cite the captures I used. Try one of these.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
+                <div className="mx-auto grid w-full max-w-[560px] grid-cols-1 gap-[var(--space-3)] text-left sm:grid-cols-2">
                   {[
                     'Summarize my recent meetings',
                     'What are my pending action items?',
@@ -1117,7 +1125,7 @@ export function Chat() {
                     <button
                       key={suggestion}
                       onClick={() => setInput(suggestion)}
-                      className="p-4 text-sm bg-muted/50 rounded-xl hover:bg-muted border border-transparent hover:border-border transition-all text-left"
+                      className="rounded-lg border border-border bg-surface px-4 py-3.5 text-left text-[13px] leading-snug text-ink shadow-xs transition-colors hover:border-border-strong hover:bg-surface-hover"
                     >
                       {suggestion}
                     </button>
@@ -1127,44 +1135,47 @@ export function Chat() {
             ) : (
               filteredMessages.map((message) => {
                 const msgSources = getMessageSources(message)
+                const isUser = message.role === 'user'
                 return (
                   <div
                     key={message.id}
-                    className={cn('flex gap-4 group', message.role === 'user' && 'flex-row-reverse')}
+                    className={cn('group flex gap-[13px]', isUser && 'flex-row-reverse')}
                   >
                     <div
                       className={cn(
-                        'flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border',
-                        message.role === 'user' ? 'bg-primary border-primary' : 'bg-background border-border'
+                        'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md',
+                        isUser
+                          ? 'bg-primary text-primary-foreground'
+                          : 'border border-border bg-surface text-accent-2'
                       )}
                     >
-                      {message.role === 'user' ? (
-                        <User className="h-5 w-5 text-primary-foreground" />
+                      {isUser ? (
+                        <User className="h-[18px] w-[18px]" />
                       ) : (
-                        <Bot className="h-5 w-5 text-foreground" />
+                        <Bot className="h-[18px] w-[18px]" />
                       )}
                     </div>
-                    <div className={cn('flex flex-col gap-2 max-w-[80%]', message.role === 'user' && 'items-end')}>
+                    <div className={cn('flex max-w-[80%] min-w-0 flex-col gap-2', isUser && 'items-end')}>
                       <div
                         className={cn(
-                          'p-4 rounded-2xl shadow-sm border',
-                          message.role === 'user'
-                            ? 'bg-primary text-primary-foreground border-primary rounded-tr-none'
-                            : 'bg-background border-border rounded-tl-none',
-                          failedMessageIds.has(message.id) && 'border-destructive/50 bg-destructive/5'
+                          'whitespace-pre-wrap rounded-lg px-3.5 py-[11px] text-[13.5px] leading-relaxed',
+                          isUser
+                            ? 'rounded-br-[4px] bg-primary text-primary-foreground'
+                            : 'rounded-bl-[4px] border border-border bg-surface text-ink',
+                          failedMessageIds.has(message.id) && 'border-danger/50 bg-danger-soft'
                         )}
                       >
                         {message.role === 'assistant' ? (
-                          <div className="prose prose-sm max-w-none dark:prose-invert leading-relaxed text-sm md:text-base">
+                          <div className="prose prose-sm max-w-none leading-relaxed text-[13.5px]">
                             <ReactMarkdown>{message.content}</ReactMarkdown>
                           </div>
                         ) : (
-                          <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">{message.content}</p>
+                          <p className="leading-relaxed">{message.content}</p>
                         )}
                         <p
                           className={cn(
-                            'text-[10px] mt-3 opacity-50',
-                            message.role === 'user' ? 'text-primary-foreground' : 'text-muted-foreground'
+                            'mt-3 font-mono text-[10px] opacity-60',
+                            isUser ? 'text-primary-foreground' : 'text-ink-muted'
                           )}
                           title={new Date(message.createdAt).toLocaleString()}
                         >
@@ -1179,7 +1190,7 @@ export function Chat() {
                           size="sm"
                           onClick={() => handleRetry(message.id)}
                           disabled={isProcessing}
-                          className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive border-destructive/30"
+                          className="h-7 gap-1.5 border-danger/30 text-xs text-danger hover:text-danger"
                         >
                           <RotateCcw className="h-3 w-3" />
                           Retry
@@ -1188,17 +1199,15 @@ export function Chat() {
 
                       {/* Sources for AI responses */}
                       {message.role === 'assistant' && msgSources.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-1">
+                        <div className="mt-1 flex flex-wrap gap-1.5">
                           {msgSources.slice(0, 3).map((source, idx) => (
-                            <div
+                            <span
                               key={idx}
-                              className="group/source relative"
+                              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-sunken px-[9px] py-[3px] text-[10.5px] text-ink"
                             >
-                              <div className="flex items-center gap-1.5 text-[10px] px-2 py-1 bg-muted rounded-full border border-border/50 hover:bg-muted/80 cursor-default transition-colors">
-                                <FileText className="h-3 w-3 text-muted-foreground" />
-                                <span className="max-w-[120px] truncate">{source.subject || 'Reference'}</span>
-                              </div>
-                            </div>
+                              <FileText className="h-3 w-3 text-accent-2" />
+                              <span className="max-w-[120px] truncate">{source.subject || 'Reference'}</span>
+                            </span>
                           ))}
                         </div>
                       )}
@@ -1209,19 +1218,20 @@ export function Chat() {
             )}
             {/* B-CHAT-005: Loading indicator with cancel button */}
             {loading && (
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-background border border-border flex items-center justify-center shadow-sm">
-                  <Bot className="h-5 w-5" />
+              <div className="flex gap-[13px]">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-border bg-surface text-accent-2">
+                  <Bot className="h-[18px] w-[18px]" />
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="p-4 rounded-2xl bg-muted/30 border border-border rounded-tl-none flex items-center gap-1.5 h-12">
-                    <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce" />
+                  <span className="font-mono text-[12px] text-ink-muted">searching your library…</span>
+                  <div className="flex h-6 items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted/40" />
                     <span
-                      className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce"
+                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted/40"
                       style={{ animationDelay: '0.15s' }}
                     />
                     <span
-                      className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce"
+                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-muted/40"
                       style={{ animationDelay: '0.3s' }}
                     />
                   </div>
@@ -1229,7 +1239,7 @@ export function Chat() {
                     variant="ghost"
                     size="sm"
                     onClick={handleCancelRequest}
-                    className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                    className="h-8 gap-1.5 text-ink-muted hover:text-ink"
                     title="Cancel request"
                   >
                     <Square className="h-3.5 w-3.5" />
@@ -1243,14 +1253,14 @@ export function Chat() {
         </div>
 
         {/* Input Form */}
-        <div className="border-t p-6">
-          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-            <div className="relative flex items-center">
+        <div className="shrink-0 border-t border-border px-[var(--space-6)] pb-[var(--space-4)] pt-[var(--space-3)]">
+          <form onSubmit={handleSubmit} className="mx-auto max-w-[760px]">
+            <div className="flex items-end gap-2 rounded-lg border-[1.5px] border-border bg-surface py-2 pl-3.5 pr-2 transition-colors focus-within:border-border-strong">
               <Input
                 ref={inputRef}
                 placeholder={
                   status?.ready
-                    ? 'Ask me anything about your knowledge base...'
+                    ? 'Ask about anything in your library…'
                     : 'Index meetings to enable AI conversations'
                 }
                 value={input}
@@ -1261,26 +1271,26 @@ export function Chat() {
                 }}
                 maxLength={MAX_INPUT_LENGTH}
                 disabled={isProcessing}
-                className="pr-12 py-6 rounded-2xl shadow-sm border-border bg-background focus-visible:ring-primary/20"
+                className="h-auto flex-1 border-0 bg-transparent px-0 py-1 text-[13.5px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
               />
               <Button
                 type="submit"
                 disabled={isProcessing || !input.trim()}
                 size="icon"
-                className="absolute right-2 h-10 w-10 rounded-xl"
+                className="h-[34px] w-[34px] flex-none rounded-md"
               >
-                <Send className="h-5 w-5" />
+                <Send className="h-4 w-4" />
               </Button>
             </div>
-            <div className="flex items-center justify-between mt-3 px-1">
-              <p className="text-[10px] text-muted-foreground">
+            <div className="mt-2.5 flex items-center justify-between px-1">
+              <p className="text-[10px] text-ink-muted">
                 I answer based on your meeting transcripts and documents.
               </p>
               <p className={cn(
-                'text-[10px] tabular-nums',
+                'font-mono text-[10px] tabular-nums',
                 input.length > MAX_INPUT_LENGTH * 0.9
-                  ? 'text-destructive'
-                  : 'text-muted-foreground'
+                  ? 'text-danger'
+                  : 'text-ink-muted'
               )}>
                 {input.length}/{MAX_INPUT_LENGTH}
               </p>

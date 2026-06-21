@@ -67,8 +67,8 @@ export function TimeAnchor({
       type="button"
       onClick={handleClick}
       className={cn(
-        'text-primary hover:underline cursor-pointer font-mono text-sm',
-        isActive && 'bg-primary/10 rounded px-1',
+        'font-mono text-[11px] text-primary cursor-pointer hover:underline',
+        isActive && 'rounded-sm bg-accent-strong-soft px-1',
         className
       )}
       aria-label={`Jump to ${formatted}`}

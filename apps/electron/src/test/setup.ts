@@ -47,5 +47,17 @@ if (typeof window !== 'undefined') {
 
   // Mock scrollIntoView
   window.HTMLElement.prototype.scrollIntoView = vi.fn()
+
+  // Mock ResizeObserver (jsdom does not implement it).
+  // Must be a real class so `new ResizeObserver(…)` works (floating-ui also needs this).
+  class ResizeObserverMock {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+    constructor(_cb: ResizeObserverCallback) {
+      void _cb
+    }
+  }
+  global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 }
 

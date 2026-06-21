@@ -2,50 +2,215 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =================================================================
+   HARBOR DESIGN SYSTEM — tokens + shadcn bridge
+   Coastal-blue palette. Light is the active default; dark tokens live
+   under .dark (Tailwind darkMode: ['class']), applied to <html> by
+   useApplyTheme. Fonts are self-hosted (src/styles/fonts.css).
+   ================================================================= */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* ---- Logo anchors ---- */
+    --brand-navy:      #103d65;
+    --brand-teal:      #139d88;
+    --brand-teal-600:  #0f8472;
+    --brand-teal-700:  #0c6b5d;
+    --brand-teal-300:  #5cc4b2;
+    --brand-teal-soft: #d8f0eb;
+
+    /* ---- Brand: Blue (the harbor) ---- */
+    --blue-50:  #eef5f9;
+    --blue-100: #d7e8f1;
+    --blue-200: #b4d6e5;
+    --blue-300: #81c3d7;
+    --blue-400: #57a3c1;
+    --blue-500: #3a7ca5;
+    --blue-600: #2f6690;
+    --blue-700: #28577c;
+    --blue-800: #1e4a68;
+    --blue-900: #16425b;
+    --blue-950: #0e2c3d;
+
+    /* ---- Neutral: Mist (cool sage-grey) ---- */
+    --neutral-0:   #ffffff;
+    --neutral-50:  #f7f8f6;
+    --neutral-100: #eef0ec;
+    --neutral-200: #d9dcd6;
+    --neutral-300: #c3c7bf;
+    --neutral-400: #a4a99e;
+    --neutral-500: #838a7d;
+    --neutral-600: #656c5f;
+    --neutral-700: #4c5249;
+    --neutral-800: #343832;
+    --neutral-900: #1f221d;
+    --neutral-950: #131512;
+
+    /* ---- Semantic accent ramps ---- */
+    --green-100: #d9efe4;
+    --green-500: #2f8f6b;
+    --green-600: #257558;
+    --amber-100: #f6e7c8;
+    --amber-500: #c9892f;
+    --amber-600: #a86f23;
+    --coral-100: #f6dcd7;
+    --coral-500: #c2483d;
+    --coral-600: #a23a31;
+
+    /* ---- Harbor semantic — Light ---- */
+    --bg:              var(--neutral-50);
+    --bg-sunken:       var(--neutral-100);
+    --surface:         var(--neutral-0);
+    --surface-raised:  var(--neutral-0);
+    --surface-hover:   var(--neutral-50);
+    --surface-sunken:  var(--neutral-100);
+    --overlay:         color-mix(in oklab, var(--blue-950) 45%, transparent);
+
+    --text-strong:     var(--neutral-900);
+    --text:            var(--neutral-700);
+    --text-muted:      var(--neutral-500);
+    --text-inverse:    var(--neutral-0);
+    --text-brand:      var(--blue-600);
+    --text-link:       var(--blue-600);
+
+    --border:          var(--neutral-200);
+    --border-strong:   var(--neutral-300);
+    --border-brand:    var(--blue-500);
+
+    --accent:          var(--blue-600);
+    --accent-hover:    var(--blue-700);
+    --accent-active:   var(--blue-800);
+    --accent-soft:     var(--blue-50);
+    --accent-soft-text:var(--blue-700);
+    --on-accent:       var(--neutral-0);
+
+    --accent-2:        var(--brand-teal);
+    --accent-2-hover:  var(--brand-teal-600);
+    --accent-2-soft:   var(--brand-teal-soft);
+    --on-accent-2:     var(--neutral-0);
+
+    --ring:            var(--blue-400);
+
+    --success:         var(--green-500);
+    --success-soft:    var(--green-100);
+    --warning:         var(--amber-500);
+    --warning-soft:    var(--amber-100);
+    --danger:          var(--coral-500);
+    --danger-soft:     var(--coral-100);
+
+    /* ---- Typography ---- */
+    --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+    --font-sans:    "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    --text-xs:   0.75rem;   --text-sm:   0.875rem;  --text-base: 1rem;
+    --text-md:   1.125rem;  --text-lg:   1.375rem;  --text-xl:   1.75rem;
+    --text-2xl:  2.25rem;   --text-3xl:  3rem;      --text-4xl:  4rem;   --text-5xl: 5.5rem;
+
+    --weight-light: 300; --weight-regular: 400; --weight-medium: 500;
+    --weight-semibold: 600; --weight-bold: 700;
+
+    --leading-none: 1; --leading-tight: 1.18; --leading-snug: 1.35;
+    --leading-normal: 1.65; --leading-relaxed: 1.8;
+
+    --tracking-tight: -0.02em; --tracking-snug: -0.01em; --tracking-normal: 0;
+    --tracking-wide: 0.02em; --tracking-caps: 0.08em;
+
+    /* ---- Spacing (4px grid; control band tight, layout band airy) ---- */
+    --space-0: 0; --space-px: 1px; --space-0-5: 0.125rem; --space-1: 0.25rem;
+    --space-1-5: 0.375rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem;
+    --space-5: 1.75rem; --space-6: 2.5rem; --space-7: 3.25rem; --space-8: 4rem;
+    --space-9: 5.5rem; --space-10: 7rem; --space-12: 9rem; --space-16: 12rem;
+    --container-sm: 640px; --container-md: 768px; --container-lg: 1024px; --container-xl: 1200px;
+    --gutter: var(--space-5);
+
+    /* ---- Effects ---- */
+    --radius-xs: 3px; --radius-sm: 5px; --radius-md: 8px; --radius-lg: 12px;
+    --radius-xl: 18px; --radius-2xl: 26px; --radius-full: 999px;
+    --border-thin: 1px; --border-thick: 1.5px;
+
+    --shadow-xs:  0 1px 2px rgba(14, 44, 61, 0.06);
+    --shadow-sm:  0 1px 2px rgba(14, 44, 61, 0.06), 0 1px 3px rgba(14, 44, 61, 0.08);
+    --shadow-md:  0 2px 6px rgba(14, 44, 61, 0.07), 0 4px 14px rgba(14, 44, 61, 0.08);
+    --shadow-lg:  0 8px 30px rgba(14, 44, 61, 0.12), 0 2px 8px rgba(14, 44, 61, 0.06);
+    --shadow-xl:  0 24px 60px -12px rgba(14, 44, 61, 0.22);
+    --shadow-focus: 0 0 0 3px color-mix(in oklab, var(--ring) 40%, transparent);
+
+    --blur-sm: 6px; --blur-md: 14px;
+    --dur-fast: 120ms; --dur: 200ms; --dur-slow: 360ms;
+    --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+
+    /* ---- shadcn/Radix bridge → Harbor (consumed by tailwind.config.js) ----
+       NOTE: these reference Harbor vars, which flip under .dark, so the bridge
+       only needs declaring once here. shadcn's "accent" (a subtle hover bg) is
+       renamed to --ui-accent to avoid colliding with Harbor's --accent (the
+       primary blue). --border and --ring are shared with Harbor directly. */
+    --background:            var(--bg);
+    --foreground:            var(--text);
+    --card:                  var(--surface);
+    --card-foreground:       var(--text-strong);
+    --popover:               var(--surface);
+    --popover-foreground:    var(--text-strong);
+    --primary:               var(--accent);
+    --primary-foreground:    var(--on-accent);
+    --secondary:             var(--surface-sunken);
+    --secondary-foreground:  var(--text-strong);
+    --muted:                 var(--surface-sunken);
+    --muted-foreground:      var(--text-muted);
+    --ui-accent:             var(--surface-sunken);
+    --ui-accent-foreground:  var(--text-strong);
+    --destructive:           var(--danger);
+    --destructive-foreground:var(--neutral-0);
+    --input:                 var(--border);
     --radius: 0.5rem;
+
+    color-scheme: light;
   }
 
+  /* ---- Harbor semantic — Dark (Tailwind class strategy) ---- */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --bg:              var(--neutral-950);
+    --bg-sunken:       #0c0e0b;
+    --surface:         var(--neutral-900);
+    --surface-raised:  #262a24;
+    --surface-hover:   #262a24;
+    --surface-sunken:  #0c0e0b;
+    --overlay:         color-mix(in oklab, #000 60%, transparent);
+
+    --text-strong:     var(--neutral-50);
+    --text:            var(--neutral-300);
+    --text-muted:      var(--neutral-400);
+    --text-inverse:    var(--neutral-900);
+    --text-brand:      var(--blue-300);
+    --text-link:       var(--blue-300);
+
+    --border:          #2c302a;
+    --border-strong:   var(--neutral-700);
+    --border-brand:    var(--blue-500);
+
+    --accent:          var(--blue-300);
+    --accent-hover:    var(--blue-200);
+    --accent-active:   var(--blue-100);
+    --accent-soft:     color-mix(in oklab, var(--blue-300) 16%, transparent);
+    --accent-soft-text:var(--blue-200);
+    --on-accent:       var(--blue-950);
+
+    --accent-2:        var(--brand-teal-300);
+    --accent-2-hover:  #7fd2c2;
+    --accent-2-soft:   color-mix(in oklab, var(--brand-teal-300) 16%, transparent);
+    --on-accent-2:     var(--blue-950);
+
+    --ring:            var(--blue-300);
+
+    --success:         #4fb389;
+    --success-soft:    color-mix(in oklab, #4fb389 18%, transparent);
+    --warning:         #e0a64a;
+    --warning-soft:    color-mix(in oklab, #e0a64a 18%, transparent);
+    --danger:          #de6a5e;
+    --danger-soft:     color-mix(in oklab, #de6a5e 18%, transparent);
+
+    color-scheme: dark;
   }
 }
 
@@ -57,26 +222,43 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+  ::selection {
+    background: color-mix(in oklab, var(--blue-300) 55%, transparent);
+    color: var(--blue-950);
+  }
 }
 
-/* Custom scrollbar */
+/* Harbor uppercase eyebrow / overline helper */
+.harbor-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Custom scrollbar (Harbor-tinted) */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
-  border-radius: 4px;
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: var(--text-muted);
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 /* Titlebar drag region */
@@ -104,4 +286,3 @@
   position: relative;
   z-index: 10;
 }
-

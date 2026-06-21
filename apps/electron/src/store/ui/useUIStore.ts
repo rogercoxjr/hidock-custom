@@ -38,7 +38,14 @@ export const useUIStore = create<UIStore>()(
   // QA monitoring toggle
   qaLogsEnabled: false,
 
+  // Theme (Harbor) — light-first default; persisted. Applied to <html> by useApplyTheme.
+  theme: 'light',
+
   // Actions
+  setTheme: (theme) => {
+    set({ theme })
+  },
+
   toggleSidebar: () => {
     set((state) => ({ sidebarOpen: !state.sidebarOpen }))
   },
@@ -128,6 +135,7 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         sidebarOpen: state.sidebarOpen,
         qaLogsEnabled: state.qaLogsEnabled,
+        theme: state.theme,
         // recordingsCompactView NOT persisted here - useLibraryStore.viewMode is the single source of truth (LB-13)
         // currentlyPlayingId intentionally not persisted - transient playback
         // currentlyPlayingPath intentionally not persisted - transient playback

@@ -115,6 +115,8 @@ export interface FilterStore {
 
 export type SidebarContent = 'calendar' | 'contact' | 'project' | 'chat' | 'none'
 
+export type Theme = 'light' | 'dark' | 'system'
+
 export interface SentimentSegment {
   startTime: number // Seconds
   endTime: number // Seconds
@@ -181,6 +183,10 @@ export interface UIStore {
   // QA monitoring toggle
   qaLogsEnabled: boolean
   setQaLogsEnabled: (enabled: boolean) => void
+
+  // Theme (Harbor): light | dark | system. Light-first default.
+  theme: Theme
+  setTheme: (theme: Theme) => void
 }
 
 // =============================================================================

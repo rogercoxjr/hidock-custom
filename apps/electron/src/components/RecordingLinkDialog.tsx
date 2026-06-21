@@ -216,7 +216,7 @@ export function RecordingLinkDialog({
           <DialogDescription className="text-sm space-y-1">
             <span className="font-medium block truncate">{recording.filename}</span>
             {recording.duration_seconds && (
-              <span className="text-muted-foreground">
+              <span className="text-ink-muted">
                 Duration: {formatDuration(recording.duration_seconds)}
               </span>
             )}
@@ -227,11 +227,11 @@ export function RecordingLinkDialog({
           {/* ── Section 1: Edit meeting details (only when linked) ── */}
           {meeting && (
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">Meeting Details</p>
-              <div className="rounded-lg border p-3 space-y-3">
+              <p className="px-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-muted">Meeting Details</p>
+              <div className="space-y-3 rounded-lg border border-border p-3">
                 {/* Subject */}
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Title</p>
+                  <p className="text-xs text-ink-muted">Title</p>
                   {editingSubject ? (
                     <div className="flex items-center gap-2">
                       <Input
@@ -245,7 +245,7 @@ export function RecordingLinkDialog({
                         autoFocus
                         disabled={savingMeeting}
                       />
-                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-green-600"
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-success"
                         onClick={() => handleSaveMeetingField('subject')} disabled={savingMeeting}>
                         <Check className="h-3.5 w-3.5" />
                       </Button>
@@ -267,7 +267,7 @@ export function RecordingLinkDialog({
 
                 {/* Location */}
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Location</p>
+                  <p className="text-xs text-ink-muted">Location</p>
                   {editingLocation ? (
                     <div className="flex items-center gap-2">
                       <Input
@@ -282,7 +282,7 @@ export function RecordingLinkDialog({
                         autoFocus
                         disabled={savingMeeting}
                       />
-                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-green-600"
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-success"
                         onClick={() => handleSaveMeetingField('location')} disabled={savingMeeting}>
                         <Check className="h-3.5 w-3.5" />
                       </Button>
@@ -293,7 +293,7 @@ export function RecordingLinkDialog({
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 group">
-                      <p className="text-sm flex-1 text-muted-foreground">{meeting.location || '—'}</p>
+                      <p className="text-sm flex-1 text-ink-muted">{meeting.location || '—'}</p>
                       <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => { setEditingLocation(true); setLocationDraft(meeting.location ?? '') }}>
                         <Pencil className="h-3 w-3" />
@@ -304,7 +304,7 @@ export function RecordingLinkDialog({
 
                 {/* Date (display only) */}
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Date</p>
+                  <p className="text-xs text-ink-muted">Date</p>
                   <p className="text-sm">{formatDateTime(meeting.start_time)}</p>
                 </div>
               </div>
@@ -314,20 +314,20 @@ export function RecordingLinkDialog({
           {/* ── Section 2: Other recordings linked to this meeting ── */}
           {meeting && linkedRecordings.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">
+              <p className="px-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-muted">
                 Other Recordings Linked to This Meeting ({linkedRecordings.length})
               </p>
-              <div className="rounded-lg border divide-y">
+              <div className="divide-y divide-border rounded-lg border border-border">
                 {linkedRecordings.map(r => (
                   <div key={r.id} className="flex items-center gap-3 px-3 py-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">{(r as any).title || r.filename}</p>
-                      <p className="text-xs text-muted-foreground">{formatDateTime(r.date_recorded)}</p>
+                      <p className="text-xs text-ink-muted">{formatDateTime(r.date_recorded)}</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                      className="h-7 w-7 shrink-0 text-ink-muted hover:text-destructive"
                       title="Unlink this recording from the meeting"
                       disabled={unlinkingId === r.id}
                       onClick={() => handleUnlinkOther(r.id)}
@@ -343,17 +343,17 @@ export function RecordingLinkDialog({
           {/* ── Section 3: Change / remove link ── */}
           <div className="space-y-2">
             {meeting && (
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground px-1">
+              <p className="px-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-muted">
                 Change Meeting Link
               </p>
             )}
 
             {loading && (
-              <div className="py-8 text-center text-muted-foreground">Loading...</div>
+              <div className="py-8 text-center text-ink-muted">Loading...</div>
             )}
 
             {linkError && (
-              <div className="py-4 px-3 text-sm text-destructive bg-destructive/10 rounded-md">
+              <div className="rounded-md bg-destructive/10 px-3 py-4 text-sm text-destructive">
                 {linkError}
               </div>
             )}
@@ -365,13 +365,13 @@ export function RecordingLinkDialog({
                 className="space-y-2"
               >
                 {!hasCandidates && options.length === 0 && !meeting && (
-                  <p className="text-sm text-muted-foreground italic py-4 text-center">
+                  <p className="py-4 text-center text-sm italic text-ink-muted">
                     No meetings found near this recording time
                   </p>
                 )}
 
                 {!hasCandidates && options.length > 0 && (
-                  <p className="text-sm text-muted-foreground mb-2">
+                  <p className="mb-2 text-sm text-ink-muted">
                     {meeting ? 'Select a different meeting:' : 'No automatic match found. Select a meeting:'}
                   </p>
                 )}
@@ -380,24 +380,24 @@ export function RecordingLinkDialog({
                   <label
                     key={option.id}
                     className={cn(
-                      'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
-                      'hover:bg-muted/50',
-                      selectedId === option.meetingId && 'border-primary bg-primary/5'
+                      'flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 transition-colors',
+                      'hover:bg-surface-hover',
+                      selectedId === option.meetingId && 'border-border-brand bg-accent-strong-soft'
                     )}
                   >
                     <RadioGroupItem value={option.meetingId} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         {option.isAiSelected && (
-                          <Star className="h-4 w-4 text-yellow-500 flex-shrink-0" />
+                          <Star className="h-4 w-4 flex-shrink-0 text-warning" />
                         )}
                         <span className="font-medium truncate">{option.subject}</span>
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-ink-muted">
                         {formatTime(option.startTime)} - {formatTime(option.endTime)}
                       </div>
                       {option.matchReason && (
-                        <div className="text-xs text-muted-foreground mt-1 italic truncate">
+                        <div className="mt-1 truncate text-xs italic text-ink-muted">
                           {option.matchReason}
                         </div>
                       )}
@@ -405,12 +405,12 @@ export function RecordingLinkDialog({
                     {hasCandidates && option.confidenceScore > 0 && (
                       <span
                         className={cn(
-                          'text-xs px-2 py-0.5 rounded-full flex-shrink-0',
-                          option.confidenceScore > 0.7 && 'bg-green-100 text-green-800',
+                          'flex-shrink-0 rounded-full px-2 py-0.5 text-xs',
+                          option.confidenceScore > 0.7 && 'bg-success-soft text-success',
                           option.confidenceScore > 0.4 &&
                             option.confidenceScore <= 0.7 &&
-                            'bg-yellow-100 text-yellow-800',
-                          option.confidenceScore <= 0.4 && 'bg-gray-100 text-gray-600'
+                            'bg-warning-soft text-warning',
+                          option.confidenceScore <= 0.4 && 'bg-surface-sunken text-ink-muted'
                         )}
                       >
                         {Math.round(option.confidenceScore * 100)}%
@@ -422,13 +422,13 @@ export function RecordingLinkDialog({
                 {/* Always show "no meeting" option */}
                 <label
                   className={cn(
-                    'flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
-                    'hover:bg-muted/50',
-                    selectedId === 'none' && 'border-primary bg-primary/5'
+                    'flex cursor-pointer items-center gap-3 rounded-lg border border-border p-3 transition-colors',
+                    'hover:bg-surface-hover',
+                    selectedId === 'none' && 'border-border-brand bg-accent-strong-soft'
                   )}
                 >
                   <RadioGroupItem value="none" />
-                  <span className="text-muted-foreground">No meeting — standalone recording</span>
+                  <span className="text-ink-muted">No meeting — standalone recording</span>
                 </label>
               </RadioGroup>
             )}

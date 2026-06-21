@@ -47,9 +47,12 @@ export function QuickAddContact({ open, onClose, onCreated }: QuickAddContactPro
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-modal="true">
-      <div className="w-80 p-4 bg-background rounded-lg border space-y-3">
-        <h3 className="text-sm font-semibold">Add Person</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div className="w-80 p-[var(--space-5)] bg-surface rounded-xl border border-border shadow-xl space-y-4">
+        <div>
+          <div className="font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] text-accent-2">Organization</div>
+          <h3 className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink mt-0.5">Add Person</h3>
+        </div>
         <Input
           aria-label="Name"
           placeholder="Name (required)"
@@ -64,7 +67,7 @@ export function QuickAddContact({ open, onClose, onCreated }: QuickAddContactPro
           onChange={(e) => setEmail(e.target.value)}
           disabled={busy}
         />
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
           <Button size="sm" onClick={create} disabled={busy}>Create</Button>
         </div>

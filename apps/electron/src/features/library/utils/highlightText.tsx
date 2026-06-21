@@ -38,7 +38,7 @@ export function highlightText(text: string, query: string): React.ReactNode {
     <>
       {parts.map((part, i) =>
         tokenSet.has(part.toLowerCase()) ? (
-          <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded-sm px-0.5">
+          <mark key={i} className="bg-warning-soft text-ink rounded-sm px-0.5">
             {part}
           </mark>
         ) : (

@@ -52,6 +52,17 @@ function renderPersonDetail() {
   )
 }
 
+// Harbor re-skin: the Edit action moved into a "..." overflow DropdownMenu
+// ("Contact options" trigger → "Edit contact" item). Radix menus open on
+// pointerdown, so dispatch that before the click to enter edit mode.
+async function enterEditMode() {
+  const trigger = screen.getByTitle('Contact options')
+  fireEvent.pointerDown(trigger, { button: 0 })
+  fireEvent.click(trigger)
+  const editItem = await screen.findByText('Edit contact')
+  fireEvent.click(editItem)
+}
+
 describe('PersonDetail Page', () => {
   it('should render person details', async () => {
     renderPersonDetail()
@@ -65,8 +76,9 @@ describe('PersonDetail Page', () => {
     renderPersonDetail()
     await screen.findByText('Mario')
 
-    // Should show 'M' initial in the avatar area
-    expect(screen.getByText('M')).toBeInTheDocument()
+    // Harbor re-skin: PersonAvatar renders two-letter initials via initialsOf();
+    // a single-name contact ("Mario") yields the first two letters.
+    expect(screen.getByText('MA')).toBeInTheDocument()
   })
 
   it('should render contact info fields', async () => {
@@ -104,8 +116,8 @@ describe('PersonDetail Page', () => {
     renderPersonDetail()
     await screen.findByText('Mario')
 
-    // Click Edit button
-    fireEvent.click(screen.getByText('Edit'))
+    // Enter edit mode via the overflow menu
+    await enterEditMode()
 
     // Should show Save and Cancel buttons
     expect(screen.getByText('Save')).toBeInTheDocument()
@@ -116,8 +128,8 @@ describe('PersonDetail Page', () => {
     renderPersonDetail()
     await screen.findByText('Mario')
 
-    // Enter edit mode
-    fireEvent.click(screen.getByText('Edit'))
+    // Enter edit mode via the overflow menu
+    await enterEditMode()
 
     // Clear the name field
     const nameInput = screen.getByPlaceholderText('Name...')
@@ -136,8 +148,8 @@ describe('PersonDetail Page', () => {
     renderPersonDetail()
     await screen.findByText('Mario')
 
-    // Enter edit mode
-    fireEvent.click(screen.getByText('Edit'))
+    // Enter edit mode via the overflow menu
+    await enterEditMode()
 
     // Set an invalid email
     const emailInput = screen.getByPlaceholderText('Enter email...')
@@ -156,8 +168,8 @@ describe('PersonDetail Page', () => {
     renderPersonDetail()
     await screen.findByText('Mario')
 
-    // Enter edit mode
-    fireEvent.click(screen.getByText('Edit'))
+    // Enter edit mode via the overflow menu
+    await enterEditMode()
 
     // Modify the name
     const nameInput = screen.getByPlaceholderText('Name...')

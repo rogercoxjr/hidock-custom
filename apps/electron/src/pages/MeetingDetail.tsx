@@ -2,7 +2,10 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Clock, MapPin, Users, Mic, FileText, Play, X, Edit, Check, Loader2, Link, Unlink, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { PersonAvatar } from '@/components/harbor/PersonAvatar'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
@@ -262,22 +265,22 @@ export function MeetingDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Loading meeting details...</p>
+      <div className="flex h-full items-center justify-center bg-bg">
+        <p className="text-ink-muted">Loading meeting details...</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <p className="text-destructive">{error}</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg">
+        <p className="text-danger">{error}</p>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => id && loadMeetingDetails(id)}>
             Retry
           </Button>
           <Button variant="outline" onClick={() => navigate('/calendar')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Calendar
           </Button>
         </div>
@@ -287,10 +290,10 @@ export function MeetingDetail() {
 
   if (!details) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4">
-        <p className="text-muted-foreground">Meeting not found</p>
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg">
+        <p className="text-ink-muted">Meeting not found</p>
         <Button variant="outline" onClick={() => navigate('/calendar')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Calendar
         </Button>
       </div>
@@ -311,39 +314,47 @@ export function MeetingDetail() {
   const hasMoreAttendees = attendees.length > ATTENDEES_COLLAPSED_LIMIT
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col bg-bg">
       {/* Header */}
-      <header className="flex items-center gap-4 border-b px-6 py-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/calendar')}>
+      <header className="flex items-center gap-4 border-b border-border bg-surface px-[var(--space-5)] py-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate('/calendar')}
+          className="text-ink-muted hover:text-ink"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
+          <Eyebrow className="mb-1">Meeting</Eyebrow>
           {isEditing ? (
             <Input
               value={editForm.subject}
               onChange={(e) => setEditForm(prev => ({ ...prev, subject: e.target.value }))}
-              className="text-xl font-bold h-auto py-1"
+              className="h-auto py-1 font-display text-[1.75rem] font-semibold tracking-[-0.02em]"
             />
           ) : (
-            <h1 className="text-xl font-bold">{meeting.subject}</h1>
+            <h1 className="truncate font-display text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.02em] text-ink">
+              {meeting.subject}
+            </h1>
           )}
-          <p className="text-sm text-muted-foreground">{formatDateTime(meeting.start_time)}</p>
+          <p className="mt-1 font-mono text-[11px] text-ink-muted">{formatDateTime(meeting.start_time)}</p>
         </div>
         <div className="flex items-center gap-2">
           {isEditing ? (
             <>
               <Button size="sm" variant="default" onClick={handleSaveEdit}>
-                <Check className="h-4 w-4 mr-2" />
+                <Check className="mr-2 h-4 w-4" />
                 Save
               </Button>
               <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4 mr-2" />
+                <X className="mr-2 h-4 w-4" />
                 Cancel
               </Button>
             </>
           ) : (
             <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
-              <Edit className="h-4 w-4 mr-2" />
+              <Edit className="mr-2 h-4 w-4" />
               Edit
             </Button>
           )}
@@ -351,28 +362,26 @@ export function MeetingDetail() {
       </header>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex-1 overflow-auto p-[var(--space-5)]">
+        <div className="mx-auto max-w-4xl space-y-[var(--space-5)]">
           {/* Meeting Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Meeting Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <Card className="bg-surface">
+            <CardContent className="space-y-4 p-[var(--space-5)]">
+              <Eyebrow>Meeting Details</Eyebrow>
               <div className="flex items-center gap-3">
-                <Clock className="h-5 w-5 text-muted-foreground" />
+                <Clock className="h-5 w-5 text-ink-muted" />
                 <div>
                   {/* C-MTG-003: Timezone-aware time display using safe formatters */}
-                  <p className="font-medium">
+                  <p className="font-medium text-ink">
                     {safeFormatTime(startDate, { hour: '2-digit', minute: '2-digit' })} -{' '}
                     {safeFormatTime(endDate, { hour: '2-digit', minute: '2-digit' })}
                     {isValidDate && (
-                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                      <span className="ml-1.5 font-mono text-[11px] font-normal text-ink-muted">
                         {safeGetTimezoneName(startDate)}
                       </span>
                     )}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ink-muted">
                     {durationMins} minutes
                     {isValidDate && (
                       <>
@@ -386,7 +395,7 @@ export function MeetingDetail() {
 
               {(meeting.location || isEditing) && (
                 <div className="flex items-center gap-3">
-                  <MapPin className="h-5 w-5 text-muted-foreground" />
+                  <MapPin className="h-5 w-5 text-ink-muted" />
                   {isEditing ? (
                     <Input
                       value={editForm.location}
@@ -395,18 +404,18 @@ export function MeetingDetail() {
                       className="flex-1"
                     />
                   ) : (
-                    <p>{meeting.location}</p>
+                    <p className="text-foreground">{meeting.location}</p>
                   )}
                 </div>
               )}
 
               {meeting.organizer_name && (
                 <div className="flex items-center gap-3">
-                  <Users className="h-5 w-5 text-muted-foreground" />
+                  <Users className="h-5 w-5 text-ink-muted" />
                   <div>
-                    <p className="font-medium">Organizer: {meeting.organizer_name}</p>
+                    <p className="font-medium text-ink">Organizer: {meeting.organizer_name}</p>
                     {meeting.organizer_email && (
-                      <p className="text-sm text-muted-foreground">{meeting.organizer_email}</p>
+                      <p className="text-sm text-ink-muted">{meeting.organizer_email}</p>
                     )}
                   </div>
                 </div>
@@ -415,17 +424,21 @@ export function MeetingDetail() {
               {/* B-MTG-005: Attendees with overflow and "Show all" toggle */}
               {attendees.length > 0 && (
                 <div>
-                  <p className="font-medium mb-2">Attendees ({attendees.length})</p>
+                  <p className="mb-2 font-medium text-ink">Attendees ({attendees.length})</p>
                   <div className="max-h-40 overflow-auto">
                     <div className="flex flex-wrap gap-2">
-                      {visibleAttendees.map((attendee, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-1 bg-secondary text-secondary-foreground rounded-full text-xs"
-                        >
-                          {attendee.name || attendee.email}
-                        </span>
-                      ))}
+                      {visibleAttendees.map((attendee, i) => {
+                        const label = attendee.name || attendee.email || 'Unknown'
+                        return (
+                          <span
+                            key={i}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-sunken py-1 pl-1 pr-2.5 text-xs text-ink"
+                          >
+                            <PersonAvatar name={label} size={20} />
+                            {label}
+                          </span>
+                        )
+                      })}
                     </div>
                   </div>
                   {hasMoreAttendees && (
@@ -437,12 +450,12 @@ export function MeetingDetail() {
                     >
                       {showAllAttendees ? (
                         <>
-                          <ChevronUp className="h-3 w-3 mr-1" />
+                          <ChevronUp className="mr-1 h-3 w-3" />
                           Show less
                         </>
                       ) : (
                         <>
-                          <ChevronDown className="h-3 w-3 mr-1" />
+                          <ChevronDown className="mr-1 h-3 w-3" />
                           Show all {attendees.length} attendees
                         </>
                       )}
@@ -454,16 +467,16 @@ export function MeetingDetail() {
               {/* Description (editable) */}
               {(meeting.description || isEditing) && (
                 <div>
-                  <p className="font-medium mb-1">Description</p>
+                  <p className="mb-1 font-medium text-ink">Description</p>
                   {isEditing ? (
                     <textarea
                       value={editForm.description}
                       onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                      className="text-sm w-full border rounded px-3 py-2 bg-background min-h-[80px]"
+                      className="min-h-[80px] w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
                       placeholder="Meeting description..."
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{meeting.description}</p>
+                    <p className="whitespace-pre-wrap text-sm text-ink-muted">{meeting.description}</p>
                   )}
                 </div>
               )}
@@ -474,7 +487,7 @@ export function MeetingDetail() {
                     href={meeting.meeting_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline text-sm"
+                    className="text-sm text-primary hover:underline"
                   >
                     Join Meeting Link
                   </a>
@@ -484,19 +497,17 @@ export function MeetingDetail() {
           </Card>
 
           {/* Recordings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Mic className="h-5 w-5" />
-                Recordings ({recordings.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Card className="bg-surface">
+            <CardContent className="p-[var(--space-5)]">
+              <div className="mb-4 flex items-center gap-2">
+                <Mic className="h-4 w-4 text-accent-2" />
+                <Eyebrow>Recordings ({recordings.length})</Eyebrow>
+              </div>
               {recordings.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <Mic className="h-10 w-10 text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground font-medium mb-1">No recordings linked</p>
-                  <p className="text-sm text-muted-foreground/70 max-w-sm">
+                  <Mic className="mb-3 h-10 w-10 text-ink-muted/40" />
+                  <p className="mb-1 font-medium text-ink-muted">No recordings linked</p>
+                  <p className="max-w-sm text-sm text-ink-muted/70">
                     Recordings are automatically linked when they overlap with the meeting time.
                     You can also manually link recordings from the Calendar view.
                   </p>
@@ -512,16 +523,16 @@ export function MeetingDetail() {
               ) : (
                 <div className="space-y-4">
                   {recordings.map((recording) => (
-                    <div key={recording.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
+                    <div key={recording.id} className="rounded-lg border border-border bg-surface-sunken p-4">
+                      <div className="mb-2 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Mic className="h-4 w-4 text-green-600" />
-                          <span className="font-medium">{recording.filename}</span>
+                          <Mic className="h-4 w-4 text-accent-2" />
+                          <span className="font-medium text-ink">{recording.filename}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs px-2 py-1 rounded-full bg-secondary">
+                          <Badge variant="default" size="sm" className="capitalize">
                             {recording.status}
-                          </span>
+                          </Badge>
                           {/* B-MTG-002: Unlink recording button */}
                           <Button
                             variant="ghost"
@@ -542,7 +553,7 @@ export function MeetingDetail() {
                           </Button>
                           {/* B-MTG-003: Play with loading spinner */}
                           {playbackLoading === recording.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <Loader2 className="h-4 w-4 animate-spin text-ink-muted" />
                           ) : currentlyPlayingId === recording.id ? (
                             <Button
                               variant="ghost"
@@ -576,32 +587,32 @@ export function MeetingDetail() {
                       )}
 
                       {recording.duration_seconds && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-ink-muted">
                           Duration: {formatDuration(recording.duration_seconds)}
                         </p>
                       )}
 
                       {/* Transcript */}
                       {recording.transcript && (
-                        <div className="mt-4 pt-4 border-t">
-                          <div className="flex items-center gap-2 mb-2">
-                            <FileText className="h-4 w-4" />
-                            <span className="font-medium text-sm">Transcript</span>
+                        <div className="mt-4 border-t border-border pt-4">
+                          <div className="mb-2 flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-ink-muted" />
+                            <span className="text-sm font-medium text-ink">Transcript</span>
                           </div>
 
                           {recording.transcript.summary && (
-                            <div className="mb-3 p-3 bg-muted rounded-lg">
-                              <p className="text-xs font-medium text-muted-foreground mb-1">Summary</p>
-                              <p className="text-sm">{recording.transcript.summary}</p>
+                            <div className="mb-3 rounded-lg border border-border bg-surface p-3">
+                              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Summary</p>
+                              <p className="text-sm text-foreground">{recording.transcript.summary}</p>
                             </div>
                           )}
 
                           {recording.transcript.action_items && (
                             <div className="mb-3">
-                              <p className="text-xs font-medium text-muted-foreground mb-1">
+                              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">
                                 Action Items
                               </p>
-                              <ul className="list-disc list-inside text-sm space-y-1">
+                              <ul className="list-inside list-disc space-y-1 text-sm text-foreground">
                                 {parseJsonArray<string>(recording.transcript.action_items).map(
                                   (item, i) => (
                                     <li key={i}>{item}</li>
@@ -612,10 +623,10 @@ export function MeetingDetail() {
                           )}
 
                           <details className="mt-2">
-                            <summary className="text-sm text-primary cursor-pointer hover:underline">
+                            <summary className="cursor-pointer text-sm text-primary hover:underline">
                               View full transcript
                             </summary>
-                            <p className="mt-2 text-sm whitespace-pre-wrap bg-muted p-3 rounded-lg max-h-64 overflow-auto">
+                            <p className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-surface p-3 text-sm text-foreground">
                               {recording.transcript.full_text}
                             </p>
                           </details>
@@ -630,10 +641,10 @@ export function MeetingDetail() {
 
           {/* AUD2-002: Actionables Section */}
           {actionablesError ? (
-            <Card>
+            <Card className="bg-surface">
               <CardContent className="py-6">
-                <div className="flex items-center justify-center gap-3 text-sm text-muted-foreground">
-                  <AlertCircle className="h-4 w-4 text-destructive" />
+                <div className="flex items-center justify-center gap-3 text-sm text-ink-muted">
+                  <AlertCircle className="h-4 w-4 text-danger" />
                   <span>{actionablesError}</span>
                   <Button variant="ghost" size="sm" onClick={() => id && loadMeetingDetails(id)}>
                     Retry
@@ -658,26 +669,26 @@ export function MeetingDetail() {
           </DialogHeader>
           {linkLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="h-6 w-6 animate-spin text-ink-muted" />
             </div>
           ) : availableMeetings.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
+            <p className="py-8 text-center text-sm text-ink-muted">
               No candidate meetings found.
             </p>
           ) : (
-            <div className="max-h-64 overflow-auto space-y-2">
+            <div className="max-h-64 space-y-2 overflow-auto">
               {availableMeetings.map((m: any) => (
                 <button
                   key={m.meetingId || m.id}
-                  className="w-full text-left p-3 border rounded-lg hover:bg-muted transition-colors"
+                  className="w-full rounded-lg border border-border bg-surface p-3 text-left transition-colors hover:border-border-strong hover:bg-surface-hover"
                   onClick={() => handleLinkToMeeting(m.meetingId || m.id)}
                 >
-                  <p className="font-medium text-sm">{m.subject}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm font-medium text-ink">{m.subject}</p>
+                  <p className="font-mono text-[11px] text-ink-muted">
                     {formatDateTime(m.startTime || m.start_time)}
                   </p>
                   {m.confidenceScore !== undefined && (
-                    <p className="text-xs text-primary">
+                    <p className="text-xs text-accent-2">
                       Confidence: {Math.round(m.confidenceScore * 100)}%
                     </p>
                   )}

@@ -59,15 +59,18 @@ vi.mock('../SpeakersPanel', () => ({
   SpeakersPanel: ({
     turns,
     assignedNames,
+    suggestions,
     onChanged,
   }: {
     turns: Array<{ speaker: string }>
     assignedNames?: Record<string, string>
+    suggestions?: Array<unknown>
     onChanged: () => void
   }) => (
     <div data-testid="speakers-panel">
       <div data-testid="panel-turn-count">{turns.length}</div>
       <div data-testid="panel-assigned-names">{JSON.stringify(assignedNames ?? {})}</div>
+      <div data-testid="panel-suggestion-count">{suggestions?.length ?? 0}</div>
       <button onClick={onChanged}>fire onChanged</button>
     </div>
   ),
@@ -92,6 +95,7 @@ vi.mock('../TranscriptViewer', () => ({
 
 const mockGetForRecording = vi.fn()
 const mockGetByRecordingId = vi.fn()
+const mockGetSuggestions = vi.fn()
 
 const baseRecording: UnifiedRecording = {
   id: 'rec-1',
@@ -150,12 +154,14 @@ beforeEach(() => {
       { speaker: 'B', startMs: 1000, endMs: 2000, text: 'yo' },
     ])
   )
+  // Default: no pending suggestions (keeps existing tests unaffected).
+  mockGetSuggestions.mockResolvedValue({ success: true, data: [] })
   Object.defineProperty(window, 'electronAPI', {
     value: {
       knowledge: { update: vi.fn().mockResolvedValue({ success: true }) },
       recordings: { selectMeeting: vi.fn().mockResolvedValue({ success: true }) },
       storage: { openFile: vi.fn(), revealInFolder: vi.fn() },
-      speakers: { getForRecording: mockGetForRecording },
+      speakers: { getForRecording: mockGetForRecording, getSuggestions: mockGetSuggestions },
       transcripts: { getByRecordingId: mockGetByRecordingId },
     },
     writable: true,
@@ -178,6 +184,80 @@ describe('SourceReader — diarization wiring (D3-T4 Fix 1)', () => {
     // TranscriptViewer receives structured turns.
     expect(screen.getByTestId('tv-has-turns').textContent).toBe('yes')
     expect(screen.getByTestId('tv-turn-count').textContent).toBe('2')
+  })
+
+  // Regression: matcher suggestions must NOT flash-then-vanish when the parent's
+  // batched transcript fetch resolves and the `transcript` prop flips undefined->object
+  // while recordingId is unchanged. (Root cause: the prop-seeding effect blanked
+  // suggestions on every transcriptTurns change.)
+  it('keeps suggestions visible when the transcript prop churns at a stable recording (no flicker)', async () => {
+    mockGetSuggestions.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 'sug-1',
+          kind: 'identity',
+          targetLabel: 'A',
+          targetLabel2: null,
+          contactId: 'c-x',
+          contactName: 'Xavier',
+          contactName2: null,
+          score: 0.8,
+          rank: 1,
+          rationale: 'strong',
+          requiresWarning: false,
+        },
+      ],
+    })
+
+    // Transcript present (panel rendered); suggestion loads.
+    const { rerender } = render(
+      <SourceReader
+        recording={baseRecording}
+        transcript={makeTranscript([{ speaker: 'A', startMs: 0, endMs: 1000, text: 'hi' }])}
+        onSeek={vi.fn()}
+      />
+    )
+    await waitFor(() => expect(screen.getByTestId('panel-suggestion-count').textContent).toBe('1'))
+
+    // Parent re-issues the transcript with a CHANGED turns string (e.g. Map rebuild /
+    // enrichment), recordingId unchanged. The buggy seed effect blanked suggestions
+    // synchronously on this change -> the flash-then-vanish.
+    rerender(
+      <SourceReader
+        recording={baseRecording}
+        transcript={makeTranscript([
+          { speaker: 'A', startMs: 0, endMs: 1000, text: 'hi' },
+          { speaker: 'B', startMs: 1000, endMs: 2000, text: 'there' },
+        ])}
+        onSeek={vi.fn()}
+      />
+    )
+
+    // No empty window: suggestion stays visible across the prop churn (buggy = '0' here).
+    expect(screen.getByTestId('panel-suggestion-count').textContent).toBe('1')
+    await waitFor(() => expect(screen.getByTestId('panel-suggestion-count').textContent).toBe('1'))
+  })
+
+  // Switching to a different recording MUST clear the previous recording's suggestions.
+  it('clears suggestions when the recording changes', async () => {
+    mockGetSuggestions.mockResolvedValue({
+      success: true,
+      data: [
+        { id: 'sug-1', kind: 'identity', targetLabel: 'A', targetLabel2: null, contactId: 'c-x',
+          contactName: 'Xavier', contactName2: null, score: 0.8, rank: 1, rationale: 'strong', requiresWarning: false },
+      ],
+    })
+    const { rerender } = render(
+      <SourceReader recording={baseRecording} transcript={makeTranscript([{ speaker: 'A', startMs: 0, endMs: 1000, text: 'hi' }])} onSeek={vi.fn()} />
+    )
+    await waitFor(() => expect(screen.getByTestId('panel-suggestion-count').textContent).toBe('1'))
+
+    // Different recording with no suggestions.
+    mockGetSuggestions.mockResolvedValue({ success: true, data: [] })
+    const other = { ...baseRecording, id: 'rec-2' } as UnifiedRecording
+    rerender(<SourceReader recording={other} transcript={makeTranscript([{ speaker: 'A', startMs: 0, endMs: 1000, text: 'hi' }])} onSeek={vi.fn()} />)
+    await waitFor(() => expect(screen.getByTestId('panel-suggestion-count').textContent).toBe('0'))
   })
 
   it('fetches the speaker->contact name map and passes it as speakerNames + assignedNames', async () => {

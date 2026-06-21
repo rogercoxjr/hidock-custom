@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
 import {
   getHiDockDeviceService,
   BatteryStatus
@@ -872,19 +873,20 @@ export function Device() {
       : '')
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <header className="border-b px-6 py-4">
-        <h1 className="text-2xl font-bold">Device Sync</h1>
-        <p className="text-sm text-muted-foreground">Manage your HiDock device and sync recordings</p>
-      </header>
-
+    <div className="flex flex-col h-full bg-bg">
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex-1 overflow-auto px-[var(--space-6)] pb-[var(--space-8)] pt-[var(--space-5)]">
+        <div className="max-w-4xl mx-auto space-y-[var(--space-5)]">
+          {/* Header */}
+          <div>
+            <Eyebrow>Device</Eyebrow>
+            <h1 className="font-display text-[2.25rem] font-semibold tracking-[-0.02em] text-ink">Sync</h1>
+            <p className="text-sm text-ink-muted">Manage your HiDock device and sync recordings</p>
+          </div>
+
           {/* Error display */}
           {error && (
-            <div className="flex items-center gap-2 p-4 bg-destructive/10 text-destructive rounded-lg">
+            <div className="flex items-center gap-2 p-4 bg-danger-soft text-danger rounded-lg">
               <AlertCircle className="h-5 w-5" />
               <p>{error}</p>
               <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto">
@@ -909,8 +911,8 @@ export function Device() {
             <CardContent>
               {!deviceState.connected ? (
                 <div className="text-center py-8">
-                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-                    <Usb className={`h-10 w-10 text-muted-foreground ${connecting ? 'animate-pulse' : ''}`} />
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-sunken flex items-center justify-center">
+                    <Usb className={`h-10 w-10 text-ink-muted ${connecting ? 'animate-pulse' : ''}`} />
                   </div>
                   {connecting ? (
                     <div className="space-y-3 max-w-sm mx-auto">
@@ -918,12 +920,12 @@ export function Device() {
                       {connectionStatus.progress !== undefined && (
                         <Progress value={connectionStatus.progress} className="h-2" />
                       )}
-                      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center justify-center gap-2 text-xs text-ink-muted">
                         <span>Elapsed: {(connectionElapsed / 1000).toFixed(1)}s</span>
-                        <span className="text-muted-foreground/50">|</span>
+                        <span className="text-ink-muted/50">|</span>
                         <span>Timeout in {Math.max(0, (CONNECTION_TIMEOUT_MS - connectionElapsed) / 1000).toFixed(0)}s</span>
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-ink-muted">
                         Make sure your HiDock is connected via USB...
                       </p>
                       <Button
@@ -938,16 +940,16 @@ export function Device() {
                     </div>
                   ) : (
                     <>
-                      <p className="text-muted-foreground mb-4">
+                      <p className="text-ink-muted mb-4">
                         Connect your HiDock device via USB to begin syncing recordings
                       </p>
                       <Button onClick={handleConnect} disabled={connecting}>
                         <Usb className="h-4 w-4 mr-2" />
                         Connect Device
                       </Button>
-                      <div className="mt-6 pt-4 border-t space-y-3">
+                      <div className="mt-6 pt-4 border-t border-border space-y-3">
                         <div className="flex items-center justify-center gap-3">
-                          <Label htmlFor="auto-connect" className="text-sm text-muted-foreground">
+                          <Label htmlFor="auto-connect" className="text-sm text-ink-muted">
                             Auto-connect on startup
                           </Label>
                           <Switch
@@ -957,12 +959,12 @@ export function Device() {
                           />
                         </div>
                         {autoConnectConfig.enabled && (
-                          <p className="text-xs text-muted-foreground mt-1 text-center">
+                          <p className="text-xs text-ink-muted mt-1 text-center">
                             Will automatically connect to previously authorized devices
                           </p>
                         )}
                         <div className="flex items-center justify-center gap-3">
-                          <Label htmlFor="auto-download-disconnected" className="text-sm text-muted-foreground">
+                          <Label htmlFor="auto-download-disconnected" className="text-sm text-ink-muted">
                             Auto-download recordings
                           </Label>
                           <Switch
@@ -973,7 +975,7 @@ export function Device() {
                           />
                         </div>
                         <div className="flex items-center justify-center gap-3">
-                          <Label htmlFor="auto-transcribe-disconnected" className="text-sm text-muted-foreground">
+                          <Label htmlFor="auto-transcribe-disconnected" className="text-sm text-ink-muted">
                             Auto-transcribe recordings
                           </Label>
                           <Switch
@@ -989,35 +991,35 @@ export function Device() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {/* Connected device info */}
-                  {/* C-004: Color-coded status indicator based on sync state */}
-                  <div className={`flex items-center justify-between p-4 rounded-lg ${
-                    storeSyncing
-                      ? 'bg-blue-50 dark:bg-blue-950'
-                      : error
-                        ? 'bg-amber-50 dark:bg-amber-950'
-                        : 'bg-green-50 dark:bg-green-950'
-                  }`}>
+                  {/* Connected device info — prominent navy device card */}
+                  {/* C-004: Status conveyed via the indicator dot + label (synced/syncing/warning) */}
+                  <div className="flex items-center justify-between rounded-xl bg-brand-navy p-[var(--space-5)] text-white">
                     <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        storeSyncing
-                          ? 'bg-blue-500 animate-pulse'
-                          : error
-                            ? 'bg-amber-500'
-                            : 'bg-green-500 animate-pulse'
-                      }`} />
+                      <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-md bg-white/[0.12]">
+                        <HardDrive className="h-[22px] w-[22px]" />
+                      </div>
                       <div>
-                        <p className="font-medium capitalize">{deviceState.model.replace('-', ' ')}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {storeSyncing ? 'Syncing...' : `Firmware ${deviceState.firmwareVersion}`}
+                        <p className="font-semibold capitalize">{deviceState.model.replace('-', ' ')}</p>
+                        <p className="font-mono text-[11px] text-white/70">
+                          {storeSyncing ? 'Syncing…' : `fw ${deviceState.firmwareVersion}`}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={handleResetDevice} title="Reset USB connection if device is unresponsive">
+                      <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.12] px-2.5 py-1 font-mono text-[11px]">
+                        <span className={`h-[7px] w-[7px] rounded-full ${
+                          storeSyncing
+                            ? 'bg-brand-teal animate-pulse'
+                            : error
+                              ? 'bg-warning'
+                              : 'bg-brand-teal animate-pulse'
+                        }`} />
+                        {storeSyncing ? 'syncing' : error ? 'attention' : 'connected'}
+                      </span>
+                      <Button variant="outline" size="sm" onClick={handleResetDevice} title="Reset USB connection if device is unresponsive" className="border-white/20 bg-white/[0.08] text-white hover:bg-white/[0.16] hover:text-white">
                         <RotateCcw className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="sm" onClick={handleDisconnect}>
+                      <Button variant="outline" size="sm" onClick={handleDisconnect} className="border-white/20 bg-white/[0.08] text-white hover:bg-white/[0.16] hover:text-white">
                         Disconnect
                       </Button>
                     </div>
@@ -1025,24 +1027,24 @@ export function Device() {
 
                   {/* Storage and Recording count */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 border rounded-lg">
+                    <div className="rounded-xl border border-border bg-surface p-[var(--space-5)] shadow-sm">
                       <div className="flex items-center gap-2 mb-2">
-                        <HardDrive className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">Storage</span>
+                        <HardDrive className="h-4 w-4 text-ink-muted" />
+                        <Eyebrow tone="muted">Storage</Eyebrow>
                       </div>
                       {deviceState.storage ? (
                         deviceState.storage.capacity > 0 ? (
                           <>
-                            <p className="text-2xl font-bold">
+                            <p className="font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">
                               {formatBytes(deviceState.storage.capacity - deviceState.storage.used)}
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-ink-muted">
                               free of {formatBytes(deviceState.storage.capacity)}
                             </p>
-                            <p className="text-xs text-muted-foreground mt-1">
+                            <p className="text-xs text-ink-muted mt-1">
                               {formatBytes(deviceState.storage.used)} used
                             </p>
-                            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                            <div className="mt-2 h-2 bg-surface-sunken rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-primary"
                                 style={{
@@ -1052,13 +1054,13 @@ export function Device() {
                             </div>
                           </>
                         ) : (
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-ink-muted">
                             Storage info unavailable
                           </p>
                         )
                       ) : (
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-muted-foreground">
+                          <div className="flex items-center gap-2 text-ink-muted">
                             <RefreshCw className="h-4 w-4 animate-spin" />
                             <span className="text-sm">Loading...</span>
                           </div>
@@ -1069,13 +1071,13 @@ export function Device() {
                         </div>
                       )}
                     </div>
-                    <div className="p-4 border rounded-lg">
+                    <div className="rounded-xl border border-border bg-surface p-[var(--space-5)] shadow-sm">
                       <div className="flex items-center gap-2 mb-2">
-                        <Mic className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">Recordings</span>
+                        <Mic className="h-4 w-4 text-ink-muted" />
+                        <Eyebrow tone="muted">Recordings</Eyebrow>
                       </div>
-                      <p className="text-2xl font-bold">{deviceState.recordingCount}</p>
-                      <p className="text-xs text-muted-foreground">files on device</p>
+                      <p className="font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">{deviceState.recordingCount}</p>
+                      <p className="text-xs text-ink-muted">files on device</p>
                     </div>
                   </div>
 
@@ -1083,13 +1085,13 @@ export function Device() {
                   {/* TODO(DV-07): Additional device settings (LED brightness, notification sounds,
                       Bluetooth pairing mode) pending Jensen protocol integration. Currently only
                       auto-record is exposed from the device firmware settings. */}
-                  <div className="p-4 border rounded-lg">
-                    <p className="font-medium mb-3">Device Settings</p>
+                  <div className="rounded-xl border border-border bg-surface p-[var(--space-5)] shadow-sm">
+                    <p className="font-medium mb-3 text-ink">Device Settings</p>
                     {deviceState.settings && (
                       <div className="flex items-center justify-between mb-3">
                         <Label htmlFor="auto-record" className="flex items-center gap-2">
                           Auto-record meetings
-                          {configLoading.autoRecord && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                          {configLoading.autoRecord && <Loader2 className="h-3 w-3 animate-spin text-ink-muted" />}
                         </Label>
                         <Switch
                           id="auto-record"
@@ -1112,7 +1114,7 @@ export function Device() {
                     <div className="flex items-center justify-between mb-3">
                       <Label htmlFor="auto-download" className="text-sm flex items-center gap-2">
                         Auto-download recordings
-                        {configLoading.autoDownload && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                        {configLoading.autoDownload && <Loader2 className="h-3 w-3 animate-spin text-ink-muted" />}
                       </Label>
                       <Switch
                         id="auto-download"
@@ -1124,7 +1126,7 @@ export function Device() {
                     <div className="flex items-center justify-between">
                       <Label htmlFor="auto-transcribe" className="text-sm flex items-center gap-2">
                         Auto-transcribe recordings
-                        {configLoading.autoTranscribe && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                        {configLoading.autoTranscribe && <Loader2 className="h-3 w-3 animate-spin text-ink-muted" />}
                       </Label>
                       <Switch
                         id="auto-transcribe"
@@ -1135,7 +1137,7 @@ export function Device() {
                     </div>
 
                     {/* DV-02: Format Storage button */}
-                    <div className="mt-3 pt-3 border-t">
+                    <div className="mt-3 pt-3 border-t border-border">
                       <Button
                         variant="destructive"
                         size="sm"
@@ -1146,7 +1148,7 @@ export function Device() {
                         <Trash2 className="h-4 w-4 mr-2" />
                         {formatting ? 'Formatting...' : 'Format Storage'}
                       </Button>
-                      <p className="text-[10px] text-muted-foreground mt-1 text-center">
+                      <p className="text-[10px] text-ink-muted mt-1 text-center">
                         Erases all recordings from device
                       </p>
                     </div>
@@ -1312,31 +1314,31 @@ export function Device() {
                 <CardContent>
                   <div
                     ref={logContainerRef}
-                    className="bg-muted/50 rounded-lg p-2 font-mono text-xs max-h-64 overflow-y-auto"
+                    className="bg-bg-sunken rounded-lg p-2 font-mono text-xs max-h-64 overflow-y-auto"
                   >
                     {activityLog.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-4">
+                      <p className="text-ink-muted text-center py-4">
                         No activity yet. Device operations will appear here.
                       </p>
                     ) : (
                       activityLog.map((entry, index) => (
                         <div
                           key={`${entry.timestamp.getTime()}-${index}`}
-                          className={`flex items-start gap-2 py-1 border-b border-muted last:border-0 ${
+                          className={`flex items-start gap-2 py-1 border-b border-border last:border-0 ${
                             entry.type === 'error'
-                              ? 'text-red-500'
+                              ? 'text-danger'
                               : entry.type === 'success'
-                                ? 'text-green-500'
+                                ? 'text-success'
                                 : entry.type === 'warning'
-                                  ? 'text-amber-500'
+                                  ? 'text-warning'
                                   : entry.type === 'usb-out'
-                                    ? 'text-blue-500'
+                                    ? 'text-[var(--blue-500)]'
                                     : entry.type === 'usb-in'
-                                      ? 'text-purple-500'
-                                      : 'text-muted-foreground'
+                                      ? 'text-accent-2'
+                                      : 'text-ink-muted'
                           }`}
                         >
-                          <span className="text-muted-foreground/60 shrink-0">
+                          <span className="text-ink-muted/60 shrink-0">
                             {entry.timestamp.toLocaleTimeString('en-US', {
                               hour12: false,
                               hour: '2-digit',
@@ -1361,7 +1363,7 @@ export function Device() {
                           <span className="flex-1">
                             {entry.message}
                             {entry.details && (
-                              <span className="text-muted-foreground/80">
+                              <span className="text-ink-muted/80">
                                 {' '}
                                 - {entry.details}
                               </span>
@@ -1390,19 +1392,19 @@ export function Device() {
               <CardContent>
                 <div className="space-y-4">
                   {/* Status indicator */}
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-[var(--space-5)] shadow-sm">
                     <div className="flex items-center gap-3">
                       <div
                         className={`w-3 h-3 rounded-full ${
                           realtimeActive
                             ? realtimePaused
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500 animate-pulse'
-                            : 'bg-gray-400'
+                              ? 'bg-warning'
+                              : 'bg-danger animate-pulse'
+                            : 'bg-border-strong'
                         }`}
                       />
                       <div>
-                        <p className="font-medium">
+                        <p className="font-medium text-ink">
                           {realtimeActive
                             ? realtimePaused
                               ? 'Paused'
@@ -1410,7 +1412,7 @@ export function Device() {
                             : 'Idle'}
                         </p>
                         {realtimeActive && (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-ink-muted">
                             Received: {formatBytes(realtimeDataReceived)}
                           </p>
                         )}
@@ -1443,7 +1445,7 @@ export function Device() {
                       )}
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-ink-muted">
                     Realtime streaming captures audio directly from the device microphone.
                     Audio data is received via USB at 16kHz 16-bit mono.
                   </p>
@@ -1467,24 +1469,24 @@ export function Device() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-[var(--space-5)] shadow-sm">
                     <div className="flex items-center gap-3">
                       <div
                         className={`w-12 h-6 rounded border-2 relative ${
                           batteryStatus
                             ? batteryStatus.batteryLevel > 20
-                              ? 'border-green-500'
-                              : 'border-red-500'
-                            : 'border-gray-400'
+                              ? 'border-success'
+                              : 'border-danger'
+                            : 'border-border-strong'
                         }`}
                       >
                         <div
                           className={`absolute inset-0.5 rounded-sm ${
                             batteryStatus
                               ? batteryStatus.batteryLevel > 20
-                                ? 'bg-green-500'
-                                : 'bg-red-500'
-                              : 'bg-gray-400'
+                                ? 'bg-success'
+                                : 'bg-danger'
+                              : 'bg-border-strong'
                           }`}
                           style={{
                             width: `${batteryStatus?.batteryLevel ?? 0}%`
@@ -1493,10 +1495,10 @@ export function Device() {
                         <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-1 h-3 bg-current rounded-r" />
                       </div>
                       <div>
-                        <p className="font-medium">
+                        <p className="font-medium text-ink">
                           {batteryStatus ? `${batteryStatus.batteryLevel}%` : 'Loading...'}
                         </p>
-                        <p className="text-xs text-muted-foreground capitalize">
+                        <p className="text-xs text-ink-muted capitalize">
                           {batteryStatus?.status ?? 'Unknown'}
                         </p>
                       </div>
@@ -1521,18 +1523,18 @@ export function Device() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-[var(--space-5)] shadow-sm">
                       <div className="flex items-center gap-3">
                         <Bluetooth
                           className={`h-5 w-5 ${
-                            bluetoothScanning ? 'text-blue-500 animate-pulse' : 'text-muted-foreground'
+                            bluetoothScanning ? 'text-[var(--blue-500)] animate-pulse' : 'text-ink-muted'
                           }`}
                         />
                         <div>
-                          <p className="font-medium">
+                          <p className="font-medium text-ink">
                             {bluetoothScanning ? 'Scanning...' : 'Bluetooth Ready'}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-ink-muted">
                             {bluetoothScanning
                               ? 'Looking for nearby devices'
                               : 'Tap Scan to find devices'}
@@ -1555,7 +1557,7 @@ export function Device() {
                         )}
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-ink-muted">
                       P1 devices can connect to Bluetooth audio devices for wireless playback.
                     </p>
                   </div>
@@ -1572,20 +1574,20 @@ export function Device() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <h3 className="font-medium">1. Connect your device</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="font-medium text-ink">1. Connect your device</h3>
+                  <p className="text-sm text-ink-muted">
                     Plug in your HiDock via USB and click "Connect Device" to establish a connection
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <h3 className="font-medium">2. Sync automatically</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="font-medium text-ink">2. Sync automatically</h3>
+                  <p className="text-sm text-ink-muted">
                     Enable auto-download to automatically sync new recordings when your device connects
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <h3 className="font-medium">3. Auto-transcribe</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="font-medium text-ink">3. Auto-transcribe</h3>
+                  <p className="text-sm text-ink-muted">
                     Recordings are automatically transcribed and linked to your calendar meetings
                   </p>
                 </div>

@@ -42,7 +42,7 @@ export function BulkActionsBar({
     <div
       className={cn(
         'flex items-center justify-between gap-4 px-6 py-3',
-        'bg-primary/5 border-b border-primary/20',
+        'bg-accent-strong-soft border-b border-border-brand',
         'animate-in slide-in-from-top-2 duration-200'
       )}
       role="toolbar"
@@ -58,7 +58,7 @@ export function BulkActionsBar({
           aria-label={allSelected ? 'Deselect all' : 'Select all'}
         >
           {allSelected ? (
-            <CheckSquare className="h-4 w-4 text-primary" />
+            <CheckSquare className="h-4 w-4 text-accent-strong" />
           ) : (
             <Square className="h-4 w-4" />
           )}
@@ -66,7 +66,7 @@ export function BulkActionsBar({
         </Button>
 
         {/* Selection Count */}
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-ink-muted">
           {selectedCount} of {totalCount} selected
         </span>
 
@@ -74,7 +74,7 @@ export function BulkActionsBar({
         {isProcessing && progress && (
           <div className="flex items-center gap-2 ml-4">
             <Progress value={(progress.current / progress.total) * 100} className="w-32 h-2" />
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-ink-muted">
               {progress.current}/{progress.total}
             </span>
           </div>

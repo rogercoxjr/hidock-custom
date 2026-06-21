@@ -15,8 +15,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useAppStore, useCalendarSyncing } from '@/store/useAppStore'
 import { useConfigStore } from '@/store/domain/useConfigStore'
+import { useUIStore } from '@/store/ui/useUIStore'
 import { formatBytes } from '@/lib/utils'
 import { HealthCheck } from '@/components/HealthCheck'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { SegmentedToggle } from '@/components/ui/segmented-toggle'
 import { toast } from '@/components/ui/toaster'
 import type { StorageInfo, AppConfig } from '@/types'
 
@@ -46,6 +51,9 @@ export function Settings() {
   const syncCalendar = useAppStore((s) => s.syncCalendar)
   const calendarSyncing = useCalendarSyncing()
   const { config, loadConfig, updateConfig, configLoading } = useConfigStore()
+  // Appearance — Harbor theme (persisted + applied to <html> by useApplyTheme)
+  const theme = useUIStore((s) => s.theme)
+  const setTheme = useUIStore((s) => s.setTheme)
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null)
   const [storageError, setStorageError] = useState<string | null>(null) // B-SET-002: Storage error state
   const [saving, setSaving] = useState(false)
@@ -569,9 +577,9 @@ export function Settings() {
   // Loading state
   if (configLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-        <p className="text-muted-foreground">Loading settings...</p>
+      <div className="flex h-full flex-col items-center justify-center bg-bg">
+        <RefreshCw className="mb-4 h-8 w-8 animate-spin text-ink-muted" />
+        <p className="text-ink-muted">Loading settings...</p>
       </div>
     )
   }
@@ -579,12 +587,12 @@ export function Settings() {
   // Error state with retry
   if (loadError) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-6">
-        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-        <h2 className="text-xl font-semibold mb-2">Failed to Load Settings</h2>
-        <p className="text-muted-foreground mb-4 text-center max-w-md">{loadError}</p>
+      <div className="flex h-full flex-col items-center justify-center bg-bg p-[var(--space-6)]">
+        <AlertCircle className="mb-4 h-12 w-12 text-danger" />
+        <h2 className="mb-2 font-display text-[1.375rem] font-semibold tracking-[-0.01em] text-ink">Failed to Load Settings</h2>
+        <p className="mb-4 max-w-md text-center text-ink-muted">{loadError}</p>
         <Button onClick={loadConfigStable}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshCw className="mr-2 h-4 w-4" />
           Retry
         </Button>
       </div>
@@ -592,22 +600,63 @@ export function Settings() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <header className="border-b px-6 py-4">
-        <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="flex h-full flex-col bg-bg text-foreground">
+      <header className="shrink-0 border-b border-border bg-surface px-[var(--space-6)] py-[var(--space-4)]">
+        <Eyebrow>Workspace</Eyebrow>
+        <h1 className="mt-1 font-display text-[1.75rem] font-semibold tracking-[-0.02em] text-ink">Settings</h1>
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-2xl mx-auto space-y-6">
-          {/* Calendar Settings */}
-          <Card>
+      <div className="flex-1 overflow-auto p-[var(--space-6)]">
+        <div className="mx-auto max-w-2xl space-y-[var(--space-5)]">
+          {/* Appearance */}
+          <Card className="border-border bg-surface shadow-sm">
             <CardHeader>
-              <CardTitle>Calendar</CardTitle>
-              <CardDescription>Configure calendar sync from Outlook</CardDescription>
+              <CardTitle className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
+                Appearance
+              </CardTitle>
+              <CardDescription className="text-ink-muted">
+                Choose how HiDock looks. System follows your operating system theme.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">Theme</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">Light is the default. Your choice is saved and applied instantly.</p>
+                </div>
+                <SegmentedToggle
+                  aria-label="Theme"
+                  value={theme}
+                  onChange={setTheme}
+                  options={[
+                    { value: 'light', label: 'Light' },
+                    { value: 'dark', label: 'Dark' },
+                    { value: 'system', label: 'System' }
+                  ]}
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink">Processing</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    Recordings stay on the device until you sync. Calm from the noise.
+                  </p>
+                </div>
+                <Badge variant="success" size="md">local first</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Calendar Settings */}
+          <Card className="border-border bg-surface shadow-sm">
+            <CardHeader>
+              <CardTitle className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">Calendar</CardTitle>
+              <CardDescription className="text-ink-muted">Configure calendar sync from Outlook</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label htmlFor="icsUrl" className="text-sm font-medium">ICS Calendar URL</label>
+                <label htmlFor="icsUrl" className="text-sm font-medium text-ink">ICS Calendar URL</label>
                 <Input
                   id="icsUrl"
                   type="url"
@@ -620,7 +669,7 @@ export function Settings() {
                   aria-describedby="icsUrl-description"
                   className="mt-1"
                 />
-                <p id="icsUrl-description" className="text-xs text-muted-foreground mt-1">
+                <p id="icsUrl-description" className="mt-1 text-xs text-ink-muted">
                   Publish your Outlook calendar and paste the ICS link here
                 </p>
               </div>
@@ -634,15 +683,15 @@ export function Settings() {
                     onChange={(e) => setSyncEnabled(e.target.checked)}
                     disabled={saving}
                     aria-label="Enable auto-sync"
-                    className="rounded"
+                    className="h-4 w-4 rounded border-border-strong text-primary accent-[var(--primary)]"
                   />
-                  <label htmlFor="syncEnabled" className="text-sm">
+                  <label htmlFor="syncEnabled" className="text-sm text-foreground">
                     Auto-sync enabled
                   </label>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <label htmlFor="syncInterval" className="text-sm">Every</label>
+                  <label htmlFor="syncInterval" className="text-sm text-foreground">Every</label>
                   <Input
                     id="syncInterval"
                     type="number"
@@ -660,7 +709,7 @@ export function Settings() {
                     aria-label="Sync interval in minutes"
                     className="w-20"
                   />
-                  <span className="text-sm">minutes</span>
+                  <span className="text-sm text-foreground">minutes</span>
                 </div>
               </div>
 
@@ -683,7 +732,7 @@ export function Settings() {
                   Sync Now
                 </Button>
                 {config?.calendar.lastSyncAt && (
-                  <span className="text-xs text-muted-foreground ml-2">
+                  <span className="ml-2 text-xs text-ink-muted">
                     Last synced: {new Date(config.calendar.lastSyncAt).toLocaleString()}
                   </span>
                 )}
@@ -692,15 +741,15 @@ export function Settings() {
           </Card>
 
           {/* Transcription Settings */}
-          <Card>
+          <Card className="border-border bg-surface shadow-sm">
             <CardHeader>
-              <CardTitle>Transcription</CardTitle>
-              <CardDescription>Configure the transcription (ASR) provider</CardDescription>
+              <CardTitle className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">Transcription</CardTitle>
+              <CardDescription className="text-ink-muted">Configure the transcription (ASR) provider</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* ASR provider picker — Button-group idiom (matches Chat provider toggle) */}
               <div>
-                <label id="asrProvider-label" className="text-sm font-medium">ASR Provider</label>
+                <label id="asrProvider-label" className="text-sm font-medium text-ink">ASR Provider</label>
                 <div className="flex gap-2 mt-2" role="group" aria-labelledby="asrProvider-label">
                   <Button
                     variant={asrProvider === 'gemini' ? 'default' : 'outline'}
@@ -736,13 +785,13 @@ export function Settings() {
               </div>
 
               {asrProvider === 'assemblyai' && (
-                <p className="text-xs text-muted-foreground rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-2">
+                <p className="rounded-md border border-warning/30 bg-warning-soft p-2 text-xs text-warning">
                   Speaker detection uses AssemblyAI (cloud, global routing); recordings are uploaded for processing.{' '}
                   <a
                     href="https://www.assemblyai.com/legal/terms-of-service"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline"
+                    className="font-medium underline hover:opacity-80"
                   >
                     Terms of Service
                   </a>
@@ -752,7 +801,7 @@ export function Settings() {
               {asrProvider === 'gemini' && (
                 <>
               <div>
-                <label htmlFor="geminiApiKey" className="text-sm font-medium">Gemini API Key</label>
+                <label htmlFor="geminiApiKey" className="text-sm font-medium text-ink">Gemini API Key</label>
                 <div className="relative mt-1">
                   <Input
                     id="geminiApiKey"
@@ -778,7 +827,7 @@ export function Settings() {
                     {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p id="geminiApiKey-description" className="text-xs text-muted-foreground mt-1">
+                <p id="geminiApiKey-description" className="mt-1 text-xs text-ink-muted">
                   Get your API key from{' '}
                   <a
                     href="https://aistudio.google.com/app/apikey"
@@ -792,7 +841,7 @@ export function Settings() {
               </div>
 
               <div>
-                <label htmlFor="geminiModel" className="text-sm font-medium">Transcription Model</label>
+                <label htmlFor="geminiModel" className="text-sm font-medium text-ink">Transcription Model</label>
                 <select
                   id="geminiModel"
                   value={geminiModel}
@@ -801,7 +850,7 @@ export function Settings() {
                   disabled={saving}
                   aria-label="Transcription Model"
                   aria-describedby="geminiModel-description"
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground ring-offset-bg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 >
                   {GEMINI_MODELS.map((model) => (
                     <option key={model.value} value={model.value}>
@@ -809,7 +858,7 @@ export function Settings() {
                     </option>
                   ))}
                 </select>
-                <p id="geminiModel-description" className="text-xs text-muted-foreground mt-1">
+                <p id="geminiModel-description" className="mt-1 text-xs text-ink-muted">
                   Gemini 3 Pro provides the best transcription accuracy
                 </p>
               </div>
@@ -820,7 +869,7 @@ export function Settings() {
                 <>
                   {/* OpenAI API key — Eye/EyeOff idiom copied from the Gemini field */}
                   <div>
-                    <label htmlFor="openaiApiKey" className="text-sm font-medium">OpenAI API Key</label>
+                    <label htmlFor="openaiApiKey" className="text-sm font-medium text-ink">OpenAI API Key</label>
                     <div className="relative mt-1">
                       <Input
                         id="openaiApiKey"
@@ -846,7 +895,7 @@ export function Settings() {
                         {showOpenaiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                     </div>
-                    <p id="openaiApiKey-description" className="text-xs text-muted-foreground mt-1">
+                    <p id="openaiApiKey-description" className="mt-1 text-xs text-ink-muted">
                       Get your API key from{' '}
                       <a
                         href="https://platform.openai.com/api-keys"
@@ -859,12 +908,12 @@ export function Settings() {
                     </p>
                   </div>
                   <div>
-                    <label htmlFor="whisperModel" className="text-sm font-medium">Transcription Model</label>
+                    <label htmlFor="whisperModel" className="text-sm font-medium text-ink">Transcription Model</label>
                     <select id="whisperModel" value="whisper-1" disabled aria-label="Whisper Model"
-                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm opacity-70">
+                      className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground opacity-70">
                       <option value="whisper-1">whisper-1 (only supported model in v1)</option>
                     </select>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 text-xs text-ink-muted">
                       gpt-4o-transcribe is not supported yet (25-minute duration cap).
                     </p>
                   </div>
@@ -873,7 +922,7 @@ export function Settings() {
 
               {asrProvider === 'assemblyai' && (
                 <div>
-                  <label htmlFor="assemblyaiApiKey" className="text-sm font-medium">AssemblyAI API Key</label>
+                  <label htmlFor="assemblyaiApiKey" className="text-sm font-medium text-ink">AssemblyAI API Key</label>
                   <div className="relative mt-1">
                     <Input
                       id="assemblyaiApiKey"
@@ -899,7 +948,7 @@ export function Settings() {
                       {showAssemblyaiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
-                  <p id="assemblyaiApiKey-description" className="text-xs text-muted-foreground mt-1">
+                  <p id="assemblyaiApiKey-description" className="mt-1 text-xs text-ink-muted">
                     Get your API key from{' '}
                     <a
                       href="https://www.assemblyai.com/dashboard"
@@ -914,7 +963,7 @@ export function Settings() {
               )}
 
               <div>
-                <label htmlFor="transcriptionLanguage" className="text-sm font-medium">Language</label>
+                <label htmlFor="transcriptionLanguage" className="text-sm font-medium text-ink">Language</label>
                 <select
                   id="transcriptionLanguage"
                   value={language}
@@ -923,7 +972,7 @@ export function Settings() {
                   disabled={saving}
                   aria-label="Transcription Language"
                   aria-describedby="transcriptionLanguage-description"
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground ring-offset-bg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                 >
                   {TRANSCRIPTION_LANGUAGES.map((lang) => (
                     <option key={lang.value} value={lang.value}>
@@ -931,7 +980,7 @@ export function Settings() {
                     </option>
                   ))}
                 </select>
-                <p id="transcriptionLanguage-description" className="text-xs text-muted-foreground mt-1">
+                <p id="transcriptionLanguage-description" className="mt-1 text-xs text-ink-muted">
                   Force the spoken language, or choose Auto-detect to let the provider decide
                 </p>
               </div>
@@ -948,15 +997,15 @@ export function Settings() {
           </Card>
 
           {/* Summarization Settings (spec §5.6) */}
-          <Card>
+          <Card className="border-border bg-surface shadow-sm">
             <CardHeader>
-              <CardTitle>Summarization</CardTitle>
-              <CardDescription>Configure the LLM used to summarize transcripts</CardDescription>
+              <CardTitle className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">Summarization</CardTitle>
+              <CardDescription className="text-ink-muted">Configure the LLM used to summarize transcripts</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Provider toggle — Button-group idiom */}
               <div>
-                <label id="sumProvider-label" className="text-sm font-medium">Summarization Provider</label>
+                <label id="sumProvider-label" className="text-sm font-medium text-ink">Summarization Provider</label>
                 <div className="flex gap-2 mt-2" role="group" aria-labelledby="sumProvider-label">
                   <Button
                     variant={sumProvider === 'gemini' ? 'default' : 'outline'}
@@ -985,7 +1034,7 @@ export function Settings() {
                 <>
                   {/* Ollama Cloud API key — Eye/EyeOff idiom */}
                   <div>
-                    <label htmlFor="ollamaCloudApiKey" className="text-sm font-medium">Ollama Cloud API Key</label>
+                    <label htmlFor="ollamaCloudApiKey" className="text-sm font-medium text-ink">Ollama Cloud API Key</label>
                     <div className="relative mt-1">
                       <Input
                         id="ollamaCloudApiKey"
@@ -1011,7 +1060,7 @@ export function Settings() {
                         {showOllamaKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                     </div>
-                    <p id="ollamaCloudApiKey-description" className="text-xs text-muted-foreground mt-1">
+                    <p id="ollamaCloudApiKey-description" className="mt-1 text-xs text-ink-muted">
                       Get your API key from{' '}
                       <a
                         href="https://ollama.com/settings/keys"
@@ -1026,7 +1075,7 @@ export function Settings() {
 
                   {/* Model picker — text input + "Fetch models" button; select renders when models are available */}
                   <div>
-                    <label htmlFor="ollamaCloudModel" className="text-sm font-medium">Ollama Cloud Model</label>
+                    <label htmlFor="ollamaCloudModel" className="text-sm font-medium text-ink">Ollama Cloud Model</label>
                     <div className="flex gap-2 mt-1">
                       <Input
                         id="ollamaCloudModel"
@@ -1052,7 +1101,7 @@ export function Settings() {
                     </div>
                     {ollamaModels.length > 0 && (
                       <select
-                        className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        className="mt-2 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
                         value={ollamaCloudModel}
                         onChange={(e) => setOllamaCloudModel(e.target.value)}
                         aria-label="Select Ollama Cloud model from list"
@@ -1063,7 +1112,7 @@ export function Settings() {
                         ))}
                       </select>
                     )}
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 text-xs text-ink-muted">
                       Manual text input works as a fallback even without fetching the list
                     </p>
                   </div>
@@ -1093,14 +1142,14 @@ export function Settings() {
           </Card>
 
           {/* Chat Settings */}
-          <Card>
+          <Card className="border-border bg-surface shadow-sm">
             <CardHeader>
-              <CardTitle>Chat / RAG</CardTitle>
-              <CardDescription>Configure chat provider for querying meetings</CardDescription>
+              <CardTitle className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">Chat / RAG</CardTitle>
+              <CardDescription className="text-ink-muted">Configure chat provider for querying meetings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label id="chatProvider-label" className="text-sm font-medium">Chat Provider</label>
+                <label id="chatProvider-label" className="text-sm font-medium text-ink">Chat Provider</label>
                 <div className="flex gap-2 mt-2" role="group" aria-labelledby="chatProvider-label">
                   <Button
                     variant={chatProvider === 'gemini' ? 'default' : 'outline'}
@@ -1136,14 +1185,14 @@ export function Settings() {
               </div>
 
               {chatProvider === 'ollama-cloud' && (
-                <p className="text-xs text-muted-foreground rounded-md border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-2">
+                <p className="rounded-md border border-border-brand bg-accent-strong-soft p-2 text-xs text-accent-strong">
                   Uses the Ollama Cloud API key and model configured in the Summarization section below.
                 </p>
               )}
 
               {chatProvider === 'ollama' && (
                 <div>
-                  <label htmlFor="ollamaUrl" className="text-sm font-medium">Ollama URL</label>
+                  <label htmlFor="ollamaUrl" className="text-sm font-medium text-ink">Ollama URL</label>
                   <Input
                     id="ollamaUrl"
                     type="url"
@@ -1156,7 +1205,7 @@ export function Settings() {
                     aria-describedby="ollamaUrl-description"
                     className="mt-1"
                   />
-                  <p id="ollamaUrl-description" className="text-xs text-muted-foreground mt-1">
+                  <p id="ollamaUrl-description" className="mt-1 text-xs text-ink-muted">
                     URL of your local Ollama server
                   </p>
                 </div>
@@ -1164,7 +1213,7 @@ export function Settings() {
 
               {/* C-CHAT: RAG Context Window Size */}
               <div>
-                <label htmlFor="ragContextSize" className="text-sm font-medium">
+                <label htmlFor="ragContextSize" className="text-sm font-medium text-ink">
                   RAG Context Window
                 </label>
                 <Input
@@ -1185,7 +1234,7 @@ export function Settings() {
                   aria-describedby="ragContextSize-description"
                   className="mt-1"
                 />
-                <p id="ragContextSize-description" className="text-xs text-muted-foreground mt-1">
+                <p id="ragContextSize-description" className="mt-1 text-xs text-ink-muted">
                   Number of knowledge chunks to retrieve for context (1-20). Default: 10
                 </p>
               </div>
@@ -1202,54 +1251,56 @@ export function Settings() {
           </Card>
 
           {/* Privacy / Voice Library */}
-          <Card>
+          <Card className="border-border bg-surface shadow-sm">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-2 font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
+                <Shield className="h-[18px] w-[18px] text-accent-2" />
                 Privacy
               </CardTitle>
-              <CardDescription>Voiceprint capture and backup settings</CardDescription>
+              <CardDescription className="text-ink-muted">
+                When you name a speaker, HiDock can learn their voice to recognize them later. Voiceprints are local-only biometric data — yours to control.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="enableVoiceprintCapture"
-                  checked={enableVoiceprintCapture}
-                  onChange={(e) => handleToggleVoiceprintCapture(e.target.checked)}
-                  disabled={saving || clearingVoiceprints}
-                  className="mt-1 rounded"
-                />
-                <div className="flex-1">
-                  <label htmlFor="enableVoiceprintCapture" className="text-sm font-medium">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="enableVoiceprintCapture" className="text-sm font-medium text-ink">
                     Capture voiceprints
                   </label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Remember voices from speaker assignments to recognize people later. Voiceprints are local-only biometric data.
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    Remember voices from speaker assignments to recognize people later. Off means names still stick, but no voiceprint is captured and no auto-matching happens.
                   </p>
                 </div>
+                <Switch
+                  id="enableVoiceprintCapture"
+                  checked={enableVoiceprintCapture}
+                  onCheckedChange={handleToggleVoiceprintCapture}
+                  disabled={saving || clearingVoiceprints}
+                  aria-label="Capture voiceprints"
+                  className="mt-0.5"
+                />
               </div>
 
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="excludeVoiceprintsFromBackup"
-                  checked={excludeVoiceprintsFromBackup}
-                  onChange={(e) => handleToggleExcludeFromBackup(e.target.checked)}
-                  disabled={saving || clearingVoiceprints}
-                  className="mt-1 rounded"
-                />
-                <div className="flex-1">
-                  <label htmlFor="excludeVoiceprintsFromBackup" className="text-sm font-medium">
+              <div className="flex items-start justify-between gap-3 border-t border-border pt-5">
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="excludeVoiceprintsFromBackup" className="text-sm font-medium text-ink">
                     Exclude voiceprints from backups & sync
                   </label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="mt-0.5 text-xs text-ink-muted">
                     Honored when backup/sync ships. Default on so biometric data stays off sync channels.
                   </p>
                 </div>
+                <Switch
+                  id="excludeVoiceprintsFromBackup"
+                  checked={excludeVoiceprintsFromBackup}
+                  onCheckedChange={handleToggleExcludeFromBackup}
+                  disabled={saving || clearingVoiceprints}
+                  aria-label="Exclude voiceprints from backups and sync"
+                  className="mt-0.5"
+                />
               </div>
 
-              <div className="pt-2 border-t">
+              <div className="border-t border-border pt-4">
                 <Button
                   variant="destructive"
                   size="sm"
@@ -1293,22 +1344,22 @@ export function Settings() {
           </AlertDialog>
 
           {/* Storage */}
-          <Card>
+          <Card className="border-border bg-surface shadow-sm">
             <CardHeader>
-              <CardTitle>Storage</CardTitle>
-              <CardDescription>Local data storage information</CardDescription>
+              <CardTitle className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">Storage</CardTitle>
+              <CardDescription className="text-ink-muted">Local data storage information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Storage loading indicator */}
               {storageLoading && !storageInfo && (
-                <div className="flex items-center gap-2 py-4 justify-center">
-                  <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Loading storage info...</span>
+                <div className="flex items-center justify-center gap-2 py-4">
+                  <RefreshCw className="h-4 w-4 animate-spin text-ink-muted" />
+                  <span className="text-sm text-ink-muted">Loading storage info...</span>
                 </div>
               )}
               {/* B-SET-002: Storage error with retry button */}
               {storageError && (
-                <div className="flex items-center gap-3 p-3 rounded-md bg-destructive/10 text-destructive border border-destructive/20">
+                <div className="flex items-center gap-3 rounded-md border border-danger/20 bg-danger-soft p-3 text-danger">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
                   <div className="flex-1 text-sm">{storageError}</div>
                   <Button variant="outline" size="sm" onClick={loadStorageInfo}>
@@ -1321,20 +1372,20 @@ export function Settings() {
                 <>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-muted-foreground">Total Size</p>
-                      <p className="font-medium">{formatBytes(storageInfo.totalSizeBytes)}</p>
+                      <p className="text-ink-muted">Total Size</p>
+                      <p className="font-medium text-ink">{formatBytes(storageInfo.totalSizeBytes)}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Recordings</p>
-                      <p className="font-medium">{storageInfo.recordingsCount} files</p>
+                      <p className="text-ink-muted">Recordings</p>
+                      <p className="font-medium text-ink">{storageInfo.recordingsCount} files</p>
                     </div>
                   </div>
 
                   <div className="space-y-3 text-sm">
-                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-muted-foreground text-xs">Recordings</p>
-                        <p className="font-mono text-xs truncate" title={storageInfo.recordingsPath}>
+                    <div className="flex items-center justify-between rounded-md bg-surface-sunken p-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-ink-muted">Recordings</p>
+                        <p className="truncate font-mono text-xs text-foreground" title={storageInfo.recordingsPath}>
                           {storageInfo.recordingsPath}
                         </p>
                       </div>
@@ -1342,10 +1393,10 @@ export function Settings() {
                         <FolderOpen className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-muted-foreground text-xs">Transcripts</p>
-                        <p className="font-mono text-xs truncate" title={storageInfo.transcriptsPath}>
+                    <div className="flex items-center justify-between rounded-md bg-surface-sunken p-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-ink-muted">Transcripts</p>
+                        <p className="truncate font-mono text-xs text-foreground" title={storageInfo.transcriptsPath}>
                           {storageInfo.transcriptsPath}
                         </p>
                       </div>
@@ -1353,10 +1404,10 @@ export function Settings() {
                         <FolderOpen className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-muted-foreground text-xs">Data</p>
-                        <p className="font-mono text-xs truncate" title={storageInfo.dataPath}>
+                    <div className="flex items-center justify-between rounded-md bg-surface-sunken p-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-ink-muted">Data</p>
+                        <p className="truncate font-mono text-xs text-foreground" title={storageInfo.dataPath}>
                           {storageInfo.dataPath}
                         </p>
                       </div>

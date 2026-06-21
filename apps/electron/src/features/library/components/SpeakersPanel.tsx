@@ -13,6 +13,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { toast } from '@/components/ui/toaster'
 import { useConfigStore } from '@/store/domain/useConfigStore'
 import {
@@ -117,6 +122,8 @@ export function SpeakersPanel({
   const [openPickerLabel, setOpenPickerLabel] = useState<string | null>(null)
   const [openMergeLabel, setOpenMergeLabel] = useState<string | null>(null)
   const [openReassignTurn, setOpenReassignTurn] = useState<number | null>(null)
+  // The per-turn reassign list can be long; collapsed by default.
+  const [turnsExpanded, setTurnsExpanded] = useState(false)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -460,9 +467,9 @@ export function SpeakersPanel({
   const MAX_IDENTITY_CHIPS = 2
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">Speakers</p>
+        <Eyebrow tone="muted">Speakers</Eyebrow>
         {suggestions.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => void dismissAllSuggestions()} disabled={busy}>
             Dismiss all suggestions
@@ -470,7 +477,7 @@ export function SpeakersPanel({
         )}
       </div>
       {!enableVoiceprintCapture && (
-        <p className="text-xs text-muted-foreground italic">
+        <p className="text-xs italic text-ink-muted">
           Voice memory is off — assignments won&apos;t be remembered. Enable in Settings → Privacy.
         </p>
       )}
@@ -483,15 +490,24 @@ export function SpeakersPanel({
           .filter((s) => s.kind === 'identity')
           .slice(0, MAX_IDENTITY_CHIPS)
         const otherChips = labelSuggestions.filter((s) => s.kind !== 'identity')
+        const dotColor = avatarColor(assignedName ?? label)
         return (
-          <div key={label} className="relative flex flex-col gap-2 p-2 border rounded-lg bg-muted/30">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm w-10">{label}</span>
-              <span className="text-xs text-muted-foreground flex-1">
+          <div
+            key={label}
+            className="relative flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken p-3"
+          >
+            <div className="flex items-center gap-2.5">
+              <span
+                className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ background: dotColor }}
+                aria-hidden
+              />
+              <span className="w-8 shrink-0 font-mono text-[13px] font-semibold text-ink">{label}</span>
+              <span className="flex-1 text-xs text-ink-muted">
                 <span>{count} turns</span>
                 <span> &bull; </span>
                 <span>{formatTalkTime(talkMs)}</span>
-                {assignedName && <span className="ml-2 text-foreground font-medium">→ {assignedName}</span>}
+                {assignedName && <span className="ml-2 font-medium text-ink">→ {assignedName}</span>}
               </span>
 
               {!readOnly && (
@@ -505,17 +521,84 @@ export function SpeakersPanel({
                 </Button>
               )}
 
-              <Button
-                variant="outline"
-                size="sm"
-                aria-label={`Assign contact to ${label}`}
-                onClick={() => {
-                  setOpenPickerLabel(openPickerLabel === label ? null : label)
-                  setSearch('')
+              <Popover
+                open={openPickerLabel === label}
+                onOpenChange={(open) => {
+                  setOpenPickerLabel(open ? label : null)
+                  if (open) setSearch('')
                 }}
               >
-                {assignedName ? 'Reassign' : 'Assign'}
-              </Button>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" aria-label={`Assign contact to ${label}`}>
+                    {assignedName ? 'Reassign' : 'Assign'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-[308px] space-y-2.5 p-3.5">
+                  {assignedName && (
+                    <div className="flex items-center gap-2.5 rounded-md bg-surface-sunken p-2.5">
+                      <PersonAvatar name={assignedName} color={dotColor} size={32} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13.5px] font-semibold text-ink">{assignedName}</div>
+                        <div className="font-mono text-[10px] text-ink-muted">Assigned to {label}</div>
+                      </div>
+                    </div>
+                  )}
+                  <Input
+                    aria-label="Search or add a contact"
+                    placeholder="Search or add a contact..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    disabled={busy}
+                  />
+                  <div className="max-h-44 space-y-0.5 overflow-y-auto">
+                    {pickList.map((c) => {
+                      const isAttendee = attendees.some((a) => a.id === c.id)
+                      return (
+                        <button
+                          key={c.id}
+                          className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-hover disabled:opacity-50"
+                          onClick={() => assign(label, c.id, 'user')}
+                          disabled={busy}
+                        >
+                          <PersonAvatar name={c.name} size={24} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-medium text-ink">{c.name}</span>
+                            {c.email && <span className="block truncate text-[11px] text-ink-muted">{c.email}</span>}
+                          </span>
+                          {isAttendee && (
+                            <Badge variant="accent" size="sm">
+                              Attendee
+                            </Badge>
+                          )}
+                        </button>
+                      )
+                    })}
+                    {search.trim() && !exactNameMatch && (
+                      <button
+                        className="flex w-full items-center gap-2.5 rounded-md border border-dashed border-border-strong px-2 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-hover disabled:opacity-50"
+                        aria-label={`Create contact "${search.trim()}"`}
+                        onClick={() => quickAddAndAssign(label, search)}
+                        disabled={busy}
+                      >
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-strong-soft text-base leading-none text-accent-strong">
+                          +
+                        </span>
+                        <span className="font-medium">Create contact &quot;{search.trim()}&quot;</span>
+                      </button>
+                    )}
+                    {assignment && (
+                      <button
+                        className="block w-full rounded-sm px-2 py-1.5 text-left text-sm text-danger transition-colors hover:bg-danger-soft disabled:opacity-50"
+                        aria-label={`Clear assignment for ${assignedName ?? label}`}
+                        onClick={() => unassign(label)}
+                        disabled={busy}
+                      >
+                        Clear assignment{assignedName ? ` for ${assignedName}` : ''}
+                      </button>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               {!assignedName && enableVoiceprintCapture && (
                 <Button
@@ -531,13 +614,13 @@ export function SpeakersPanel({
             </div>
 
             {openMergeLabel === label && (
-              <div className="z-10 p-2 bg-background border rounded-lg shadow">
+              <div className="z-10 rounded-lg border border-border bg-surface p-2 shadow-md">
                 {labels
                   .filter((l) => l.label !== label)
                   .map((target) => (
                     <button
                       key={target.label}
-                      className="block w-full text-left text-sm px-2 py-1 hover:bg-muted rounded"
+                      className="block w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-hover"
                       aria-label={`Merge into ${target.label}`}
                       onClick={() => mergeInto(label, target.label)}
                     >
@@ -547,144 +630,106 @@ export function SpeakersPanel({
               </div>
             )}
 
-            {openPickerLabel === label && (
-              <div className="z-10 w-full p-2 bg-background border rounded-lg shadow space-y-2">
-                <Input
-                  aria-label="Search or add a contact"
-                  placeholder="Search or add a contact..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  disabled={busy}
-                />
-                <div className="max-h-48 overflow-y-auto">
-                  {pickList.map((c) => (
-                    <button
-                      key={c.id}
-                      className="block w-full text-left text-sm px-2 py-1 hover:bg-muted rounded"
-                      onClick={() => assign(label, c.id, 'user')}
-                      disabled={busy}
-                    >
-                      {c.name}
-                      {c.email && <span className="text-muted-foreground ml-1">({c.email})</span>}
-                    </button>
-                  ))}
-                  {search.trim() && !exactNameMatch && (
-                    <button
-                      className="block w-full text-left text-sm px-2 py-1 text-primary hover:bg-muted rounded"
-                      aria-label={`Create contact "${search.trim()}"`}
-                      onClick={() => quickAddAndAssign(label, search)}
-                      disabled={busy}
-                    >
-                      Create contact &quot;{search.trim()}&quot;
-                    </button>
-                  )}
-                  {assignment && (
-                    <button
-                      className="block w-full text-left text-sm px-2 py-1 text-destructive hover:bg-muted rounded"
-                      aria-label={`Clear assignment for ${assignedName ?? label}`}
-                      onClick={() => unassign(label)}
-                      disabled={busy}
-                    >
-                      Clear assignment{assignedName ? ` for ${assignedName}` : ''}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
             {selfHintLabel === label && (
-              <div className="text-xs px-1 text-muted-foreground" data-testid="self-hint">
-                Mark a contact as <strong>Me</strong> first in People → &quot;This is me&quot;.
+              <div className="px-1 text-xs text-ink-muted" data-testid="self-hint">
+                Mark a contact as <strong className="text-ink">Me</strong> first in People → &quot;This is me&quot;.
               </div>
             )}
 
             {/* Phase 2B: suggestion chips */}
-            {[...identityChips, ...otherChips].map((s) => (
-              <div
-                key={s.id}
-                className={`flex flex-wrap items-center gap-2 text-xs px-2 py-1.5 rounded-md border ${
-                  s.kind === 'identity' && (s.rationale ?? '').includes('strong')
-                    ? 'bg-primary/10 border-primary/30'
-                    : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900'
-                }`}
-              >
-                {s.kind === 'identity' && s.contactName && (
-                  <>
-                    <span className="font-medium">
-                      Looks like {s.contactName} ({humanIdentityLabel(s)})
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => void confirmIdentity(s)}
-                      disabled={busy}
-                    >
-                      Confirm
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-muted-foreground"
-                      onClick={() => void dismissSuggestion(s.id)}
-                      disabled={busy}
-                    >
-                      Dismiss
-                    </Button>
-                  </>
-                )}
-                {s.kind === 'merge' && s.targetLabel2 && (
-                  <>
-                    <span className="font-medium">
-                      {s.targetLabel} & {s.targetLabel2} may be one voice
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      onClick={() => confirmMerge(s)}
-                      disabled={busy}
-                    >
-                      Confirm merge
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-muted-foreground"
-                      onClick={() => void dismissSuggestion(s.id)}
-                      disabled={busy}
-                    >
-                      Dismiss
-                    </Button>
-                  </>
-                )}
-                {s.kind === 'mixed' && (
-                  <>
-                    <span className="font-medium">{s.targetLabel} may contain two voices</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-muted-foreground"
-                      onClick={() => void dismissSuggestion(s.id)}
-                      disabled={busy}
-                    >
-                      Dismiss
-                    </Button>
-                  </>
-                )}
-              </div>
-            ))}
+            {[...identityChips, ...otherChips].map((s) => {
+              const isStrong = s.kind === 'identity' && (s.rationale ?? '').includes('strong')
+              return (
+                <div
+                  key={s.id}
+                  className={`flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-2 text-xs ${
+                    isStrong
+                      ? 'border-accent-2/30 bg-accent-2-soft'
+                      : 'border-warning/30 bg-warning-soft'
+                  }`}
+                >
+                  {s.kind === 'identity' && s.contactName && (
+                    <>
+                      <PersonAvatar name={s.contactName} size={22} />
+                      <span className="font-medium text-ink">
+                        Looks like {s.contactName}{' '}
+                        <span className={isStrong ? 'text-accent-2' : 'text-warning'}>
+                          ({humanIdentityLabel(s)})
+                        </span>
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto h-6 px-2 text-xs"
+                        onClick={() => void confirmIdentity(s)}
+                        disabled={busy}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-ink-muted"
+                        onClick={() => void dismissSuggestion(s.id)}
+                        disabled={busy}
+                      >
+                        Dismiss
+                      </Button>
+                    </>
+                  )}
+                  {s.kind === 'merge' && s.targetLabel2 && (
+                    <>
+                      <span className="font-medium text-ink">
+                        {s.targetLabel} & {s.targetLabel2} may be one voice
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto h-6 px-2 text-xs"
+                        onClick={() => confirmMerge(s)}
+                        disabled={busy}
+                      >
+                        Confirm merge
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-ink-muted"
+                        onClick={() => void dismissSuggestion(s.id)}
+                        disabled={busy}
+                      >
+                        Dismiss
+                      </Button>
+                    </>
+                  )}
+                  {s.kind === 'mixed' && (
+                    <>
+                      <span className="font-medium text-ink">{s.targetLabel} may contain two voices</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto h-6 px-2 text-xs text-ink-muted"
+                        onClick={() => void dismissSuggestion(s.id)}
+                        disabled={busy}
+                      >
+                        Dismiss
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
 
             {note && (
-              <div className="text-xs px-1">
+              <div className="px-1 text-xs">
                 {note.captured ? (
-                  <span className="text-green-600">
+                  <span className="inline-flex items-center gap-1.5 text-success">
                     Voice remembered
                     {note.purgedCount && note.purgedCount > 0 ? ` (replaced ${note.purgedCount} older voiceprint${note.purgedCount === 1 ? '' : 's'})` : ''}
                     {note.cleanSpeechMs && ` · ${formatTalkTime(note.cleanSpeechMs)} clean speech`}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">{humanSkipReason(note.reason)} · assignment not banked</span>
+                  <span className="text-ink-muted">{humanSkipReason(note.reason)} · assignment not banked</span>
                 )}
               </div>
             )}
@@ -692,14 +737,32 @@ export function SpeakersPanel({
         )
       })}
 
-      {/* Per-turn reassign (AC3): change one turn's speaker to another existing label. */}
-      {!readOnly && (
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Turns</p>
+      {/* Per-turn reassign (AC3): change one turn's speaker to another existing label.
+          Collapsible — the list is long on real recordings. */}
+      {!readOnly && turns.length > 0 && (
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={() => setTurnsExpanded((v) => !v)}
+            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
+            aria-expanded={turnsExpanded}
+          >
+            <Eyebrow tone="muted">Turns ({turns.length})</Eyebrow>
+            {turnsExpanded ? (
+              <ChevronDown className="h-4 w-4 text-ink-muted" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-ink-muted" />
+            )}
+          </button>
+          {turnsExpanded && (
+          <div className="space-y-1.5">
           {turns.map((t, i) => (
-            <div key={`${t.startMs}-${t.speaker}`} className="relative flex items-start gap-2 p-2 border rounded-lg bg-muted/20">
-              <span className="font-semibold text-xs w-6 shrink-0">{t.speaker}</span>
-              <span className="text-xs flex-1 min-w-0">{t.text}</span>
+            <div
+              key={`${t.startMs}-${t.speaker}`}
+              className="relative flex items-start gap-2.5 rounded-lg border border-border bg-surface-sunken/60 p-2.5"
+            >
+              <span className="w-6 shrink-0 font-mono text-xs font-semibold text-ink">{t.speaker}</span>
+              <span className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">{t.text}</span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -710,13 +773,13 @@ export function SpeakersPanel({
                 Reassign
               </Button>
               {openReassignTurn === i && (
-                <div className="absolute right-2 top-10 z-10 p-2 bg-background border rounded-lg shadow">
+                <div className="absolute right-2 top-10 z-10 rounded-lg border border-border bg-surface p-2 shadow-md">
                   {labels
                     .filter((l) => l.label !== t.speaker)
                     .map((target) => (
                       <button
                         key={target.label}
-                        className="block w-full text-left text-sm px-2 py-1 hover:bg-muted rounded"
+                        className="block w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-hover disabled:opacity-50"
                         aria-label={`Reassign to ${target.label}`}
                         onClick={() => reassignTurn(i, target.label)}
                         disabled={busy}
@@ -728,6 +791,8 @@ export function SpeakersPanel({
               )}
             </div>
           ))}
+          </div>
+          )}
         </div>
       )}
 

@@ -119,10 +119,11 @@ describe('People Page', () => {
 
     await screen.findByText('Mario')
 
-    // Each card should show the first letter as avatar initial
-    expect(screen.getByText('M')).toBeInTheDocument() // Mario
-    expect(screen.getByText('A')).toBeInTheDocument() // Alice
-    expect(screen.getByText('Z')).toBeInTheDocument() // Zara
+    // Harbor re-skin: PersonAvatar renders two-letter initials via initialsOf().
+    // Single-name contacts use the first two letters of the name.
+    expect(screen.getByText('MA')).toBeInTheDocument() // Mario
+    expect(screen.getByText('AL')).toBeInTheDocument() // Alice
+    expect(screen.getByText('ZA')).toBeInTheDocument() // Zara
   })
 
   it('should render empty state when no people found', async () => {

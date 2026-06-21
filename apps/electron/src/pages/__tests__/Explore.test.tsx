@@ -116,8 +116,8 @@ describe('Explore Page', () => {
       expect(screen.getByText('Knowledge 1')).toBeInTheDocument()
     }, { timeout: 2000 })
 
-    // Click "people" tab
-    const peopleTab = screen.getByText('people')
+    // Click the "People" tab (SegmentedToggle, role="tab"; label title-cased)
+    const peopleTab = screen.getByRole('tab', { name: 'People' })
     fireEvent.click(peopleTab)
 
     await waitFor(() => {
@@ -137,10 +137,12 @@ describe('Explore Page', () => {
     fireEvent.change(input, { target: { value: 'test' } })
 
     await waitFor(() => {
-      expect(screen.getByText('all')).toBeInTheDocument()
-      expect(screen.getByText('knowledge')).toBeInTheDocument()
-      expect(screen.getByText('people')).toBeInTheDocument()
-      expect(screen.getByText('projects')).toBeInTheDocument()
+      // Harbor re-skin: result filters are a SegmentedToggle (role="tab") whose
+      // labels are title-cased text nodes; the all-caps look is CSS only.
+      expect(screen.getByRole('tab', { name: 'All' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Knowledge' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'People' })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Projects' })).toBeInTheDocument()
     }, { timeout: 2000 })
   })
 

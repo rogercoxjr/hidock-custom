@@ -1,16 +1,49 @@
 import { memo } from 'react'
-import { Play, X, AlertCircle, Download, Trash2, Wand2, Mic, FileText, RefreshCw } from 'lucide-react'
+import {
+  Play,
+  Square,
+  AlertCircle,
+  Download,
+  Trash2,
+  Wand2,
+  Mic,
+  FileText,
+  RefreshCw,
+  MoreHorizontal,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { formatDate, formatDuration } from '@/lib/utils'
-import { Meeting, Transcript } from '@/types'
+import { Meeting, Transcript, parseJsonArray } from '@/types'
 import { UnifiedRecording, hasLocalPath } from '@/types/unified-recording'
 import { StatusIcon } from './StatusIcon'
-import { TranscriptionStatusBadge } from './TranscriptionStatusBadge'
 import { useLibraryStore } from '@/store/useLibraryStore'
 import { getDisplayTitle } from '@/features/library/utils/getDisplayTitle'
 import { highlightText } from '@/features/library/utils/highlightText'
+
+// Derive an "insight count" (action items + key points) for the accent badge.
+function insightCount(transcript?: Transcript): number {
+  if (!transcript) return 0
+  const actions = transcript.action_items ? parseJsonArray<string>(transcript.action_items).length : 0
+  const points = transcript.key_points ? parseJsonArray<string>(transcript.key_points).length : 0
+  return actions + points
+}
+
+// Location → Harbor Badge variant + label for the status pill
+const LOCATION_BADGE: Record<string, { variant: 'default' | 'warning' | 'primary' | 'success'; label: string }> = {
+  'device-only': { variant: 'warning', label: 'On Device' },
+  'local-only':  { variant: 'primary', label: 'Downloaded' },
+  'both':        { variant: 'success', label: 'Synced' },
+}
 
 interface SourceRowProps {
   recording: UnifiedRecording
@@ -55,7 +88,7 @@ export const SourceRow = memo(function SourceRow({
   onGenerateOutput,
   isDownloading = false,
   downloadProgress,
-  deviceConnected = false
+  deviceConnected = false,
 }: SourceRowProps) {
   const canPlay = hasLocalPath(recording)
   const error = useLibraryStore((state) => state.recordingErrors.get(recording.id))
@@ -70,38 +103,44 @@ export const SourceRow = memo(function SourceRow({
   }
 
   const handleRowClick = (e: React.MouseEvent) => {
-    // Don't trigger onClick if clicking on buttons or checkbox
+    // Don't trigger onClick if clicking on buttons, checkbox, or dropdown
     const target = e.target as HTMLElement
-    if (target.closest('button') || target.closest('[role="checkbox"]')) {
+    if (
+      target.closest('button') ||
+      target.closest('[role="checkbox"]') ||
+      target.closest('[data-radix-popper-content-wrapper]')
+    ) {
       return
     }
     onClick?.()
   }
 
-  // Build secondary line: date + duration + filename (when title isn't filename)
-  const secondaryParts: string[] = []
-  secondaryParts.push(formatDate(recording.dateRecorded))
-  if (recording.duration) {
-    secondaryParts.push(formatDuration(recording.duration))
-  }
-  if (showFilenameInSecondary) {
-    secondaryParts.push(recording.filename)
-  }
-  const secondaryText = secondaryParts.join(' \u00B7 ')
+  // Secondary line: date · duration (· filename when title isn't the filename)
+  const secondaryParts: string[] = [formatDate(recording.dateRecorded)]
+  if (recording.duration) secondaryParts.push(formatDuration(recording.duration))
+  if (showFilenameInSecondary) secondaryParts.push(recording.filename)
+  const secondaryText = secondaryParts.join(' · ')
+
+  const insights = insightCount(transcript)
+  const locationBadge = LOCATION_BADGE[recording.location]
+
+  // Overflow menu shown when secondary actions exist and we're not mid-download
+  const hasSecondaryActions = !!(onTranscribe || onDownload || onAskAssistant || onGenerateOutput || onDelete)
 
   return (
     <div
       className={[
-        '@container flex items-center justify-between py-2 px-3 hover:bg-muted/50 cursor-pointer transition-colors',
-        isSelected ? 'bg-primary/10 border-l-2 border-l-primary/50' : 'border-l-2 border-l-transparent',
-        isActiveSource ? 'bg-primary/15 border-l-primary' : ''
+        'group @container flex items-center justify-between py-2 px-3 hover:bg-surface-hover cursor-pointer transition-colors',
+        isSelected ? 'bg-accent-strong-soft border-l-2 border-l-accent-strong/50' : 'border-l-2 border-l-transparent',
+        isActiveSource ? 'bg-accent-strong-soft border-l-primary' : '',
       ].filter(Boolean).join(' ')}
       role="option"
       onClick={handleRowClick}
       aria-selected={isPlaying || isSelected}
       tabIndex={0}
     >
-      <div className="flex items-center gap-2 min-w-0 flex-1">
+      {/* Left: checkbox + icon tile + content */}
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
         {onSelectionChange && (
           <Checkbox
             checked={isSelected}
@@ -110,117 +149,166 @@ export const SourceRow = memo(function SourceRow({
             className="shrink-0"
           />
         )}
-        <StatusIcon recording={recording} />
-        <TranscriptionStatusBadge status={recording.transcriptionStatus} compact />
 
-        {/* Content area — flex-1 to fill remaining space */}
+        {/* Icon tile — active source uses bg-primary, otherwise surface-sunken */}
+        <div
+          className={[
+            'flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md',
+            isActiveSource ? 'bg-primary text-primary-foreground' : 'bg-surface-sunken',
+          ].join(' ')}
+        >
+          <StatusIcon recording={recording} />
+        </div>
+
+        {/* Content area: primary title + secondary meta line */}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm truncate text-foreground leading-tight">
+          <p className="text-[13.5px] font-semibold truncate text-ink leading-tight">
             {searchQuery ? highlightText(primaryText, searchQuery) : primaryText}
           </p>
-          <p className="text-xs text-muted-foreground truncate leading-tight mt-0.5">
-            {searchQuery ? highlightText(secondaryText, searchQuery) : secondaryText}
-          </p>
+          <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+            <p className="font-mono text-[10.5px] text-ink-muted truncate leading-tight">
+              {searchQuery ? highlightText(secondaryText, searchQuery) : secondaryText}
+            </p>
+            {/* Status pill with label */}
+            {locationBadge && (
+              <Badge variant={locationBadge.variant} size="sm" className="shrink-0">
+                {locationBadge.label}
+              </Badge>
+            )}
+          </div>
         </div>
+
+        {/* Insight count badge (accent-2-soft) */}
+        {insights > 0 && (
+          <span
+            className="shrink-0 rounded-full bg-accent-2-soft px-[7px] py-0.5 font-mono text-[10px] font-semibold text-accent-2"
+            title={`${insights} insight${insights === 1 ? '' : 's'}`}
+          >
+            {insights}
+          </span>
+        )}
       </div>
 
-      {/* Action area — action buttons, play button, and error indicator */}
+      {/* Right: error indicator + downloading state + overflow kebab + play/stop */}
       <div className="flex items-center gap-1 shrink-0 ml-2">
-        {/* Error indicator */}
+        {/* Error indicator — always visible (actionable signal) */}
         {error && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                <AlertCircle className="h-3.5 w-3.5 text-danger shrink-0" />
               </TooltipTrigger>
               <TooltipContent>
                 <p>{error.message}</p>
-                {error.details && <p className="text-xs text-muted-foreground mt-1">{error.details}</p>}
+                {error.details && <p className="text-xs text-ink-muted mt-1">{error.details}</p>}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}
 
-        {/* Ask Assistant button */}
-        {onAskAssistant && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onAskAssistant(); }}
-            title="Ask Assistant about this capture"
-          >
-            <Mic className="h-3.5 w-3.5" />
-          </Button>
+        {/* Downloading in-progress indicator */}
+        {isDownloading && (
+          <div className="flex items-center gap-1 text-xs text-ink-muted px-1">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            <span>{downloadProgress ?? 0}%</span>
+          </div>
         )}
 
-        {/* Generate Output button */}
-        {onGenerateOutput && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onGenerateOutput(); }}
-            title="Generate artifact from this capture"
-          >
-            <FileText className="h-3.5 w-3.5" />
-          </Button>
+        {/* Overflow kebab — hover/focus-reveal via group; hidden when downloading */}
+        {hasSecondaryActions && !isDownloading && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+                aria-label="More actions"
+                data-testid="source-row-overflow"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+              {/* Transcribe — only for local recordings without a complete transcript */}
+              {onTranscribe && hasLocalPath(recording) && recording.transcriptionStatus !== 'complete' && (
+                <DropdownMenuItem
+                  onSelect={() => onTranscribe()}
+                  disabled={
+                    recording.transcriptionStatus === 'pending' ||
+                    recording.transcriptionStatus === 'processing'
+                  }
+                >
+                  {recording.transcriptionStatus === 'processing' ? (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Wand2 className="mr-2 h-4 w-4" />
+                  )}
+                  {recording.transcriptionStatus === 'pending'
+                    ? 'Transcription Queued'
+                    : recording.transcriptionStatus === 'processing'
+                      ? 'Transcribing…'
+                      : 'Transcribe'}
+                </DropdownMenuItem>
+              )}
+
+              {/* Download — only for device-only recordings */}
+              {onDownload && recording.location === 'device-only' && (
+                <DropdownMenuItem onSelect={() => onDownload()} disabled={!deviceConnected}>
+                  <Download className="mr-2 h-4 w-4" />
+                  {deviceConnected ? 'Download' : 'Device not connected'}
+                </DropdownMenuItem>
+              )}
+
+              {onAskAssistant && (
+                <DropdownMenuItem onSelect={() => onAskAssistant()}>
+                  <Mic className="mr-2 h-4 w-4" />
+                  Ask Assistant
+                </DropdownMenuItem>
+              )}
+
+              {onGenerateOutput && (
+                <DropdownMenuItem onSelect={() => onGenerateOutput()}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Generate Output
+                </DropdownMenuItem>
+              )}
+
+              {onDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => onDelete()}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {recording.location === 'device-only'
+                      ? 'Delete from Device'
+                      : recording.location === 'local-only'
+                        ? 'Delete Local File'
+                        : 'Delete'}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
 
-        {/* Transcribe button - only for local recordings without complete transcript */}
-        {hasLocalPath(recording) && recording.transcriptionStatus !== 'complete' && onTranscribe && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onTranscribe(); }}
-            disabled={recording.transcriptionStatus === 'pending' || recording.transcriptionStatus === 'processing'}
-            title={
-              recording.transcriptionStatus === 'pending' ? 'Transcription queued' :
-              recording.transcriptionStatus === 'processing' ? 'Transcription in progress' :
-              'Transcribe this capture'
-            }
-          >
-            {recording.transcriptionStatus === 'processing' ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Wand2 className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        )}
-
-        {/* Download button - only for device-only recordings */}
-        {recording.location === 'device-only' && onDownload && (
-          isDownloading ? (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground px-2">
-              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              <span>{downloadProgress ?? 0}%</span>
-            </div>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={(e) => { e.stopPropagation(); onDownload(); }}
-              disabled={!deviceConnected}
-              title={deviceConnected ? 'Download to computer' : 'Device not connected'}
-            >
-              <Download className="h-3.5 w-3.5" />
-            </Button>
-          )
-        )}
-
-        {/* Play/Stop button */}
+        {/* Play / Stop — always visible */}
         {isPlaying ? (
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onStop(); }}
+            onClick={(e) => { e.stopPropagation(); onStop() }}
             title="Stop playback"
           >
-            <X className="h-3.5 w-3.5" />
+            <Square className="h-3.5 w-3.5" />
           </Button>
         ) : (
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onPlay(); }}
+            onClick={(e) => { e.stopPropagation(); onPlay() }}
             disabled={!canPlay || error?.type === 'audio_not_found'}
             title={
               error?.type === 'audio_not_found'
@@ -233,37 +321,11 @@ export const SourceRow = memo(function SourceRow({
             <Play className="h-3.5 w-3.5" />
           </Button>
         )}
-
-        {/* Delete button */}
-        {onDelete && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className={
-              recording.location === 'device-only'
-                ? 'text-destructive hover:text-destructive'
-                : recording.location === 'local-only'
-                  ? 'text-orange-500 hover:text-orange-600'
-                  : 'text-muted-foreground hover:text-orange-500'
-            }
-            title={
-              recording.location === 'device-only'
-                ? 'Delete from device (permanent)'
-                : recording.location === 'local-only'
-                  ? 'Delete from computer (permanent)'
-                  : 'Delete from device and computer'
-            }
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
       </div>
     </div>
   )
 }, (prevProps, nextProps) => {
-  // Custom comparison for performance
-  // LB-16 fix: Include recording.location in equality check to detect download state changes
+  // Custom comparison for performance — include all fields that affect rendering
   return (
     prevProps.recording.id === nextProps.recording.id &&
     prevProps.recording.location === nextProps.recording.location &&
@@ -277,12 +339,13 @@ export const SourceRow = memo(function SourceRow({
     prevProps.isPlaying === nextProps.isPlaying &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isActiveSource === nextProps.isActiveSource &&
+    prevProps.isDownloading === nextProps.isDownloading &&
+    prevProps.downloadProgress === nextProps.downloadProgress &&
     prevProps.transcript?.id === nextProps.transcript?.id &&
     prevProps.transcript?.title_suggestion === nextProps.transcript?.title_suggestion &&
     prevProps.meeting?.id === nextProps.meeting?.id &&
     prevProps.meeting?.subject === nextProps.meeting?.subject &&
     prevProps.searchQuery === nextProps.searchQuery &&
-    // Include callback props to detect when they change
     prevProps.onSelectionChange === nextProps.onSelectionChange &&
     prevProps.onClick === nextProps.onClick
   )
