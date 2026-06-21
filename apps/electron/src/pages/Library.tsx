@@ -993,7 +993,7 @@ export function Library() {
                     const meeting = recording.meetingId ? meetings.get(recording.meetingId) : undefined
                     const isFocused = focusedIndex === virtualRow.index
                     const rowPeople = deriveCapturePeople(meeting)
-                    const rowLabels = deriveCaptureLabels(recording.category)
+                    const rowLabels = deriveCaptureLabels(recording.category, transcripts.get(recording.id)?.topics)
                     const rowPeopleKey = buildPeopleKey(rowPeople)
                     const rowLabelsKey = buildLabelsKey(rowLabels)
 
@@ -1064,7 +1064,7 @@ export function Library() {
                     const meeting = recording.meetingId ? meetings.get(recording.meetingId) : undefined
                     const isFocused = focusedIndex === virtualRow.index
                     const cardPeople = deriveCapturePeople(meeting)
-                    const cardLabels = deriveCaptureLabels(recording.category)
+                    const cardLabels = deriveCaptureLabels(recording.category, transcript?.topics)
                     const cardPeopleKey = buildPeopleKey(cardPeople)
                     const cardLabelsKey = buildLabelsKey(cardLabels)
 

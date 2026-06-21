@@ -10,19 +10,38 @@ const CATEGORY_COLOR: Record<string, string> = {
   other: 'bg-surface-sunken',
 }
 
+/** Max uncolored topic chips appended after the category chip. */
+const MAX_TOPIC_CHIPS = 2
+
+/** Parse a transcript `topics` value (JSON string of string[], or an array). */
+function parseTopics(topics?: string | string[] | null): string[] {
+  if (!topics) return []
+  if (Array.isArray(topics)) return topics.filter((t): t is string => typeof t === 'string')
+  try {
+    const parsed = JSON.parse(topics)
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 /**
- * Derive capture labels from a recording's category field.
- * Slice 1: category only. Slice 2 will add uncolored topic chips.
+ * Derive capture labels: the recording's category (colored) plus up to
+ * MAX_TOPIC_CHIPS uncolored topic chips from the transcript's `topics`.
  */
-export function deriveCaptureLabels(category?: string | null): CaptureLabel[] {
-  if (!category) return []
-  return [
-    {
-      text: category,
-      kind: 'category',
-      colorClass: CATEGORY_COLOR[category],
-    },
-  ]
+export function deriveCaptureLabels(
+  category?: string | null,
+  topics?: string | string[] | null
+): CaptureLabel[] {
+  const labels: CaptureLabel[] = []
+  if (category) {
+    labels.push({ text: category, kind: 'category', colorClass: CATEGORY_COLOR[category] })
+  }
+  for (const topic of parseTopics(topics).slice(0, MAX_TOPIC_CHIPS)) {
+    const text = topic.trim()
+    if (text) labels.push({ text, kind: 'topic' }) // no colorClass -> uncolored chip
+  }
+  return labels
 }
 
 /**
