@@ -29,7 +29,12 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useConfigStore } from '@/store/domain/useConfigStore'
 import { labelName } from '@/features/library/utils'
+import type { LabelDefinition } from '@/types'
 import { formatDateTime, formatDuration, formatBytes } from '@/lib/utils'
+
+// Stable empty reference so the labels selector never yields a fresh [] per render
+// (keeps useCallback deps that reference labelItems stable).
+const EMPTY_LABELS: LabelDefinition[] = []
 
 interface SourceReaderProps {
   recording: UnifiedRecording | null
@@ -88,7 +93,7 @@ export function SourceReader({
   const [isSavingCategory, setIsSavingCategory] = useState(false)
 
   // Smart Labels taxonomy — drives the category dropdown options + display names.
-  const labelItems = useConfigStore((s) => s.config?.labels?.items) ?? []
+  const labelItems = useConfigStore((s) => s.config?.labels?.items) ?? EMPTY_LABELS
 
   // Meeting link dialog state
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
