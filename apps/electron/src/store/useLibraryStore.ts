@@ -81,7 +81,10 @@ interface LibraryActions {
   clearFilters: () => void
 
   // Selection
-  selectSingle: (id: string) => void
+  // Opens a record's detail pane WITHOUT touching the bulk-selection set
+  // (selectedIds). Open (selectedSourceId) and bulk (selectedIds) are independent:
+  // opening a single record must not trip the bulk-actions bar.
+  openSource: (id: string) => void
   toggleSelection: (id: string) => void
   selectAll: (ids: string[]) => void
   selectRange: (ids: string[], startId: string, endId: string) => void
@@ -174,8 +177,8 @@ export const useLibraryStore = create<LibraryStore>()(
         }),
 
       // Selection
-      selectSingle: (id) =>
-        set({ selectedIds: new Set([id]), selectedSourceId: id }),
+      openSource: (id) =>
+        set({ selectedSourceId: id }),
 
       toggleSelection: (id) =>
         set((state) => {
