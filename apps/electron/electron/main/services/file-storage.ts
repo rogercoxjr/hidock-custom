@@ -320,23 +320,32 @@ export function deleteWronglyNamedRecordings(): { deleted: string[]; kept: strin
   return { deleted, kept }
 }
 
-export function readRecordingFile(filePath: string): Buffer | null {
+/**
+ * Returns true only if `filePath` resolves to a location inside the recordings
+ * or transcripts directories. Shared guard used by both the IPC file-read path
+ * and the streaming media protocol so neither can be tricked into reading
+ * arbitrary files (path-traversal defense). Case-insensitive on Windows.
+ */
+export function isRecordingPathAllowed(filePath: string): boolean {
   try {
-    // Validate that the path is within allowed directories
-    const recordingsPath = getRecordingsPath()
-    const transcriptsPath = getTranscriptsPath()
-
-    // Normalize the path for comparison
     const normalizedPath = normalize(resolve(filePath))
-    const normalizedRecordings = normalize(resolve(recordingsPath))
-    const normalizedTranscripts = normalize(resolve(transcriptsPath))
+    const normalizedRecordings = normalize(resolve(getRecordingsPath()))
+    const normalizedTranscripts = normalize(resolve(getTranscriptsPath()))
 
-    // Only allow reading files within recordings or transcripts directories
-    // Use case-insensitive comparison on Windows (paths are case-insensitive)
     const pathToCompare = process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
     const recToCompare = process.platform === 'win32' ? normalizedRecordings.toLowerCase() : normalizedRecordings
     const transToCompare = process.platform === 'win32' ? normalizedTranscripts.toLowerCase() : normalizedTranscripts
-    if (!pathToCompare.startsWith(recToCompare) && !pathToCompare.startsWith(transToCompare)) {
+
+    return pathToCompare.startsWith(recToCompare) || pathToCompare.startsWith(transToCompare)
+  } catch {
+    return false
+  }
+}
+
+export function readRecordingFile(filePath: string): Buffer | null {
+  try {
+    // Only allow reading files within recordings or transcripts directories
+    if (!isRecordingPathAllowed(filePath)) {
       console.error('Attempted to read file outside allowed directories:', filePath)
       return null
     }

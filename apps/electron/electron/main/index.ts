@@ -1,6 +1,17 @@
-import { app, shell, BrowserWindow, session, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, session, ipcMain, protocol } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { MEDIA_SCHEME, registerMediaProtocol } from './services/media-protocol'
+
+// Privileged custom scheme for streaming local recordings to <audio>. MUST be
+// registered before app `ready`. `stream: true` enables ranged/streamed
+// responses; the renderer CSP (src/index.html) allows `hidock-media:` in media-src.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: MEDIA_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+])
 
 // HiDock USB Vendor/Product IDs
 // Source: Official HiDock HiNotes jensen.js (December 2025)
@@ -196,6 +207,9 @@ if (enableRemoteDebugging) {
 app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.hidock.meeting-intelligence')
+
+  // Serve local recordings via the streaming media protocol (range-capable).
+  registerMediaProtocol()
 
   // Show splash screen immediately
   splashWindow = createSplashWindow()
