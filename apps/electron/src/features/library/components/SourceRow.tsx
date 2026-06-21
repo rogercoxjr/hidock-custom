@@ -29,6 +29,9 @@ import { StatusIcon } from './StatusIcon'
 import { useLibraryStore } from '@/store/useLibraryStore'
 import { getDisplayTitle } from '@/features/library/utils/getDisplayTitle'
 import { highlightText } from '@/features/library/utils/highlightText'
+import { CapturePeoplePills } from './CapturePeoplePills'
+import { CaptureLabelChips } from './CaptureLabelChips'
+import type { CapturePerson, CaptureLabel } from '../types/captureMeta'
 
 // Derive an "insight count" (action items + key points) for the accent badge.
 function insightCount(transcript?: Transcript): number {
@@ -67,6 +70,16 @@ interface SourceRowProps {
   isDownloading?: boolean
   downloadProgress?: number
   deviceConnected?: boolean
+  /** Pre-derived people for the pills row (from meeting attendees, slice 1). */
+  people?: CapturePerson[]
+  /** Pre-derived labels for the chip row (category, slice 1). */
+  labels?: CaptureLabel[]
+  /** Stable primitive key for people array — used in memo comparator. */
+  peopleKey?: string
+  /** Stable primitive key for labels array — used in memo comparator. */
+  labelsKey?: string
+  /** Called when overflow "+N" pill is clicked (opens source reader). */
+  onOverflowPeopleClick?: () => void
 }
 
 export const SourceRow = memo(function SourceRow({
@@ -89,6 +102,11 @@ export const SourceRow = memo(function SourceRow({
   isDownloading = false,
   downloadProgress,
   deviceConnected = false,
+  people = [],
+  labels = [],
+  peopleKey: _peopleKey,
+  labelsKey: _labelsKey,
+  onOverflowPeopleClick,
 }: SourceRowProps) {
   const canPlay = hasLocalPath(recording)
   const error = useLibraryStore((state) => state.recordingErrors.get(recording.id))
@@ -176,6 +194,13 @@ export const SourceRow = memo(function SourceRow({
               </Badge>
             )}
           </div>
+          {/* People pills + label chips — visible when data is present */}
+          {(people.length > 0 || labels.length > 0) && (
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <CapturePeoplePills people={people} cap={3} onOverflowClick={onOverflowPeopleClick} />
+              <CaptureLabelChips labels={labels} />
+            </div>
+          )}
         </div>
 
         {/* Insight count badge (accent-2-soft) */}
@@ -346,6 +371,8 @@ export const SourceRow = memo(function SourceRow({
     prevProps.meeting?.id === nextProps.meeting?.id &&
     prevProps.meeting?.subject === nextProps.meeting?.subject &&
     prevProps.searchQuery === nextProps.searchQuery &&
+    prevProps.peopleKey === nextProps.peopleKey &&
+    prevProps.labelsKey === nextProps.labelsKey &&
     prevProps.onSelectionChange === nextProps.onSelectionChange &&
     prevProps.onClick === nextProps.onClick
   )
