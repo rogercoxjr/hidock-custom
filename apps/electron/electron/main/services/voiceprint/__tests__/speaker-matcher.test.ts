@@ -346,48 +346,57 @@ describe('runMatcher() — Phase 2B orchestrator', () => {
   const longLabelRows = (runId: string) =>
     [
       {
-        id: 'le_M',
-        recording_id: 'rec_1',
-        file_label: 'M',
-        model_id: VOICEPRINT_MODEL_ID,
-        dim: 256,
-        embedding: embBlob(SAME_VEC),
-        clean_speech_ms: 25_000,
-        diarization_run_id: runId,
+        id: 'le_M', recording_id: 'rec_1', file_label: 'M', model_id: VOICEPRINT_MODEL_ID,
+        dim: 256, embedding: embBlob(SAME_VEC), clean_speech_ms: 25_000, diarization_run_id: runId,
       },
     ] as never
 
-  // obsolete in-memory-cache assertion — rewritten DB-backed in Task 7
-  it.skip('perf: caches window embeddings per (recording, run) — re-run does NOT re-decode/re-embed', async () => {
+  const longTurns = [
+    { speaker: 'M', startMs: 0, endMs: 22_000, text: 'a' },
+    { speaker: 'M', startMs: 22_000, endMs: 44_000, text: 'b' },
+  ]
+
+  it('perf: a DB hit (matching fingerprint) serves window embeddings without re-decode/re-embed', async () => {
     vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_1'))
     vi.mocked(db.getContactsWithActiveVoiceprints).mockReturnValue([] as never)
     vi.mocked(db.getRecordingById).mockReturnValue({ id: 'rec_1', file_path: '/r/rec.wav' } as never)
-    vi.mocked(vp.embedLabelWindows).mockResolvedValue([DIFF_VEC, SAME_VEC])
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({ id: 't1', turns: JSON.stringify(longTurns) } as never)
+    const fp = labelTurnsFingerprint(longTurns as never, 'M', VOICEPRINT_MODEL_ID, 1)
+    vi.mocked(db.getWindowEmbeddingsForRecording).mockReturnValue([
+      { fileLabel: 'M', fingerprint: fp, embeddings: [embBlob(DIFF_VEC), embBlob(SAME_VEC)] },
+    ] as never)
 
     await runMatcher('rec_1')
     await runMatcher('rec_1')
     await runMatcher('rec_1')
 
-    // The expensive decode + per-window inference run ONCE for the run, not per call.
-    expect(vi.mocked(vp.decodeRecordingPcm16k)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(vp.embedLabelWindows)).toHaveBeenCalledTimes(1)
-    // But suggestions are still produced on every call (scoring re-runs).
+    // Persisted hit each call → never decode or embed.
+    expect(vi.mocked(vp.decodeRecordingPcm16k)).not.toHaveBeenCalled()
+    expect(vi.mocked(vp.embedLabelWindows)).not.toHaveBeenCalled()
+    // But scoring re-runs and a mixed suggestion is produced every call.
     expect(vi.mocked(db.insertSuggestion).mock.calls.filter((c) => c[0].kind === 'mixed').length).toBe(3)
   })
 
-  // obsolete in-memory-cache assertion — rewritten DB-backed in Task 7
-  it.skip('perf: a new diarization run id re-decodes/re-embeds (cache keyed by run)', async () => {
+  it('perf: a changed fingerprint (edited turns) re-decodes/re-embeds and re-persists', async () => {
+    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_1'))
     vi.mocked(db.getContactsWithActiveVoiceprints).mockReturnValue([] as never)
     vi.mocked(db.getRecordingById).mockReturnValue({ id: 'rec_1', file_path: '/r/rec.wav' } as never)
+    vi.mocked(db.getTranscriptByRecordingId).mockReturnValue({ id: 't1', turns: JSON.stringify(longTurns) } as never)
     vi.mocked(vp.embedLabelWindows).mockResolvedValue([DIFF_VEC, SAME_VEC])
 
-    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_1'))
+    // First call: DB empty → miss → compute + persist.
+    vi.mocked(db.getWindowEmbeddingsForRecording).mockReturnValue([] as never)
     await runMatcher('rec_1')
-    vi.mocked(db.getLabelEmbeddingsForRecording).mockReturnValue(longLabelRows('drun_2'))
+
+    // Second call: persisted rows exist but under a STALE fingerprint → miss → recompute.
+    vi.mocked(db.getWindowEmbeddingsForRecording).mockReturnValue([
+      { fileLabel: 'M', fingerprint: 'STALE', embeddings: [embBlob(SAME_VEC)] },
+    ] as never)
     await runMatcher('rec_1')
 
     expect(vi.mocked(vp.decodeRecordingPcm16k)).toHaveBeenCalledTimes(2)
     expect(vi.mocked(vp.embedLabelWindows)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(db.replaceWindowEmbeddingsForLabel)).toHaveBeenCalledTimes(2)
   })
 })
 
