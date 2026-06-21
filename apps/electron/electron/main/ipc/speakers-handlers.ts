@@ -34,6 +34,37 @@ export function setMainWindowForSpeakers(win: BrowserWindow): void {
   mainWindow = win
 }
 
+/**
+ * Per-recording single-flight for the expensive getSuggestions compute (spec §5). getSuggestions
+ * fires on recording-change AND every onChanged edit, and two IPC calls can overlap; the renderer
+ * token guard does not abort in-flight calls. Dedupe the WHOLE embedRecordingLabels+runMatcher
+ * sequence by recordingId so two first-opens can't both decode/embed or mint distinct run ids.
+ */
+const getSuggestionsInFlight = new Map<string, Promise<MatcherResult>>()
+
+function getSuggestionsSequence(recordingId: string): Promise<MatcherResult> {
+  const existing = getSuggestionsInFlight.get(recordingId)
+  if (existing) return existing
+  const p = (async (): Promise<MatcherResult> => {
+    await embedRecordingLabels(recordingId)
+    return (await runMatcher(recordingId)) as MatcherResult
+  })()
+  getSuggestionsInFlight.set(recordingId, p)
+  // Clear on settle (success OR failure) so a later call re-computes; a rejection is shared by all
+  // current awaiters (the handler try/catch maps it to []), then evicted here.
+  p.finally(() => {
+    if (getSuggestionsInFlight.get(recordingId) === p) getSuggestionsInFlight.delete(recordingId)
+  }).catch(() => { /* rejection already surfaced to awaiters; nothing to do here */ })
+  return p
+}
+
+/** Evict any in-flight getSuggestions compute for a recording. Called by mutation handlers (merge,
+ *  updateTurns) AFTER they delete embeddings, so a compute that started pre-edit is not adopted by
+ *  the renderer's post-edit refresh — the next getSuggestions starts fresh. */
+export function clearSuggestionsInFlight(recordingId: string): void {
+  getSuggestionsInFlight.delete(recordingId)
+}
+
 const AssignSpeakerSchema = z.object({
   recordingId: z.string().min(1),
   fileLabel: z.string().min(1),
@@ -388,8 +419,7 @@ export function registerSpeakersHandlers(): void {
         }
 
         const id = parsed.data
-        await embedRecordingLabels(id)
-        const { diarizationRunId } = await runMatcher(id) as MatcherResult
+        const { diarizationRunId } = await getSuggestionsSequence(id)
 
         const rows = getPendingSuggestions(id, diarizationRunId)
         const views: SuggestionView[] = rows
