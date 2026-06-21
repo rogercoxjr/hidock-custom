@@ -8,7 +8,7 @@ import type { Turn } from './asr/asr-provider'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 31
+const SCHEMA_VERSION = 32
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -310,6 +310,23 @@ CREATE TABLE IF NOT EXISTS recording_label_embeddings (
     created_at TEXT NOT NULL,
     updated_at TEXT
 );
+
+-- Per-recording per-label per-window embeddings for mixed-detection persistence (spec 2026-06-21, v32)
+CREATE TABLE IF NOT EXISTS recording_window_embeddings (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL,
+    transcript_id TEXT,
+    diarization_run_id TEXT,
+    file_label TEXT NOT NULL,
+    window_index INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    model_version INTEGER NOT NULL DEFAULT 1,
+    dim INTEGER NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rwe_recording_label ON recording_window_embeddings(recording_id, file_label);
 
 -- Pending speaker-identity / merge suggestions (spec 2026-06-19 §8, v27, diarization_run_id v28, contact_id_2 v29)
 CREATE TABLE IF NOT EXISTS speaker_suggestions (
@@ -1789,6 +1806,23 @@ const MIGRATIONS: Record<number, () => void> = {
 
     console.log('Migration v31 complete')
   }
+  ,
+
+  32: () => {
+    // v32: persist mixed-detection per-window embeddings (spec 2026-06-21). Additive
+    // only — new table + index, no FK rebuild, no CHECK changes. Idempotent CREATEs so
+    // a fresh DB (already created by the canonical SCHEMA) and an upgraded DB converge.
+    console.log('Running migration to schema v32: recording_window_embeddings')
+    const database = getDatabase()
+    database.run(`CREATE TABLE IF NOT EXISTS recording_window_embeddings (
+      id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, transcript_id TEXT, diarization_run_id TEXT,
+      file_label TEXT NOT NULL, window_index INTEGER NOT NULL, fingerprint TEXT NOT NULL,
+      model_id TEXT NOT NULL, model_version INTEGER NOT NULL DEFAULT 1, dim INTEGER NOT NULL,
+      embedding BLOB NOT NULL, created_at TEXT NOT NULL)`)
+    database.run(`CREATE INDEX IF NOT EXISTS idx_rwe_recording_label
+      ON recording_window_embeddings(recording_id, file_label)`)
+    console.log('Migration v32 complete')
+  }
 
 }
 
@@ -2611,6 +2645,8 @@ export function deleteRecordingLocal(id: string): void {
     on_local: 0,
     location: newLocation as Recording['location']
   })
+  deleteLabelEmbeddingsForRecording(id)
+  deleteWindowEmbeddingsForRecording(id)
 }
 
 export function insertRecording(recording: Omit<Recording, 'created_at'>): void {
@@ -3285,6 +3321,114 @@ export function getLabelEmbeddingsForRecording(recordingId: string): LabelEmbedd
 }
 export function deleteLabelEmbeddingsForRecording(recordingId: string): void {
   run('DELETE FROM recording_label_embeddings WHERE recording_id = ?', [recordingId])
+}
+
+// v32 mixed-detection window embeddings (spec 2026-06-21 §2). The fingerprint is the
+// content cache key (NOT diarization_run_id); see speaker-matcher.labelTurnsFingerprint.
+export interface WindowEmbeddingRow {
+  id: string; recording_id: string; transcript_id?: string | null; diarization_run_id?: string | null
+  file_label: string; window_index: number; fingerprint: string
+  model_id: string; model_version?: number; dim: number; embedding: Uint8Array; created_at?: string
+}
+
+export interface WindowEmbeddingGroup {
+  fileLabel: string; fingerprint: string; embeddings: Uint8Array[]
+}
+
+/** Insert all window-embedding rows inside ONE transaction and save the sql.js image
+ *  ONCE. Never per-row run() (whole-DB write storm). Empty input is a no-op. */
+export function insertWindowEmbeddingsBatch(rows: WindowEmbeddingRow[]): void {
+  if (rows.length === 0) return
+  const now = new Date().toISOString()
+  runInTransaction(() => {
+    const stmt = getDatabase().prepare(`INSERT OR REPLACE INTO recording_window_embeddings
+      (id, recording_id, transcript_id, diarization_run_id, file_label, window_index, fingerprint,
+       model_id, model_version, dim, embedding, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    try {
+      for (const r of rows) {
+        stmt.bind([
+          r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
+          r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
+          r.dim, r.embedding, r.created_at ?? now
+        ])
+        stmt.step()
+        stmt.reset()
+      }
+    } finally {
+      stmt.free()
+    }
+  })
+}
+
+/** Rows for a recording, grouped by file_label, embeddings ordered by window_index,
+ *  with each label's fingerprint. Stale model_id / model_version rows are excluded. */
+export function getWindowEmbeddingsForRecording(
+  recordingId: string,
+  modelId: string,
+  modelVersion: number
+): WindowEmbeddingGroup[] {
+  const rows = queryAll<WindowEmbeddingRow>(
+    `SELECT * FROM recording_window_embeddings
+     WHERE recording_id = ? AND model_id = ? AND model_version = ?
+     ORDER BY file_label, window_index`,
+    [recordingId, modelId, modelVersion]
+  )
+  const byLabel = new Map<string, WindowEmbeddingGroup>()
+  for (const r of rows) {
+    let g = byLabel.get(r.file_label)
+    if (!g) {
+      g = { fileLabel: r.file_label, fingerprint: r.fingerprint, embeddings: [] }
+      byLabel.set(r.file_label, g)
+    }
+    g.embeddings.push(r.embedding)
+  }
+  return [...byLabel.values()]
+}
+
+export function deleteWindowEmbeddingsForRecording(recordingId: string): void {
+  run('DELETE FROM recording_window_embeddings WHERE recording_id = ?', [recordingId])
+}
+
+export function deleteWindowEmbeddingsForLabel(recordingId: string, fileLabel: string): void {
+  run('DELETE FROM recording_window_embeddings WHERE recording_id = ? AND file_label = ?', [recordingId, fileLabel])
+}
+
+/** Atomically replace one label's window rows: DELETE the label's existing rows + INSERT the
+ *  fresh set inside ONE transaction, saving the sql.js image ONCE. This is the recompute accessor
+ *  the matcher uses — a separate delete + batch-insert would be TWO auto-saving transactions with a
+ *  crash window that could leave the label with zero rows (spec §4.4 atomicity). Empty `rows` just
+ *  deletes the label. */
+export function replaceWindowEmbeddingsForLabel(
+  recordingId: string,
+  fileLabel: string,
+  rows: WindowEmbeddingRow[]
+): void {
+  const now = new Date().toISOString()
+  runInTransaction(() => {
+    runNoSave('DELETE FROM recording_window_embeddings WHERE recording_id = ? AND file_label = ?', [
+      recordingId,
+      fileLabel,
+    ])
+    if (rows.length === 0) return
+    const stmt = getDatabase().prepare(`INSERT OR REPLACE INTO recording_window_embeddings
+      (id, recording_id, transcript_id, diarization_run_id, file_label, window_index, fingerprint,
+       model_id, model_version, dim, embedding, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    try {
+      for (const r of rows) {
+        stmt.bind([
+          r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
+          r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
+          r.dim, r.embedding, r.created_at ?? now
+        ])
+        stmt.step()
+        stmt.reset()
+      }
+    } finally {
+      stmt.free()
+    }
+  })
 }
 
 export interface SpeakerSuggestion {

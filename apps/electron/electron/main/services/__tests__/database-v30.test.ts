@@ -99,9 +99,9 @@ beforeEach(async () => {
 afterEach(() => { try { closeDatabase() } catch { /* ignore */ } })
 
 describe('v30 voice-library phase-2C schema', () => {
-  it('schema_version is at current head (31)', () => {
+  it('schema_version is at current head (32)', () => {
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(31)
+    expect(ver?.version).toBe(32)
   })
 
   it('diarization_runs table exists with the expected columns', () => {

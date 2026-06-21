@@ -38,6 +38,7 @@ import {
   clearTranscriptForRetranscribe,
   deleteRecordingSpeakersForRecording,
   deleteLabelEmbeddingsForRecording,
+  deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
   rependFailedItems,
   isSummaryStale
@@ -180,6 +181,8 @@ export function registerRecordingHandlers(): void {
         const deleted = deleteRecordingFile(recording.file_path)
         if (deleted) {
           updateRecordingStatus(result.data.id, 'deleted')
+          deleteLabelEmbeddingsForRecording(result.data.id)
+          deleteWindowEmbeddingsForRecording(result.data.id)
         }
         return deleted
       }
@@ -215,6 +218,8 @@ export function registerRecordingHandlers(): void {
             const wasDeleted = deleteRecordingFile(recording.file_path)
             if (wasDeleted) {
               updateRecordingStatus(id, 'deleted')
+              deleteLabelEmbeddingsForRecording(id)
+              deleteWindowEmbeddingsForRecording(id)
               deleted++
             } else {
               failed++
@@ -320,6 +325,7 @@ export function registerRecordingHandlers(): void {
         clearTranscriptForRetranscribe(id)
         deleteRecordingSpeakersForRecording(id)
         deleteLabelEmbeddingsForRecording(id)
+        deleteWindowEmbeddingsForRecording(id)
         expireSuggestionsForRecording(id)
       }
 

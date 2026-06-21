@@ -87,6 +87,7 @@ vi.mock('../database', () => ({
   resetStuckTranscriptions: vi.fn(),
   deleteRecordingSpeakersForRecording: vi.fn(),
   deleteLabelEmbeddingsForRecording: vi.fn(),
+  deleteWindowEmbeddingsForRecording: vi.fn(),
   expireSuggestionsForRecording: vi.fn(),
   run: vi.fn(),
   queryOne: vi.fn()

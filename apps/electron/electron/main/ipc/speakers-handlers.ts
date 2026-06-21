@@ -18,6 +18,7 @@ import {
   getPendingSuggestions,
   getSelfContactId,
   deleteLabelEmbeddingsForRecording,
+  deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
   acceptSuggestion as dbAcceptSuggestion,
   dismissSuggestion as dbDismissSuggestion,
@@ -32,6 +33,37 @@ import { z } from 'zod'
 let mainWindow: BrowserWindow | null = null
 export function setMainWindowForSpeakers(win: BrowserWindow): void {
   mainWindow = win
+}
+
+/**
+ * Per-recording single-flight for the expensive getSuggestions compute (spec §5). getSuggestions
+ * fires on recording-change AND every onChanged edit, and two IPC calls can overlap; the renderer
+ * token guard does not abort in-flight calls. Dedupe the WHOLE embedRecordingLabels+runMatcher
+ * sequence by recordingId so two first-opens can't both decode/embed or mint distinct run ids.
+ */
+const getSuggestionsInFlight = new Map<string, Promise<MatcherResult>>()
+
+function getSuggestionsSequence(recordingId: string): Promise<MatcherResult> {
+  const existing = getSuggestionsInFlight.get(recordingId)
+  if (existing) return existing
+  const p = (async (): Promise<MatcherResult> => {
+    await embedRecordingLabels(recordingId)
+    return (await runMatcher(recordingId)) as MatcherResult
+  })()
+  getSuggestionsInFlight.set(recordingId, p)
+  // Clear on settle (success OR failure) so a later call re-computes; a rejection is shared by all
+  // current awaiters (the handler try/catch maps it to []), then evicted here.
+  p.finally(() => {
+    if (getSuggestionsInFlight.get(recordingId) === p) getSuggestionsInFlight.delete(recordingId)
+  }).catch(() => { /* rejection already surfaced to awaiters; nothing to do here */ })
+  return p
+}
+
+/** Evict any in-flight getSuggestions compute for a recording. Called by mutation handlers (merge,
+ *  updateTurns) AFTER they delete embeddings, so a compute that started pre-edit is not adopted by
+ *  the renderer's post-edit refresh — the next getSuggestions starts fresh. */
+export function clearSuggestionsInFlight(recordingId: string): void {
+  getSuggestionsInFlight.delete(recordingId)
 }
 
 const AssignSpeakerSchema = z.object({
@@ -262,6 +294,8 @@ export function registerSpeakersHandlers(): void {
         // A merge changes the label set for this diarization run; drop stale embeddings
         // and suggestions so the next panel-open mints a fresh run id and re-matches.
         deleteLabelEmbeddingsForRecording(recordingId)
+        deleteWindowEmbeddingsForRecording(recordingId)
+        clearSuggestionsInFlight(recordingId) // evict any pre-edit compute (Task 5)
         expireSuggestionsForRecording(recordingId)
 
         // 2. Preserve the mapping: if toLabel has no row but fromLabel does, carry it over.
@@ -364,6 +398,14 @@ export function registerSpeakersHandlers(): void {
 
         const { recordingId, turns } = parsed.data
         updateTranscriptTurns(recordingId, turns as Turn[])
+        // Per-turn reassign edits turn membership without minting a new run id. The window
+        // fingerprint already forces a window recompute, but LABEL embeddings (identity/merge
+        // scoring) are computed from the clean-speech set and would otherwise stay stale — so drop
+        // BOTH, matching what speakers:merge does, and evict any in-flight compute so the renderer's
+        // post-edit refresh starts fresh. (spec §6; improvement-high "label embeddings stale".)
+        deleteLabelEmbeddingsForRecording(recordingId)
+        deleteWindowEmbeddingsForRecording(recordingId)
+        clearSuggestionsInFlight(recordingId)
         return success({ recordingId })
       } catch (err) {
         console.error('transcripts:updateTurns error:', err)
@@ -388,8 +430,7 @@ export function registerSpeakersHandlers(): void {
         }
 
         const id = parsed.data
-        await embedRecordingLabels(id)
-        const { diarizationRunId } = await runMatcher(id) as MatcherResult
+        const { diarizationRunId } = await getSuggestionsSequence(id)
 
         const rows = getPendingSuggestions(id, diarizationRunId)
         const views: SuggestionView[] = rows

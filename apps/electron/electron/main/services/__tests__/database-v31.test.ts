@@ -89,9 +89,9 @@ beforeEach(async () => {
 afterEach(() => { try { closeDatabase() } catch { /* ignore */ } })
 
 describe('v31 — fresh boot (relaxed category column)', () => {
-  it('schema_version is 31', () => {
+  it('schema_version is 31 (now advances to 32 as current head)', () => {
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(31)
+    expect(ver?.version).toBe(32)
   })
 
   it('knowledge_captures.category has NO CHECK (a user-defined label is storable)', () => {
@@ -170,9 +170,9 @@ describe('v31 — genuine upgrade path (CHECK-drop rebuild)', () => {
     closeDatabase()
     await initializeDatabase()
 
-    // --- Assert: version bumped ---
+    // --- Assert: version bumped (to current head, which is now 32) ---
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(31)
+    expect(ver?.version).toBe(32)
 
     // --- Assert: CHECK is gone ---
     const createSql = queryOne<{ sql: string }>(

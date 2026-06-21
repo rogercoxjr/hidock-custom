@@ -35,6 +35,7 @@ vi.mock('../../services/database', () => ({
   clearTranscriptForRetranscribe: vi.fn(),
   deleteRecordingSpeakersForRecording: vi.fn(),
   deleteLabelEmbeddingsForRecording: vi.fn(),
+  deleteWindowEmbeddingsForRecording: vi.fn(),
   expireSuggestionsForRecording: vi.fn(),
   rependFailedItems: vi.fn().mockReturnValue(0),
   isSummaryStale: vi.fn().mockReturnValue(false)

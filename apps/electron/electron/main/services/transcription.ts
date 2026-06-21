@@ -30,6 +30,7 @@ import {
   buildAttributedTranscript,
   deleteRecordingSpeakersForRecording,
   deleteLabelEmbeddingsForRecording,
+  deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
   insertDiarizationRun
 } from './database'
@@ -479,6 +480,7 @@ async function transcribeRecording(
     // are NOT dropped.
     deleteRecordingSpeakersForRecording(recordingId)
     deleteLabelEmbeddingsForRecording(recordingId)
+    deleteWindowEmbeddingsForRecording(recordingId)
     expireSuggestionsForRecording(recordingId)
 
     // Build meeting context for better transcription

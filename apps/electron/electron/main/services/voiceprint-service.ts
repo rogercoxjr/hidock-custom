@@ -24,6 +24,7 @@ import {
   insertLabelEmbedding,
   getLabelEmbeddingsForRecording,
   deleteLabelEmbeddingsForRecording,
+  deleteWindowEmbeddingsForRecording,
   getActiveVoiceprintsByContactId,
   getSuggestionsForRecording,
   getRecordingSpeaker
@@ -133,6 +134,10 @@ export const MIN_CLEAN_SPEECH_MS = 10_000
  *  under a minute; 60 s bounds compute() time (and the slicing loop) so a long
  *  recording can't freeze the main thread. Well above MIN_CLEAN_SPEECH_MS. */
 export const MAX_EMBED_SPEECH_MS = 60_000
+
+/** The active voiceprint/window-embedding model version — the ONE place this is declared.
+ *  Bump here (and only here) when the model changes; all stale-filters/fingerprints key off it. */
+export const VOICEPRINT_MODEL_VERSION = 1
 
 /**
  * Sum the milliseconds of `label`'s turns that do NOT overlap any OTHER
@@ -454,7 +459,7 @@ export async function captureVoiceprint(
       source_label: fileLabel,
       clean_speech_ms: cleanMs,
       quality_score: qualityScore,
-      model_version: 1,
+      model_version: VOICEPRINT_MODEL_VERSION,
       created_from: createdFrom
     })
     return { captured: true, voiceprintId, cleanSpeechMs: cleanMs }
@@ -473,9 +478,10 @@ export async function embedRecordingLabels(recordingId: string): Promise<void> {
   // Idempotency: if embeddings already exist for this recording, adopt their
   // diarization_run_id and return without re-decoding or re-embedding (§9).
   const existing = getLabelEmbeddingsForRecording(recordingId)
-  const hasStale = existing.some((e) => e.model_id !== VOICEPRINT_MODEL_ID || e.model_version !== 1)
+  const hasStale = existing.some((e) => e.model_id !== VOICEPRINT_MODEL_ID || e.model_version !== VOICEPRINT_MODEL_VERSION)
   if (hasStale) {
     deleteLabelEmbeddingsForRecording(recordingId)
+    deleteWindowEmbeddingsForRecording(recordingId)
   } else if (existing.length > 0) {
     return
   }
@@ -507,7 +513,7 @@ export async function embedRecordingLabels(recordingId: string): Promise<void> {
       diarization_run_id: runId,
       file_label: label,
       model_id: VOICEPRINT_MODEL_ID,
-      model_version: 1,
+      model_version: VOICEPRINT_MODEL_VERSION,
       dim: embedding.length,
       embedding: embeddingToBlob(embedding),
       clean_speech_ms: collectCleanSpeechMs(turns, label),
