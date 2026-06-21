@@ -6,4 +6,6 @@ export * from './highlightText'
 export { buildSearchCorpus, buildDateAliases } from './buildSearchCorpus'
 export * from './deriveCapturePeople'
 export * from './deriveCaptureLabels'
+export * from './labelPalette'
+export * from './labelTaxonomy'
 

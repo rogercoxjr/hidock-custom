@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { deriveCaptureLabels, buildLabelsKey } from '../deriveCaptureLabels'
+import type { LabelDefinition } from '@/types'
+
+const TAXONOMY: LabelDefinition[] = [
+  { id: 'meeting', name: 'Meeting', color: 'blue', builtin: true },
+  { id: 'interview', name: 'Interview', color: 'teal', builtin: true },
+  { id: '1:1', name: '1:1', color: 'green', builtin: true },
+  { id: 'brainstorm', name: 'Brainstorm', color: 'amber', builtin: true },
+  { id: 'note', name: 'Note', color: 'violet', builtin: true },
+  { id: 'other', name: 'Other', color: 'slate', builtin: true },
+  { id: 'sales-call', name: 'Sales Call', color: 'green' }
+]
 
 describe('deriveCaptureLabels', () => {
   it('returns empty array when category is undefined', () => {
@@ -10,27 +21,34 @@ describe('deriveCaptureLabels', () => {
     expect(deriveCaptureLabels('')).toEqual([])
   })
 
-  it('returns one category chip for a known category', () => {
-    const labels = deriveCaptureLabels('meeting')
+  it('resolves the category chip name + color from the taxonomy', () => {
+    const labels = deriveCaptureLabels('meeting', undefined, TAXONOMY)
     expect(labels).toHaveLength(1)
-    expect(labels[0]).toMatchObject({ text: 'meeting', kind: 'category', colorClass: 'bg-primary' })
+    // Shows the display NAME (not the raw id) and the palette dot color (blue → bg-primary).
+    expect(labels[0]).toMatchObject({ text: 'Meeting', kind: 'category', colorClass: 'bg-primary' })
   })
 
-  it('returns a chip for every known category value', () => {
-    const categories = ['meeting', 'interview', '1:1', 'brainstorm', 'note', 'other'] as const
-    for (const cat of categories) {
-      const labels = deriveCaptureLabels(cat)
+  it('resolves a user-added label by its display name + color', () => {
+    const labels = deriveCaptureLabels('sales-call', undefined, TAXONOMY)
+    expect(labels[0]).toMatchObject({ text: 'Sales Call', kind: 'category', colorClass: 'bg-success' })
+  })
+
+  it('returns a colored chip for every taxonomy category value', () => {
+    for (const item of TAXONOMY) {
+      const labels = deriveCaptureLabels(item.id, undefined, TAXONOMY)
       expect(labels).toHaveLength(1)
       expect(labels[0].kind).toBe('category')
+      expect(labels[0].text).toBe(item.name)
       expect(labels[0].colorClass).toBeTruthy()
     }
   })
 
-  it('returns a chip for unknown category without a colorClass', () => {
-    const labels = deriveCaptureLabels('custom-unknown')
+  it('falls back to the raw id + slate dot for a category absent from the taxonomy', () => {
+    const labels = deriveCaptureLabels('custom-unknown', undefined, TAXONOMY)
     expect(labels).toHaveLength(1)
     expect(labels[0]).toMatchObject({ text: 'custom-unknown', kind: 'category' })
-    expect(labels[0].colorClass).toBeUndefined()
+    // Unknown labels still get a (slate) dot so the chip renders consistently.
+    expect(labels[0].colorClass).toBe('bg-surface-sunken')
   })
 
   it('appends uncolored topic chips parsed from a JSON topics string', () => {

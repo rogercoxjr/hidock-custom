@@ -209,6 +209,19 @@ export interface AppConfig {
     enableVoiceprintCapture: boolean
     excludeVoiceprintsFromBackup: boolean
   }
+  // Smart Labels (v1 manual taxonomy) — kept in sync with the main-process AppConfig
+  // (electron/main/services/config.ts). Assignment lives in knowledge_captures.category.
+  labels: {
+    items: LabelDefinition[]
+  }
+}
+
+/** A user-owned category label. `id` is an immutable slug; `name` is editable display. */
+export interface LabelDefinition {
+  id: string        // immutable slug; equals the stored knowledge_captures.category
+  name: string      // editable display label
+  color: string     // Harbor palette token name (see features/library/utils/labelPalette.ts)
+  builtin?: boolean  // true for the 6 seeds; blocks hard-delete
 }
 
 // =============================================================================

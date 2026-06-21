@@ -8,7 +8,7 @@ import type { Turn } from './asr/asr-provider'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 30
+const SCHEMA_VERSION = 31
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -67,7 +67,9 @@ CREATE TABLE IF NOT EXISTS knowledge_captures (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     summary TEXT,
-    category TEXT CHECK(category IN ('meeting', 'interview', '1:1', 'brainstorm', 'note', 'other')) DEFAULT 'meeting',
+    -- v31: CHECK dropped so user-defined Smart Labels are storable. The set of valid
+    -- categories is now AppConfig.labels.items, validated in the app layer (sole writer).
+    category TEXT DEFAULT 'meeting',
     status TEXT CHECK(status IN ('processing', 'ready', 'enriched')) DEFAULT 'ready',
 
     -- Quality assessment
@@ -1705,6 +1707,87 @@ const MIGRATIONS: Record<number, () => void> = {
     }
 
     console.log('Migration v30 complete')
+  },
+
+  31: () => {
+    // v31: Smart Labels — drop the CHECK constraint on knowledge_captures.category so
+    // user-defined labels (AppConfig.labels.items) are storable. App-layer validation
+    // (the sole writer) replaces the dropped CHECK.
+    //
+    // knowledge_captures is a CENTRAL FK-parent with CASCADE children (transcripts,
+    // action-items, embeddings, conversation-context). SQLite can't drop a CHECK in
+    // place, so we use the existing *_new + copy + RENAME rebuild pattern. FK enforcement
+    // is OFF (no PRAGMA foreign_keys=ON anywhere — see migration v20 contacts rebuild),
+    // and every parent id is preserved verbatim by the copy, so children stay valid and
+    // CASCADE relationships remain intact. Columns are listed EXPLICITLY (not SELECT *)
+    // so the copy is robust to column-order drift from ALTER-based structural repair.
+    console.log('Running migration to schema v31: drop knowledge_captures.category CHECK')
+    const database = getDatabase()
+
+    try {
+      const tableInfo = database.exec(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_captures'"
+      )
+      const createSql = tableInfo.length > 0 && tableInfo[0].values.length > 0
+        ? (tableInfo[0].values[0][0] as string)
+        : ''
+
+      // Idempotent: only rebuild if the category CHECK is still present.
+      if (createSql.includes("category IN ('meeting'") || /category[^,]*CHECK/i.test(createSql)) {
+        const cols = `
+          id, title, summary, category, status,
+          quality_rating, quality_confidence, quality_assessed_at,
+          storage_tier, retention_days, expires_at,
+          meeting_id, correlation_confidence, correlation_method,
+          source_recording_id,
+          captured_at, created_at, updated_at, deleted_at
+        `.replace(/\s+/g, ' ').trim()
+
+        database.run(`
+          CREATE TABLE knowledge_captures_new (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            summary TEXT,
+            category TEXT DEFAULT 'meeting',
+            status TEXT CHECK(status IN ('processing', 'ready', 'enriched')) DEFAULT 'ready',
+            quality_rating TEXT CHECK(quality_rating IN ('valuable', 'archived', 'low-value', 'garbage', 'unrated')) DEFAULT 'unrated',
+            quality_confidence REAL,
+            quality_assessed_at TEXT,
+            storage_tier TEXT CHECK(storage_tier IN ('hot', 'cold', 'expiring', 'deleted')) DEFAULT 'hot',
+            retention_days INTEGER,
+            expires_at TEXT,
+            meeting_id TEXT,
+            correlation_confidence REAL,
+            correlation_method TEXT,
+            source_recording_id TEXT,
+            captured_at TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            deleted_at TEXT,
+            FOREIGN KEY (meeting_id) REFERENCES meetings(id),
+            FOREIGN KEY (source_recording_id) REFERENCES recordings(id)
+          )
+        `)
+        // Explicit column list both sides → preserves every row + its category verbatim.
+        database.run(`INSERT INTO knowledge_captures_new (${cols}) SELECT ${cols} FROM knowledge_captures`)
+        database.run('DROP TABLE knowledge_captures')
+        database.run('ALTER TABLE knowledge_captures_new RENAME TO knowledge_captures')
+        console.log('[Migration v31] knowledge_captures.category CHECK removed (rows preserved)')
+      } else {
+        console.log('[Migration v31] category CHECK already absent — no rebuild needed')
+      }
+
+      // Recreate ALL indexes the table rebuild dropped (DROP TABLE drops its indexes).
+      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_category ON knowledge_captures(category)')
+      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_quality ON knowledge_captures(quality_rating)')
+      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_status ON knowledge_captures(status)')
+      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_title ON knowledge_captures(title)')
+      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_summary ON knowledge_captures(summary)')
+    } catch (e) {
+      console.warn('[Migration v31] CHECK-drop rebuild failed:', e)
+    }
+
+    console.log('Migration v31 complete')
   }
 
 }
@@ -1784,7 +1867,8 @@ export async function initializeDatabase(): Promise<void> {
     const captureInfo = database.exec("PRAGMA table_info(knowledge_captures)")
     const capCols = captureInfo.length > 0 && captureInfo[0].values ? captureInfo[0].values.map(col => col[1]) : []
     const knowledgeRepairs = [
-      { name: 'category', def: "category TEXT CHECK(category IN ('meeting', 'interview', '1:1', 'brainstorm', 'note', 'other')) DEFAULT 'meeting'" },
+      // v31: relaxed — no CHECK (Smart Labels are user-defined; validated in app layer)
+      { name: 'category', def: "category TEXT DEFAULT 'meeting'" },
       { name: 'status', def: "status TEXT CHECK(status IN ('processing', 'ready', 'enriched')) DEFAULT 'ready'" },
       { name: 'quality_rating', def: "quality_rating TEXT CHECK(quality_rating IN ('valuable', 'archived', 'low-value', 'garbage', 'unrated')) DEFAULT 'unrated'" },
       { name: 'quality_confidence', def: "quality_confidence REAL" },

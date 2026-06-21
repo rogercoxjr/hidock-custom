@@ -18,6 +18,7 @@ import { useConfigStore } from '@/store/domain/useConfigStore'
 import { useUIStore } from '@/store/ui/useUIStore'
 import { formatBytes } from '@/lib/utils'
 import { HealthCheck } from '@/components/HealthCheck'
+import { SmartLabelsCard } from '@/components/SmartLabelsCard'
 import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
@@ -647,6 +648,9 @@ export function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Smart Labels */}
+          <SmartLabelsCard />
 
           {/* Calendar Settings */}
           <Card className="border-border bg-surface shadow-sm">

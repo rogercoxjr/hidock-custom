@@ -99,8 +99,8 @@ beforeEach(async () => {
 afterEach(() => { try { closeDatabase() } catch { /* ignore */ } })
 
 describe('v30 voice-library phase-2C schema', () => {
-  it('schema_version is 30', () => {
-    expect(queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')!.version).toBe(30)
+  it('schema_version is at current head (31)', () => {
+    expect(queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')!.version).toBe(31)
   })
   it('recording_label_embeddings table exists with the expected columns', () => {
     run(`INSERT INTO recording_label_embeddings

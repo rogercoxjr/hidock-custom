@@ -12,7 +12,7 @@ import {
   matchesSemanticFilter,
   matchesExclusiveFilter
 } from '@/types/unified-recording'
-import { Transcript, Meeting } from '@/types'
+import { Transcript, Meeting, LabelDefinition } from '@/types'
 import { useAudioControls } from '@/components/OperationController'
 import { useUIStore } from '@/store/useUIStore'
 import { useDownloadQueue } from '@/store/useAppStore'
@@ -34,6 +34,7 @@ import { useSourceSelection, useKeyboardNavigation, useTransitionFilters } from 
 import { buildSearchCorpus } from '@/features/library/utils/buildSearchCorpus'
 import { deriveCapturePeople, buildPeopleKey, deriveCaptureLabels, buildLabelsKey } from '@/features/library/utils'
 import { useLibraryStore, useLibrarySorting } from '@/store/useLibraryStore'
+import { useConfigStore } from '@/store/domain/useConfigStore'
 import { useOperations } from '@/hooks/useOperations'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { useFailedTranscriptions, useTranscriptionStore } from '@/store/features/useTranscriptionStore'
@@ -42,6 +43,9 @@ import { useFailedTranscriptions, useTranscriptionStore } from '@/store/features
 // Used to optimistically clear matching failed store rows so the failure chip
 // updates immediately instead of waiting for the 5 s poll reconcile.
 const RETRY_ALL_MARKERS = ['OpenAI', 'Ollama Cloud', 'Gemini API key'] as const
+
+// Stable empty reference so the labels selector never returns a fresh [] each render.
+const EMPTY_LABELS: LabelDefinition[] = []
 
 export function Library() {
   const navigate = useNavigate()
@@ -143,6 +147,9 @@ export function Library() {
   const { sortBy, sortOrder } = useLibrarySorting()
   const setSortBy = useLibraryStore((state) => state.setSortBy)
   const setSortOrder = useLibraryStore((state) => state.setSortOrder)
+
+  // Smart Labels taxonomy — drives the category filter chips + capture-chip colors/names.
+  const labelItems = useConfigStore((s) => s.config?.labels?.items) ?? EMPTY_LABELS
 
   // Row expansion removed - details now shown in center panel
 
@@ -900,6 +907,7 @@ export function Library() {
             semanticFilter={semanticFilter}
             exclusiveFilter={exclusiveFilter}
             categoryFilter={categoryFilter ?? 'all'}
+            categories={labelItems}
             qualityFilter={qualityFilter ?? 'all'}
             statusFilter={statusFilter ?? 'all'}
             searchQuery={searchQuery}
@@ -993,7 +1001,7 @@ export function Library() {
                     const meeting = recording.meetingId ? meetings.get(recording.meetingId) : undefined
                     const isFocused = focusedIndex === virtualRow.index
                     const rowPeople = deriveCapturePeople(meeting)
-                    const rowLabels = deriveCaptureLabels(recording.category, transcripts.get(recording.id)?.topics)
+                    const rowLabels = deriveCaptureLabels(recording.category, transcripts.get(recording.id)?.topics, labelItems)
                     const rowPeopleKey = buildPeopleKey(rowPeople)
                     const rowLabelsKey = buildLabelsKey(rowLabels)
 
@@ -1064,7 +1072,7 @@ export function Library() {
                     const meeting = recording.meetingId ? meetings.get(recording.meetingId) : undefined
                     const isFocused = focusedIndex === virtualRow.index
                     const cardPeople = deriveCapturePeople(meeting)
-                    const cardLabels = deriveCaptureLabels(recording.category, transcript?.topics)
+                    const cardLabels = deriveCaptureLabels(recording.category, transcript?.topics, labelItems)
                     const cardPeopleKey = buildPeopleKey(cardPeople)
                     const cardLabelsKey = buildLabelsKey(cardLabels)
 

@@ -8,6 +8,8 @@ import {
   ExclusiveLocationFilter
 } from '@/types/unified-recording'
 import type { SortBy, SortOrder } from '@/store/useLibraryStore'
+import type { LabelDefinition } from '@/types'
+import { dotClassForToken } from '@/features/library/utils'
 
 interface LibraryFiltersProps {
   stats: {
@@ -22,6 +24,8 @@ interface LibraryFiltersProps {
   semanticFilter: SemanticLocationFilter
   exclusiveFilter: ExclusiveLocationFilter
   categoryFilter: string
+  /** Smart Labels taxonomy (AppConfig.labels.items) driving the category chips. */
+  categories: LabelDefinition[]
   qualityFilter: string
   statusFilter: string
   searchQuery: string
@@ -38,11 +42,9 @@ interface LibraryFiltersProps {
   onSortOrderChange?: (order: SortOrder) => void
 }
 
-const CATEGORIES = ['all', 'meeting', 'interview', '1:1', 'brainstorm', 'note'] as const
-
 // Harbor pill-chip (matches prototype `hd-chip`). Active = solid primary, inactive = surface + border.
 const chipBase =
-  'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border'
+  'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border inline-flex items-center gap-1.5'
 const chipActive = 'border-transparent bg-primary text-primary-foreground'
 const chipInactive = 'border-border bg-surface text-foreground hover:border-border-strong hover:text-ink'
 
@@ -56,6 +58,7 @@ export function LibraryFilters({
   semanticFilter,
   exclusiveFilter,
   categoryFilter,
+  categories,
   qualityFilter,
   statusFilter,
   searchQuery,
@@ -197,19 +200,30 @@ export function LibraryFilters({
           </div>
         </div>
 
-        {/* Category filter */}
+        {/* Category filter — data-driven from the Smart Labels taxonomy */}
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Category filter">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => onCategoryFilterChange(cat)}
-              className={`${chipBase} ${categoryFilter === cat ? chipActive : chipInactive}`}
-              aria-pressed={categoryFilter === cat}
-              aria-label={`Filter by ${cat}`}
-            >
-              {cat.charAt(0).toUpperCase() + cat.slice(1)}
-            </button>
-          ))}
+          {[{ id: 'all', name: 'All', color: undefined } as { id: string; name: string; color?: string }, ...categories].map((cat) => {
+            const isActive = categoryFilter === cat.id
+            return (
+              <button
+                key={cat.id}
+                onClick={() => onCategoryFilterChange(cat.id)}
+                className={`${chipBase} ${isActive ? chipActive : chipInactive}`}
+                aria-pressed={isActive}
+                aria-label={`Filter by ${cat.name}`}
+              >
+                {/* Per-label color dot (omitted for the All chip). On the active solid
+                    chip the dot turns white so it stays visible against the fill. */}
+                {cat.id !== 'all' && (
+                  <span
+                    aria-hidden="true"
+                    className={`h-2 w-2 rounded-full ${isActive ? 'bg-white' : dotClassForToken(cat.color)}`}
+                  />
+                )}
+                {cat.name}
+              </button>
+            )
+          })}
         </div>
 
         {/* Search */}

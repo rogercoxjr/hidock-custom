@@ -255,7 +255,7 @@ export interface ElectronAPI {
 
   // Knowledge Captures
   knowledge: {
-    getAll: (options?: { limit?: number; offset?: number; status?: string }) => Promise<KnowledgeCapture[]>
+    getAll: (options?: { limit?: number; offset?: number; status?: string; quality?: string; category?: string }) => Promise<KnowledgeCapture[]>
     getById: (id: string) => Promise<KnowledgeCapture | null>
     getByIds: (ids: string[]) => Promise<KnowledgeCapture[]> // B-CHAT-004
     update: (id: string, updates: Partial<KnowledgeCapture>) => Promise<{ success: boolean; error?: string }>
