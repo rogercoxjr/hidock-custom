@@ -23,6 +23,7 @@ import { registerSpeakersHandlers } from './speakers-handlers'
 import { registerVoiceprintsHandlers } from './voiceprints-handlers'
 import { registerDiarizationHandlers } from './diarization-handlers'
 import { registerSummarizationTemplatesHandlers } from './summarization-templates-handlers'
+import { registerTranscriptsExportHandlers } from './transcripts-export-handlers'
 
 export function registerIpcHandlers(): void {
   // Register all IPC handlers
@@ -51,6 +52,7 @@ export function registerIpcHandlers(): void {
   registerVoiceprintsHandlers()
   registerDiarizationHandlers()
   registerSummarizationTemplatesHandlers()
+  registerTranscriptsExportHandlers()
 
   console.log('All IPC handlers registered')
 }
