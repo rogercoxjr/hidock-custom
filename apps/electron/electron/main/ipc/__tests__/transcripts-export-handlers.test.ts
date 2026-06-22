@@ -179,6 +179,30 @@ describe('transcripts:export handler', () => {
     expect(parsed.recording.title).toBe('My Recording')
   })
 
+  it('treats a whitespace-only title_suggestion as empty: falls through to the filename fallback in BOTH content and filename', async () => {
+    setupTranscript({ title_suggestion: '   ' }, { original_filename: 'My Recording.wav' })
+    showSaveDialog.mockResolvedValue({ canceled: false, filePath: '/out/My Recording.json' })
+    const res = await callExport({ recordingId: 'rec1', format: 'json' })
+    expect(res.success).toBe(true)
+    // recording.title must NOT be the whitespace junk — it falls through to the trimmed fallback.
+    const written = writeFileSync.mock.calls[0][1] as string
+    expect(JSON.parse(written).recording.title).toBe('My Recording')
+    // And the proposed filename agrees with the serialized title (no content/filename divergence).
+    const opts = showSaveDialog.mock.calls[0][1]
+    expect(opts.defaultPath).toBe('My Recording.json')
+  })
+
+  it('analysis array parse failures fall back to [] and never throw out of the handler', async () => {
+    setupTranscript({ action_items: '{bad', topics: 'null', key_points: '"notarray"' })
+    showSaveDialog.mockResolvedValue({ canceled: false, filePath: '/out/My Meeting.json' })
+    const res = await callExport({ recordingId: 'rec1', format: 'json' })
+    expect(res.success).toBe(true)
+    const parsed = JSON.parse(writeFileSync.mock.calls[0][1] as string)
+    expect(parsed.analysis.actionItems).toEqual([])
+    expect(parsed.analysis.topics).toEqual([])
+    expect(parsed.analysis.keyPoints).toEqual([])
+  })
+
   it('proposes a sanitized default filename derived from the title', async () => {
     setupTranscript({ title_suggestion: 'a/b:c*?' })
     showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })

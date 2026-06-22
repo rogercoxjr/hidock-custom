@@ -91,8 +91,12 @@ export function registerTranscriptsExportHandlers(): void {
         const recording = getRecordingById(recordingId)
         const stripExt = (name: string): string => name.replace(/\.[^./\\]+$/, '')
         const fileFallback = recording?.original_filename || recording?.filename
+        // Trim the AI title first: a whitespace-only suggestion (e.g. '   ') is otherwise
+        // truthy and wins the chain, serializing junk into recording.title while
+        // sanitizeBasename collapses it to 'transcript' for the filename — content/name diverge.
+        const aiTitle = transcript.title_suggestion?.trim()
         const title =
-          transcript.title_suggestion ||
+          aiTitle ||
           (fileFallback ? stripExt(fileFallback) : '') ||
           'transcript'
         const durationMs =
