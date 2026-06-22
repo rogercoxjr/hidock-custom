@@ -1368,7 +1368,10 @@ describe('Recording IPC Handlers', () => {
       expect(processQueueManually).toHaveBeenCalled()
     })
 
-    it('no templateId in payload → setTranscriptTemplateOverride NOT called (bare resummarize compat)', async () => {
+    // FIX 3: a bare-string (no-templateId) resummarize must ALWAYS reset the
+    // override to null so a stale single-shot override left by a FAILED Stage-2
+    // never silently applies a template the user didn't request this run.
+    it('no templateId in payload → setTranscriptTemplateOverride(recId, null) clears any stale override', async () => {
       const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, hasInFlightQueueItem } =
         await import('../../services/database')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
@@ -1378,7 +1381,7 @@ describe('Recording IPC Handlers', () => {
       const result = await handlers['transcription:resummarize'](null, recId)
 
       expect(result).toEqual({ success: true })
-      expect(setTranscriptTemplateOverride).not.toHaveBeenCalled()
+      expect(setTranscriptTemplateOverride).toHaveBeenCalledWith(recId, null)
       expect(clearTranscriptStage2Marker).toHaveBeenCalledWith(recId)
       expect(addToQueue).toHaveBeenCalledWith(recId)
     })

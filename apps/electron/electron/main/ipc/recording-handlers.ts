@@ -450,7 +450,12 @@ export function registerRecordingHandlers(): void {
       if (hasInFlightQueueItem(recordingId)) {
         return { success: false, error: 'transcription in progress' }
       }
-      if (templateId !== undefined) setTranscriptTemplateOverride(recordingId, templateId)
+      // FIX 3: ALWAYS reset the single-shot override to the requested value (null when
+      // none requested). The success-path nulling lives in updateTranscriptStage2, so a
+      // FAILED Stage-2 leaves a stale override behind; without this a later plain
+      // re-summarize would silently re-apply that template. Setting null here starts
+      // every plain re-summarize from a clean selector/Default state.
+      setTranscriptTemplateOverride(recordingId, templateId ?? null)
       clearTranscriptStage2Marker(recordingId)
       addToQueue(recordingId)
       void processQueueManually()
