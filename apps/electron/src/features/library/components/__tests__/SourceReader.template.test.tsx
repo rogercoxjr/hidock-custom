@@ -92,6 +92,8 @@ function makeElectronAPI(opts: {
     },
     summarizationTemplates: {
       latestRun: opts.latestRun ?? vi.fn().mockResolvedValue({ success: false }),
+      list: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      acceptSuggestedTemplate: vi.fn().mockResolvedValue({ success: true }),
     },
   }
 }

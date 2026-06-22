@@ -879,11 +879,19 @@ export function SourceReader({
                 </Button>
               </div>
             )}
-            {/* Phase 3 (Task 13b): suggest-new banner — spec §10 precedence:
+            {/* Phase 3 (Task 13b) / Phase 4 (Task 14): suggest-new banner — spec §10 precedence:
                 staleness > error > suggest-new. Only render when no higher-priority
                 primary banner is visible. */}
             {!summaryStale && recording.transcriptionStatus !== 'error' && latestRunView?.kind === 'suggest_new' && (
-              <SuggestNewBanner suggestedTemplate={latestRunView.suggestedTemplate} />
+              <SuggestNewBanner
+                suggestedTemplate={latestRunView.suggestedTemplate}
+                recordingId={recording.id}
+                onAccepted={() => {
+                  // Clear the suggest-new banner and let the parent refresh the transcript
+                  setLatestRunView(null)
+                  onResummarize?.()
+                }}
+              />
             )}
             {isLoadingSuggestions && (
               <div className="mb-3 flex items-center gap-2 text-sm text-ink-muted">

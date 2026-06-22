@@ -9,11 +9,11 @@
  * All reads/writes go through window.electronAPI.summarizationTemplates.* (DB-backed IPC).
  * Each call branches on the Result envelope: { success, data } or { success: false, error }.
  *
- * Phase 3 note: a disabled "Test selection" button is present but inactive —
- * it will wire to previewSelection in Phase 4.
+ * Phase 4 (Task 14): the "Test selection" area is now wired to previewSelection.
+ * It requires a recording ID — the user pastes one in and the result is shown inline.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Pencil, Star } from 'lucide-react'
+import { Plus, Trash2, Pencil, Star, FlaskConical } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -77,6 +77,23 @@ const MAX_DESCRIPTION = 500
 const MAX_INSTRUCTIONS = 2000
 
 // --------------------------------------------------------------------------
+// Types for previewSelection result (mirrored from preload — no cross-boundary import)
+// --------------------------------------------------------------------------
+interface PreviewSelectionResult {
+  kind: 'selected' | 'suggest_new' | 'use_default' | 'manual'
+  templateId?: string
+  confidence: number
+  reason: string
+  suggestedTemplate?: {
+    name: string
+    description: string
+    instructions: string
+    exampleTriggers: string[]
+  }
+  elapsedMs: number
+}
+
+// --------------------------------------------------------------------------
 // Component
 // --------------------------------------------------------------------------
 export function SummarizationTemplatesCard() {
@@ -93,6 +110,12 @@ export function SummarizationTemplatesCard() {
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<SummarizationTemplate | null>(null)
+
+  // Phase 4 (Task 14): "Test selection" state
+  const [testRecordingId, setTestRecordingId] = useState('')
+  const [testBusy, setTestBusy] = useState(false)
+  const [testResult, setTestResult] = useState<PreviewSelectionResult | null>(null)
+  const [testError, setTestError] = useState<string | null>(null)
 
   // ---- data loading -------------------------------------------------------
   const loadTemplates = useCallback(async () => {
@@ -233,6 +256,31 @@ export function SummarizationTemplatesCard() {
       setBusy(false)
     }
   }
+
+  // Phase 4 (Task 14): test the template selector against a recording (read-only, no DB writes)
+  const handleTestSelection = useCallback(async () => {
+    const id = testRecordingId.trim()
+    if (!id) {
+      toast.error('Enter a recording ID to test')
+      return
+    }
+    setTestBusy(true)
+    setTestResult(null)
+    setTestError(null)
+    try {
+      const res = await window.electronAPI.summarizationTemplates.previewSelection(id)
+      if (res.success) {
+        setTestResult(res.data as PreviewSelectionResult)
+      } else {
+        const msg = (res as FailResult).error?.message ?? 'Selection preview failed'
+        setTestError(msg)
+      }
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setTestBusy(false)
+    }
+  }, [testRecordingId])
 
   // ---- render -------------------------------------------------------------
   return (
@@ -432,11 +480,67 @@ export function SummarizationTemplatesCard() {
               </p>
             </div>
 
-            {/* Phase 4 placeholder: test against a selection */}
-            {/* The "Test selection" button activates in Phase 4 when previewSelection IPC is wired */}
-            <Button variant="outline" size="sm" disabled className="w-full opacity-50">
-              Test selection (available in a future update)
-            </Button>
+            {/* Phase 4 (Task 14): "Test selection" — runs the read-only selector preview
+                against a real recording to see which template would be chosen. */}
+            <div className="space-y-2 rounded-md border border-border bg-surface-sunken p-3">
+              <p className="text-xs font-medium text-ink">Test selection</p>
+              <p className="text-xs text-ink-muted">
+                Enter a recording ID to preview which template the selector would choose (read-only — no changes are made).
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Recording ID…"
+                  value={testRecordingId}
+                  onChange={(e) => {
+                    setTestRecordingId(e.target.value)
+                    setTestResult(null)
+                    setTestError(null)
+                  }}
+                  className="h-7 flex-1 text-xs"
+                  aria-label="Recording ID for template selection test"
+                  disabled={testBusy}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestSelection}
+                  disabled={testBusy || !testRecordingId.trim()}
+                  className="h-7 gap-1.5 text-xs"
+                  data-testid="test-selection-button"
+                >
+                  <FlaskConical className="h-3 w-3" />
+                  {testBusy ? 'Testing…' : 'Test'}
+                </Button>
+              </div>
+              {testError && (
+                <p className="text-xs text-destructive" role="alert">{testError}</p>
+              )}
+              {testResult && (
+                <div className="space-y-1 text-xs text-ink" data-testid="test-selection-result">
+                  <p>
+                    <span className="font-medium">Kind:</span>{' '}
+                    <span className="font-mono">{testResult.kind}</span>
+                  </p>
+                  {testResult.templateId && (
+                    <p>
+                      <span className="font-medium">Template:</span>{' '}
+                      <span className="font-mono">{testResult.templateId}</span>
+                    </p>
+                  )}
+                  <p>
+                    <span className="font-medium">Confidence:</span>{' '}
+                    {Math.round(testResult.confidence * 100)}%
+                  </p>
+                  <p>
+                    <span className="font-medium">Reason:</span>{' '}
+                    <span className="text-ink-muted">{testResult.reason}</span>
+                  </p>
+                  {testResult.elapsedMs !== undefined && (
+                    <p className="text-ink-muted">{testResult.elapsedMs}ms</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter>

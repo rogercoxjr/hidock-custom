@@ -3,7 +3,7 @@
  *
  * CRUD over IPC for summarization templates (Phase 2 of summarization-templates plan).
  * latestRun read added in Phase 3 (Task 13b) for reader chip + suggest-new banner.
- * Manual override / resummarize are deferred to Phase 4.
+ * previewSelection + acceptSuggestedTemplate added in Phase 4 (Task 14).
  */
 
 import { ipcMain } from 'electron'
@@ -15,7 +15,9 @@ import {
   setEnabled,
   deleteTemplate,
   getTemplateById,
-  type SummarizationTemplate
+  userTemplates,
+  type SummarizationTemplate,
+  type TemplateInput
 } from '../services/summarization-templates'
 import {
   TemplateInputSchema,
@@ -23,8 +25,46 @@ import {
   TemplateIdSchema,
   SetEnabledSchema
 } from '../validation/summarization-templates'
-import { getLatestTemplateRun, getTranscriptByRecordingId } from '../services/database'
-import { hashText } from '../services/summarization-selector'
+import {
+  getLatestTemplateRun,
+  getTranscriptByRecordingId,
+  setTranscriptTemplateOverride,
+  clearTranscriptStage2Marker,
+  hasInFlightQueueItem,
+  addToQueue
+} from '../services/database'
+import { hashText, selectTemplateForTranscript, type TemplateSelectionResult } from '../services/summarization-selector'
+import { getConfig } from '../services/config'
+import { getLlmProvider } from '../services/llm/llm-provider'
+import { processQueueManually } from '../services/transcription'
+
+// ---------------------------------------------------------------------------
+// Phase 4 (Task 14): Rate limiter for previewSelection (mirrors outputs-handlers)
+// Global key so 5/min is a true ceiling across ALL recordings (spec §5.1 cost-control).
+// ---------------------------------------------------------------------------
+const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 5
+const previewTimestamps: Map<string, number[]> = new Map()
+
+/**
+ * Check and enforce rate limit for a given key.
+ * Returns true if the request is allowed, false if rate-limited.
+ */
+function checkRateLimit(key: string): boolean {
+  const now = Date.now()
+  const timestamps = previewTimestamps.get(key) || []
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+  if (recent.length >= RATE_LIMIT_MAX_REQUESTS) {
+    previewTimestamps.set(key, recent)
+    return false
+  }
+  recent.push(now)
+  previewTimestamps.set(key, recent)
+  return true
+}
+
+/** Shape returned by previewSelection IPC to the renderer. */
+export type PreviewSelectionResult = TemplateSelectionResult & { elapsedMs: number }
 
 /** Shape returned by the latestRun IPC to the renderer. */
 export interface LatestRunView {
@@ -166,6 +206,134 @@ export function registerSummarizationTemplatesHandlers(): void {
         return success(view)
       } catch (err) {
         return error('INTERNAL_ERROR', err instanceof Error ? err.message : 'latestRun failed', err)
+      }
+    }
+  )
+
+  /**
+   * Phase 4 (Task 14): previewSelection — READ-ONLY selector dry-run.
+   *
+   * Runs selectTemplateForTranscript for the given recording and returns the
+   * TemplateSelectionResult WITHOUT writing anything to the DB (no audit row,
+   * no override).  Rate-limited at 5/min globally across all recordingIds
+   * (spec §5.1 cost-control).
+   */
+  ipcMain.handle(
+    'summarizationTemplates:previewSelection',
+    async (_, recordingId: unknown): Promise<Result<PreviewSelectionResult>> => {
+      if (typeof recordingId !== 'string' || !recordingId) {
+        return error('VALIDATION_ERROR', 'recordingId must be a non-empty string', null)
+      }
+      // Global rate limit — not per recording (spec §5.1)
+      if (!checkRateLimit('previewSelection')) {
+        return error(
+          'RATE_LIMITED',
+          'Rate limit exceeded. Maximum 5 preview selections per minute. Please wait before trying again.'
+        )
+      }
+      try {
+        const transcript = getTranscriptByRecordingId(recordingId)
+        if (!transcript?.full_text) {
+          return error('NOT_FOUND', 'No transcript text available for this recording', null)
+        }
+        const templates = userTemplates()
+        const config = getConfig()
+        const llm = getLlmProvider(config)
+        const result = await selectTemplateForTranscript(
+          {
+            fullText: transcript.full_text,
+            meetingSubjects: [],
+            templates,
+            userDefaultId: null,
+          },
+          llm
+        )
+        return success(result)
+      } catch (err) {
+        return error('INTERNAL_ERROR', err instanceof Error ? err.message : 'previewSelection failed', err)
+      }
+    }
+  )
+
+  /**
+   * Phase 4 (Task 14): acceptSuggestedTemplate — save + re-summarize.
+   *
+   * Reads the latest run's suggested_template_json for recordingId, merges any
+   * caller-supplied `edits` (name/description/instructions/exampleTriggers) over it,
+   * creates a new user template via createTemplate (sanitized, is_builtin=0 enforced),
+   * then re-summarizes the recording with the newly-created template id by calling
+   * setTranscriptTemplateOverride + clearTranscriptStage2Marker + addToQueue.
+   * Rejects with { success: false } when a transcription job is already in-flight.
+   */
+  ipcMain.handle(
+    'summarizationTemplates:acceptSuggestedTemplate',
+    async (_, recordingId: unknown, edits?: unknown): Promise<Result<SummarizationTemplate>> => {
+      if (typeof recordingId !== 'string' || !recordingId) {
+        return error('VALIDATION_ERROR', 'recordingId must be a non-empty string', null)
+      }
+      try {
+        // Read the suggested template from the latest selector run
+        const run = getLatestTemplateRun(recordingId as string)
+        if (!run?.suggestedTemplateJson) {
+          return error(
+            'NOT_FOUND',
+            'No suggested template found for this recording. Run the selector first.',
+            null
+          )
+        }
+
+        let suggestedPayload: Record<string, unknown>
+        try {
+          suggestedPayload = JSON.parse(run.suggestedTemplateJson) as Record<string, unknown>
+        } catch {
+          return error('INTERNAL_ERROR', 'Could not parse suggested template JSON', null)
+        }
+
+        // Merge optional caller edits over the suggested payload
+        const editObj = edits && typeof edits === 'object' && !Array.isArray(edits)
+          ? (edits as Record<string, unknown>)
+          : {}
+
+        const mergedInput: TemplateInput = {
+          name: typeof editObj.name === 'string'
+            ? editObj.name
+            : typeof suggestedPayload.name === 'string' ? suggestedPayload.name : 'Suggested template',
+          description: typeof editObj.description === 'string'
+            ? editObj.description
+            : typeof suggestedPayload.description === 'string' ? suggestedPayload.description : undefined,
+          instructions: typeof editObj.instructions === 'string'
+            ? editObj.instructions
+            : typeof suggestedPayload.instructions === 'string'
+              ? suggestedPayload.instructions
+              : typeof suggestedPayload.guidance === 'string'
+                ? suggestedPayload.guidance
+                : '',
+          exampleTriggers: Array.isArray(editObj.exampleTriggers)
+            ? (editObj.exampleTriggers as unknown[]).filter((t): t is string => typeof t === 'string')
+            : Array.isArray(suggestedPayload.exampleTriggers)
+              ? (suggestedPayload.exampleTriggers as unknown[]).filter((t): t is string => typeof t === 'string')
+              : [],
+        }
+
+        // Create the new user template (sanitize forces is_builtin=0)
+        const newTemplate = createTemplate(mergedInput)
+
+        // §8.3 concurrency guard — check BEFORE any write
+        if (hasInFlightQueueItem(recordingId as string)) {
+          return error('VALIDATION_ERROR', 'transcription in progress', null)
+        }
+
+        // Write the single-shot override and enqueue a re-summarize
+        setTranscriptTemplateOverride(recordingId as string, newTemplate.id)
+        clearTranscriptStage2Marker(recordingId as string)
+
+        // Enqueue asynchronously (mirrors recording-handlers resummarize path)
+        addToQueue(recordingId as string)
+        void processQueueManually()
+
+        return success(newTemplate)
+      } catch (err) {
+        return error('INTERNAL_ERROR', err instanceof Error ? err.message : 'acceptSuggestedTemplate failed', err)
       }
     }
   )

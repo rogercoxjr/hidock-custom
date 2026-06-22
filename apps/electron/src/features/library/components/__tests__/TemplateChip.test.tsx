@@ -1,13 +1,32 @@
 /**
- * TemplateChip + SuggestNewBanner — Phase 3 (Task 13b)
+ * TemplateChip + SuggestNewBanner — Phase 3 (Task 13b) / Phase 4 (Task 14)
  *
  * Unit tests for the components themselves (props → rendering).
  * SourceReader integration tests live in SourceReader.template.test.tsx.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { TemplateChip, SuggestNewBanner } from '../TemplateChip'
+
+// Phase 4: patch only window.electronAPI, not the whole window object (stubGlobal
+// would replace window entirely and break React's DOM instanceof checks).
+const mockAcceptSuggestedTemplate = vi.fn()
+beforeAll(() => {
+  Object.defineProperty(window, 'electronAPI', {
+    value: {
+      summarizationTemplates: {
+        acceptSuggestedTemplate: mockAcceptSuggestedTemplate,
+      },
+    },
+    configurable: true,
+    writable: true,
+  })
+})
+afterAll(() => {
+  // @ts-expect-error cleaning up
+  delete window.electronAPI
+})
 
 // ---------------------------------------------------------------------------
 // TemplateChip
@@ -73,25 +92,31 @@ describe('TemplateChip', () => {
 
 describe('SuggestNewBanner', () => {
   it('renders the banner with a suggested template name', () => {
-    render(<SuggestNewBanner suggestedTemplate={{ name: 'Interview notes' }} />)
+    render(<SuggestNewBanner suggestedTemplate={{ name: 'Interview notes' }} recordingId="rec-1" />)
     expect(screen.getByTestId('suggest-new-banner')).toBeInTheDocument()
     expect(screen.getByText(/Interview notes/i)).toBeInTheDocument()
   })
 
   it('falls back to "a new template" when suggestedTemplate.name is absent', () => {
-    render(<SuggestNewBanner suggestedTemplate={null} />)
+    render(<SuggestNewBanner suggestedTemplate={null} recordingId="rec-1" />)
     expect(screen.getByTestId('suggest-new-banner')).toBeInTheDocument()
     expect(screen.getByText(/a new template/i)).toBeInTheDocument()
   })
 
-  it('renders the Accept button in disabled state (Phase 4)', () => {
-    render(<SuggestNewBanner suggestedTemplate={{ name: 'Foo' }} />)
-    const btn = screen.getByRole('button', { name: /accept/i })
-    expect(btn).toBeDisabled()
+  it('renders the Save button (Phase 4 — enabled)', () => {
+    render(<SuggestNewBanner suggestedTemplate={{ name: 'Foo' }} recordingId="rec-1" />)
+    const btn = screen.getByTestId('suggest-new-save')
+    expect(btn).not.toBeDisabled()
+  })
+
+  it('renders the "Edit & save" button (Phase 4 — enabled)', () => {
+    render(<SuggestNewBanner suggestedTemplate={{ name: 'Foo' }} recordingId="rec-1" />)
+    const btn = screen.getByTestId('suggest-new-edit-save')
+    expect(btn).not.toBeDisabled()
   })
 
   it('renders "No matching template" label', () => {
-    render(<SuggestNewBanner suggestedTemplate={null} />)
+    render(<SuggestNewBanner suggestedTemplate={null} recordingId="rec-1" />)
     expect(screen.getByText(/no matching template/i)).toBeInTheDocument()
   })
 })

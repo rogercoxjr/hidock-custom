@@ -149,6 +149,29 @@ interface LatestRunView {
   instructionsChanged: boolean
 }
 
+/** Phase 4: read-only selector dry-run result (inlined to avoid tsconfig.web.json scope). */
+interface PreviewSelectionResult {
+  kind: 'selected' | 'suggest_new' | 'use_default' | 'manual'
+  templateId?: string
+  confidence: number
+  reason: string
+  suggestedTemplate?: {
+    name: string
+    description: string
+    instructions: string
+    exampleTriggers: string[]
+  }
+  elapsedMs: number
+}
+
+/** Phase 4: editable fields for acceptSuggestedTemplate (inlined to avoid tsconfig.web.json scope). */
+interface SuggestedTemplateEdits {
+  name?: string
+  description?: string
+  instructions?: string
+  exampleTriggers?: string[]
+}
+
 // Type definitions for the API
 export interface ElectronAPI {
   // App
@@ -227,7 +250,7 @@ export interface ElectronAPI {
   }
 
   // Summarization Templates — CRUD (Phase 2) + latestRun reader chip (Phase 3)
-  // + resummarizeWithTemplate single-shot override (Phase 4).
+  // + resummarizeWithTemplate single-shot override + previewSelection + acceptSuggestedTemplate (Phase 4).
   summarizationTemplates: {
     list: () => Promise<Result<SummarizationTemplate[]>>
     create: (template: TemplateInput) => Promise<Result<SummarizationTemplate>>
@@ -243,6 +266,19 @@ export interface ElectronAPI {
      * Thin wrapper over the same `transcription:resummarize` channel.
      */
     resummarizeWithTemplate: (recordingId: string, templateId: string | null) => Promise<{ success: boolean; error?: string }>
+    /**
+     * Phase 4: read-only selector dry-run — runs the template selector for the recording
+     * and returns the TemplateSelectionResult WITHOUT writing anything to the DB.
+     * Rate-limited globally at 5/min (spec §5.1 cost-control).
+     */
+    previewSelection: (recordingId: string) => Promise<Result<PreviewSelectionResult>>
+    /**
+     * Phase 4: save suggested template + re-summarize.
+     * Reads the latest run's suggestedTemplateJson, merges optional edits, creates a new
+     * user template (sanitized, is_builtin=0 enforced), then enqueues a re-summarize with it.
+     * Returns the newly-created SummarizationTemplate.
+     */
+    acceptSuggestedTemplate: (recordingId: string, edits?: SuggestedTemplateEdits) => Promise<Result<SummarizationTemplate>>
   }
 
   // Projects
@@ -737,6 +773,11 @@ const electronAPI: ElectronAPI = {
     // threads the templateId through the concurrency guard + override write.
     resummarizeWithTemplate: (recordingId, templateId) =>
       callIPC('transcription:resummarize', { recordingId, templateId }),
+    // Phase 4 (Task 14): read-only selector dry-run (rate-limited 5/min globally).
+    previewSelection: (recordingId) => callIPC('summarizationTemplates:previewSelection', recordingId),
+    // Phase 4 (Task 14): save suggested template + re-summarize with it.
+    acceptSuggestedTemplate: (recordingId, edits?) =>
+      callIPC('summarizationTemplates:acceptSuggestedTemplate', recordingId, edits),
   },
 
   projects: {
