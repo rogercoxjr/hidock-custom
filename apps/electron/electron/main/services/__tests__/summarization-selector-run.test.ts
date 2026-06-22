@@ -104,8 +104,13 @@ describe('selectTemplateForTranscript', () => {
 
 describe('buildSelectorPrompt', () => {
   it('never includes template instructions, wraps metadata in nonce blocks', () => {
-    const p = buildSelectorPrompt({ excerpt: 'hi', meetingSubjects: ['Standup'], templates: tpls, nonce: 'N' })
-    expect(p).not.toContain('instructions')   // the instructions VALUE 'i' would appear; ensure absent
+    // MINOR: use a distinctive multi-word sentinel as the instructions VALUE so
+    // the not.toContain assertion can actually catch an instructions leak (the
+    // old single-char 'i' fixture made the check effectively vacuous).
+    const SENTINEL = 'SECRET_INSTRUCTIONS_SHOULD_NEVER_LEAK'
+    const tplsWithSentinel = tpls.map((t) => ({ ...t, instructions: SENTINEL }))
+    const p = buildSelectorPrompt({ excerpt: 'hi', meetingSubjects: ['Standup'], templates: tplsWithSentinel, nonce: 'N' })
+    expect(p).not.toContain(SENTINEL)         // template instructions must NEVER appear in the selector prompt
     expect(p).toContain('<<<DATA_N>>>')
     expect(p).toContain('Sales')              // name IS sent
   })

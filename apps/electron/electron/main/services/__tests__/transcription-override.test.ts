@@ -55,9 +55,28 @@ vi.mock('electron', () => ({
     getPath: vi.fn(() => os.tmpdir()),
     getName: vi.fn(() => 'test')
   },
-  BrowserWindow: { getAllWindows: vi.fn(() => []) },
+  BrowserWindow: { getAllWindows: vi.fn(() => []), getFocusedWindow: vi.fn(() => null) },
+  dialog: { showOpenDialog: vi.fn() },
   ipcMain: { handle: vi.fn() },
   Notification: { isSupported: vi.fn(() => false ) }
+}))
+
+// Mock the transcription + recording-watcher services so importing the REAL
+// recording-handlers module (for the FIX 6 integration test) does not pull in
+// heavy ASR/LLM deps. The DB layer stays REAL (shared singleton with this test).
+vi.mock('../transcription', () => ({
+  getTranscriptionStatus: vi.fn(),
+  startTranscriptionProcessor: vi.fn(),
+  stopTranscriptionProcessor: vi.fn(),
+  cancelTranscription: vi.fn(),
+  cancelAllTranscriptions: vi.fn(),
+  processQueueManually: vi.fn().mockResolvedValue(undefined)
+}))
+
+vi.mock('../recording-watcher', () => ({
+  startRecordingWatcher: vi.fn(),
+  stopRecordingWatcher: vi.fn(),
+  getWatcherStatus: vi.fn(() => ({ isWatching: false, path: '/mock/recordings' }))
 }))
 
 vi.mock('../config', () => ({
@@ -100,6 +119,8 @@ import {
   addToQueue,
   clearTranscriptStage2Marker
 } from '../database'
+import { ipcMain } from 'electron'
+import { registerRecordingHandlers } from '../../ipc/recording-handlers'
 
 // ---------------------------------------------------------------------------
 // Test helpers.
@@ -378,5 +399,85 @@ describe('concurrency guard — write-side contract (DB layer)', () => {
       [REC_ID]
     )
     expect(queueRows?.c).toBe(1)  // exactly one pending queue row
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 6. FIX 6 — REAL-handler guard-before-write integration test.
+//
+// The DB-layer tests above re-implement the guard (they check hasInFlightQueueItem
+// then conditionally call setTranscriptTemplateOverride themselves). The IPC-layer
+// unit tests mock the DB. Neither proves the REAL transcription:resummarize handler
+// checks the §8.3 in-flight guard BEFORE the override write. This test wires the
+// REAL handler via registerRecordingHandlers against a REAL sql.js DB with a real
+// `processing` queue row and asserts the handler rejects AND the override column is
+// untouched. It fails if someone reorders the override write before the guard.
+// ---------------------------------------------------------------------------
+
+describe('FIX 6 — real resummarize handler: guard runs BEFORE the override write', () => {
+  let handlers: Record<string, (...args: unknown[]) => unknown> = {}
+
+  beforeEach(() => {
+    handlers = {}
+    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+      handlers[channel] = handler
+      return undefined as never
+    })
+    registerRecordingHandlers()
+  })
+
+  it('processing queue row in-flight → handler returns "transcription in progress" AND override NOT written', async () => {
+    seedRecording()
+    seedTranscript()                       // override column starts NULL
+    seedQueueRow(REC_ID, 'processing')     // a REAL in-flight queue row
+
+    // Invoke the REAL handler with a templateId — if the guard were reordered
+    // after the write, the override column would be clobbered to TPL_ID.
+    const result = await handlers['transcription:resummarize'](
+      null,
+      { recordingId: REC_ID, templateId: TPL_ID }
+    )
+
+    expect(result).toEqual({ success: false, error: 'transcription in progress' })
+
+    // The override column must be UNCHANGED (still NULL) — the guard ran first.
+    const row = queryOne<{ summarization_template_id: string | null }>(
+      'SELECT summarization_template_id FROM transcripts WHERE recording_id = ?',
+      [REC_ID]
+    )
+    expect(row?.summarization_template_id).toBeNull()
+
+    // And no new queue row was enqueued (still exactly one — the seeded processing row).
+    const queueRows = queryOne<{ c: number }>(
+      'SELECT COUNT(*) AS c FROM transcription_queue WHERE recording_id = ?',
+      [REC_ID]
+    )
+    expect(queueRows?.c).toBe(1)
+  })
+
+  it('idle (no in-flight row) → REAL handler writes the override, clears marker, enqueues', async () => {
+    // Positive control: with no in-flight row the same handler DOES write the override,
+    // proving the rejection above is the guard — not a broken handler.
+    seedRecording()
+    seedTranscript()
+
+    const result = await handlers['transcription:resummarize'](
+      null,
+      { recordingId: REC_ID, templateId: TPL_ID }
+    )
+
+    expect(result).toEqual({ success: true })
+    const row = queryOne<{ summarization_template_id: string | null; summarization_provider: string | null }>(
+      'SELECT summarization_template_id, summarization_provider FROM transcripts WHERE recording_id = ?',
+      [REC_ID]
+    )
+    expect(row?.summarization_template_id).toBe(TPL_ID)  // override written
+    expect(row?.summarization_provider).toBeNull()        // Stage-2 marker cleared
+
+    const queueRows = queryOne<{ c: number }>(
+      "SELECT COUNT(*) AS c FROM transcription_queue WHERE recording_id = ? AND status = 'pending'",
+      [REC_ID]
+    )
+    expect(queueRows?.c).toBe(1)
   })
 })

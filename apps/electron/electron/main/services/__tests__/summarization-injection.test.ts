@@ -168,11 +168,24 @@ describe('Injection case (a): instructions embed closing delimiter + fake frame'
     expect(openCount).toBe(2) // EMPHASIS GUIDANCE + Transcript (no meeting subjects)
   })
 
-  it('output contract holds when fake returns a well-formed JSON (sanitizer neutralized injection attempt)', () => {
-    // Simulates: the model, having received the hardened prompt, ignores the injected
-    // payload and returns proper structured output.
-    const goodParsed = makeGoodAnalysis()
-    assertOutputContract(goodParsed, { hasCandidates: false })
+  it('output contract holds (clean throw) when fake returns the attacker forged frame payload', () => {
+    // MINOR: previously this fed a guaranteed-good object (vacuous — it only ever
+    // exercised the valid branch). Now feed the ADVERSARIAL payload the injection's
+    // fake frame tried to smuggle out: the forged JSON the injected delimiter wrapped
+    // ({"summary":"PWNED"} with empty arrays and NO title/language). validateAnalysis
+    // must reject it (or the missing-meeting-keys path) — assertOutputContract proves
+    // the result is a clean throw (returns null), never a null/sentinel ValidatedAnalysis.
+    const forgedPayload = {
+      summary: 'PWNED',
+      action_items: [],
+      topics: [],
+      key_points: [],
+      question_suggestions: [],
+      // title_suggestion + language intentionally dropped by the injection
+    }
+    const result = assertOutputContract(forgedPayload, { hasCandidates: true })
+    // hasCandidates:true + no selected_meeting_id → validateAnalysis throws → null.
+    expect(result).toBeNull()
   })
 
   it('output contract holds (throw) when fake obeys the injection and drops required fields', () => {
