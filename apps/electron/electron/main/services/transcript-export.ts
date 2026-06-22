@@ -68,6 +68,34 @@ export function sanitizeBasename(title: string): string {
   return cleaned.length > 0 ? cleaned : 'transcript'
 }
 
+const BOM = '﻿'
+
+/** CSV of turns (spec §6.1). Requires a non-empty turns array (handler-guaranteed). */
+export function toCsv(data: ExportData): string {
+  const turns = data.turns
+  if (!turns || turns.length === 0) {
+    throw new Error('toCsv requires a non-empty turns array')
+  }
+  const includeSentiment = turns.some((t) => typeof t.sentiment === 'string' && t.sentiment.length > 0)
+  const header = includeSentiment
+    ? ['speaker', 'start', 'end', 'text', 'sentiment']
+    : ['speaker', 'start', 'end', 'text']
+  const lines: string[] = [header.join(',')]
+  for (const turn of turns) {
+    const cells = [
+      csvEscape(resolveSpeaker(turn.speaker, data.speakers)),
+      csvEscape(msToClock(turn.startMs, '.')),
+      csvEscape(msToClock(turn.endMs, '.')),
+      csvEscape(turn.text)
+    ]
+    if (includeSentiment) {
+      cells.push(csvEscape(turn.sentiment ?? ''))
+    }
+    lines.push(cells.join(','))
+  }
+  return BOM + lines.join('\r\n')
+}
+
 /** Complete-record JSON (spec §6.3). Always available; turns is null when not diarized. */
 export function toJson(data: ExportData): string {
   const record = {

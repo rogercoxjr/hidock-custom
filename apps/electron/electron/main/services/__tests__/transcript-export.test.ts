@@ -4,7 +4,8 @@ import {
   csvEscape,
   resolveSpeaker,
   sanitizeBasename,
-  toJson
+  toJson,
+  toCsv
 } from '../transcript-export'
 import type { ExportData } from '../transcript-export'
 
@@ -179,6 +180,67 @@ describe('toJson', () => {
     expect(Object.keys(out.analysis).sort()).toEqual(
       ['actionItems', 'keyPoints', 'sentiment', 'summary', 'titleSuggestion', 'topics'].sort()
     )
+  })
+})
+
+describe('toCsv', () => {
+  it('begins with a UTF-8 BOM and a header row, and uses CRLF terminators', () => {
+    const out = toCsv(diarized([{ speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'Hi' }]))
+    expect(out.charCodeAt(0)).toBe(0xfeff)
+    expect(out.slice(1).startsWith('speaker,start,end,text\r\n')).toBe(true)
+  })
+
+  it('emits one row per turn with HH:MM:SS.mmm timestamps and resolved speaker names', () => {
+    const out = toCsv(diarized([
+      { speaker: 'Speaker_0', startMs: 0, endMs: 1500, text: 'Hello' },
+      { speaker: 'Speaker_9', startMs: 1500, endMs: 3000, text: 'World' }
+    ]))
+    const rows = out.slice(1).split('\r\n')
+    expect(rows[0]).toBe('speaker,start,end,text')
+    expect(rows[1]).toBe('Alice Johnson,00:00:00.000,00:00:01.500,Hello')
+    expect(rows[2]).toBe('Speaker_9,00:00:01.500,00:00:03.000,World')
+  })
+
+  it('quotes text containing a comma (RFC-4180 trigger)', () => {
+    const out = toCsv(diarized([{ speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'a,b' }]))
+    expect(out.slice(1).split('\r\n')[1]).toBe('Alice Johnson,00:00:00.000,00:00:01.000,"a,b"')
+  })
+
+  it('quotes and doubles an embedded double-quote (RFC-4180 trigger)', () => {
+    const out = toCsv(diarized([{ speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'say "hi"' }]))
+    expect(out.slice(1).split('\r\n')[1]).toBe('Alice Johnson,00:00:00.000,00:00:01.000,"say ""hi"""')
+  })
+
+  it('quotes text containing an embedded newline (RFC-4180 trigger)', () => {
+    const out = toCsv(diarized([{ speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'a\nb' }]))
+    expect(out.slice(1)).toBe('speaker,start,end,text\r\nAlice Johnson,00:00:00.000,00:00:01.000,"a\nb"')
+  })
+
+  it('quotes text containing a bare carriage return (RFC-4180 trigger)', () => {
+    const out = toCsv(diarized([{ speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'a\rb' }]))
+    expect(out.slice(1)).toBe('speaker,start,end,text\r\nAlice Johnson,00:00:00.000,00:00:01.000,"a\rb"')
+  })
+
+  it('throws when given an empty turns array (formatter contract guard)', () => {
+    expect(() => toCsv({ ...baseData(), turns: [] })).toThrow()
+  })
+
+  it('omits the sentiment column when no turn has a sentiment', () => {
+    const out = toCsv(diarized([{ speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'Hi' }]))
+    expect(out.slice(1).split('\r\n')[0]).toBe('speaker,start,end,text')
+  })
+
+  it('adds a trailing sentiment column when any turn has a sentiment', () => {
+    const out = toCsv(diarized([
+      { speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'Hi', sentiment: 'POSITIVE' },
+      { speaker: 'Speaker_1', startMs: 1000, endMs: 2000, text: 'Bye' }
+    ]))
+    const rows = out.slice(1).split('\r\n')
+    expect(rows[0]).toBe('speaker,start,end,text,sentiment')
+    expect(rows[1]).toBe('Alice Johnson,00:00:00.000,00:00:01.000,Hi,POSITIVE')
+    expect(rows[2]).toBe('Speaker_1,00:00:01.000,00:00:02.000,Bye,')
+    // The sentiment-less row keeps the sentinel cell (5 fields), not 4 — fixed column count.
+    expect(rows[2].split(',').length).toBe(5)
   })
 })
 
