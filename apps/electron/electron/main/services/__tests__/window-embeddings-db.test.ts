@@ -46,14 +46,14 @@ describe('recording_window_embeddings schema (v32)', () => {
     expect(idx.length).toBe(1)
 
     const ver = dbi.exec('SELECT MAX(version) FROM schema_version')
-    expect(ver[0].values[0][0]).toBe(32)
+    expect(ver[0].values[0][0]).toBe(33)
   })
 
   // The fresh-init test above takes the `currentVersion === 0` branch (database.ts:1948-1949),
   // which inserts SCHEMA_VERSION directly and gets the table from the canonical SCHEMA — it NEVER
   // executes MIGRATIONS[32]. This test forces the migration path: init once, then rewind the
   // schema_version row to 31 AND drop the table, then re-run initializeDatabase so currentVersion
-  // (31) < SCHEMA_VERSION (32) → runMigrations(31) → MIGRATIONS[32] runs. A typo in the migration
+  // (31) < SCHEMA_VERSION (33) → runMigrations(31) → MIGRATIONS[32] + MIGRATIONS[33] run. A typo in the migration
   // body would only surface here. *(Finding #7.)*
   it('the v32 migration recreates the table+index on an existing v31 DB', async () => {
     const db = await import('../database')
@@ -80,21 +80,21 @@ describe('recording_window_embeddings schema (v32)', () => {
       "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_rwe_recording_label'"
     )
     expect(idx.length).toBe(1)
-    expect(db2.getDatabase().exec('SELECT MAX(version) FROM schema_version')[0].values[0][0]).toBe(32)
+    expect(db2.getDatabase().exec('SELECT MAX(version) FROM schema_version')[0].values[0][0]).toBe(33)
   })
 
   // Structural self-heal: an EXISTING v32 DB that somehow lost the table (corruption/restore) must
   // be repaired by the Phase-4 canonical-SCHEMA re-apply on the next boot — migrations are SKIPPED
-  // here because currentVersion (32) === SCHEMA_VERSION (32), so this proves the table+index live in
+  // here because currentVersion (33) === SCHEMA_VERSION (33), so this proves the table+index live in
   // the canonical SCHEMA and not ONLY in the migration. If the CREATE INDEX were misplaced into a
   // Phase-1-only path, this test would catch it. *(improvement-medium "structural-repair path".)*
   it('Phase 4 structural repair recreates the table+index on a current-version DB missing it', async () => {
     const db = await import('../database')
     await db.initializeDatabase()
     const dbi = db.getDatabase()
-    expect(dbi.exec('SELECT MAX(version) FROM schema_version')[0].values[0][0]).toBe(32)
+    expect(dbi.exec('SELECT MAX(version) FROM schema_version')[0].values[0][0]).toBe(33)
 
-    // Drop the table but leave the version at 32 (no migration will run on re-init).
+    // Drop the table but leave the version at 33 (no migration will run on re-init).
     dbi.run('DROP TABLE IF EXISTS recording_window_embeddings')
     db.saveDatabase() // persist the drop to the temp file before re-opening
 

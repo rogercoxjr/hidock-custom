@@ -8,7 +8,7 @@ import type { Turn } from './asr/asr-provider'
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 32
+const SCHEMA_VERSION = 33
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -259,6 +259,9 @@ CREATE TABLE IF NOT EXISTS transcripts (
     question_suggestions TEXT,
     summarization_provider TEXT,
     summarization_model TEXT,
+    summarization_template_id TEXT,
+    summarization_template_name TEXT,
+    summarization_template_hash TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (recording_id) REFERENCES recordings(id)
 );
@@ -617,6 +620,45 @@ CREATE TABLE IF NOT EXISTS actionables (
 
 CREATE INDEX IF NOT EXISTS idx_actionables_source_knowledge ON actionables(source_knowledge_id);
 CREATE INDEX IF NOT EXISTS idx_actionables_status ON actionables(status);
+
+-- Summarization templates (spec 2026-06-21) -- user-CRUD, one seeded builtin Default.
+CREATE TABLE IF NOT EXISTS summarization_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    instructions TEXT NOT NULL,
+    example_triggers TEXT,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    is_builtin INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_summ_templates_enabled ON summarization_templates(enabled, is_builtin);
+
+-- Per-recording selector audit / telemetry / selection cache.
+CREATE TABLE IF NOT EXISTS transcript_template_runs (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL,
+    template_id TEXT,
+    selection_kind TEXT NOT NULL,
+    selection_confidence REAL NOT NULL DEFAULT 0,
+    runnerup_confidence REAL,
+    candidate_scores_json TEXT,
+    selection_reason TEXT,
+    selector_provider TEXT,
+    selector_model TEXT,
+    selector_elapsed_ms INTEGER,
+    full_text_hash TEXT,
+    suggested_template_json TEXT,
+    applied_instructions_hash TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_template_runs_recording ON transcript_template_runs(recording_id, created_at DESC);
+
+-- Idempotent seed of the protected built-in Default (empty instructions => byte-identical today).
+INSERT OR IGNORE INTO summarization_templates (id, name, description, instructions, is_default, is_builtin, enabled)
+VALUES ('builtin-default', 'Default', 'Base summarization (no extra emphasis).', '', 0, 1, 1);
 
 `
 
@@ -1822,6 +1864,39 @@ const MIGRATIONS: Record<number, () => void> = {
     database.run(`CREATE INDEX IF NOT EXISTS idx_rwe_recording_label
       ON recording_window_embeddings(recording_id, file_label)`)
     console.log('Migration v32 complete')
+  },
+
+  33: () => {
+    // v33: Summarization templates — 2 tables + indexes + 3 transcripts columns + seeded Default.
+    console.log('Running migration to schema v33: summarization templates')
+    const database = getDatabase()
+    database.run(`CREATE TABLE IF NOT EXISTS summarization_templates (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+      instructions TEXT NOT NULL, example_triggers TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0, is_builtin INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+    database.run(`CREATE INDEX IF NOT EXISTS idx_summ_templates_enabled ON summarization_templates(enabled, is_builtin)`)
+    database.run(`CREATE TABLE IF NOT EXISTS transcript_template_runs (
+      id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, template_id TEXT,
+      selection_kind TEXT NOT NULL, selection_confidence REAL NOT NULL DEFAULT 0,
+      runnerup_confidence REAL, candidate_scores_json TEXT, selection_reason TEXT,
+      selector_provider TEXT, selector_model TEXT, selector_elapsed_ms INTEGER,
+      full_text_hash TEXT, suggested_template_json TEXT, applied_instructions_hash TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+    database.run(`CREATE INDEX IF NOT EXISTS idx_template_runs_recording ON transcript_template_runs(recording_id, created_at DESC)`)
+    for (const sql of [
+      'ALTER TABLE transcripts ADD COLUMN summarization_template_id TEXT',
+      'ALTER TABLE transcripts ADD COLUMN summarization_template_name TEXT',
+      'ALTER TABLE transcripts ADD COLUMN summarization_template_hash TEXT'
+    ]) {
+      try { database.run(sql) } catch { console.log(`Column may already exist: ${sql}`) }
+    }
+    database.run(`INSERT OR IGNORE INTO summarization_templates
+      (id, name, description, instructions, is_default, is_builtin, enabled)
+      VALUES ('builtin-default', 'Default', 'Base summarization (no extra emphasis).', '', 0, 1, 1)`)
+    console.log('Migration v33 complete')
   }
 
 }
@@ -2727,6 +2802,12 @@ export interface Transcript {
   summarization_model?: string
   /** FK to diarization_runs.id (Voice Library Phase 2C). */
   diarization_run_id?: string
+  /** Live, single-shot summarization-template override (nulled on the Stage-2 write). */
+  summarization_template_id?: string | null
+  /** Provenance: denormalized template name (survives template delete/rename). */
+  summarization_template_name?: string | null
+  /** Provenance: hash of the instructions revision that produced the summary. */
+  summarization_template_hash?: string | null
   created_at: string
 }
 
