@@ -1,204 +1,162 @@
 /**
- * Transcript Export IPC Handler
+ * Transcript Export IPC Handler (transcripts:export)
  *
- * Handles the `transcripts:export` channel: loads a recording's transcript +
- * recording row + speaker roster from the DB, assembles ExportData, gates CSV/SRT
- * on diarization, formats, derives a sanitised default filename, shows the native
- * save dialog, writes the file, and returns Result<string | null>.
+ * Loads a recording's transcript + metadata + speaker roster, builds a normalized
+ * ExportData, gates CSV/SRT on diarization (server-side backstop — the UI also
+ * disables them), runs the matching pure formatter, and saves via the native dialog.
+ * Mirrors the file-save pattern in outputs-handlers.ts.
  */
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { writeFileSync } from 'fs'
+import { success, error, Result } from '../types/api'
 import {
-  getRecordingById,
   getTranscriptByRecordingId,
+  getRecordingById,
   getRecordingSpeakers,
   getContactById
 } from '../services/database'
 import {
-  toJson,
   toCsv,
   toSrt,
+  toJson,
   sanitizeBasename,
   type ExportData
 } from '../services/transcript-export'
-import { success, error, type Result } from '../types/api'
 import type { Turn } from '../services/asr/asr-provider'
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+type ExportFormat = 'csv' | 'srt' | 'json'
 
-/** Safely parse a JSON string. Returns `null` on any error. */
-function tryParseJson<T>(raw: string | undefined | null): T | null {
-  if (raw == null || raw.trim() === '') return null
+/** Parse a JSON string into a string[]; any failure or non-array yields []. */
+function parseStringArray(raw: string | null | undefined): string[] {
+  if (!raw) return []
   try {
-    return JSON.parse(raw) as T
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.map((v) => String(v)) : []
+  } catch {
+    return []
+  }
+}
+
+/** Parse the turns JSON string into Turn[]; any failure or non-array yields null (non-diarized). */
+function parseTurns(raw: string | null | undefined): Turn[] | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Turn[]) : null
   } catch {
     return null
   }
 }
 
-/**
- * Strip any file extension from a title used as a filename fallback.
- * "2026-06-22 Weekly Sync.m4a" → "2026-06-22 Weekly Sync"
- * Applied only when the recording row has no explicit title and we fall back to
- * the filename — so the exported file isn't named "meeting.m4a.json".
- */
-function stripExtension(name: string): string {
-  return name.replace(/\.[^./\\]+$/, '')
+const DIALOG_FILTERS: Record<ExportFormat, { name: string; extensions: string[] }> = {
+  csv: { name: 'CSV', extensions: ['csv'] },
+  srt: { name: 'SubRip Subtitle', extensions: ['srt'] },
+  json: { name: 'JSON', extensions: ['json'] }
 }
-
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
 
 export function registerTranscriptsExportHandlers(): void {
   ipcMain.handle(
     'transcripts:export',
-    async (
-      event,
-      args: unknown
-    ): Promise<Result<string | null>> => {
+    async (event, request: unknown): Promise<Result<string | null>> => {
       try {
-        if (
-          typeof args !== 'object' ||
-          args === null ||
-          typeof (args as Record<string, unknown>).recordingId !== 'string' ||
-          typeof (args as Record<string, unknown>).format !== 'string'
-        ) {
-          return error('VALIDATION_ERROR', 'recordingId and format are required')
+        // Validate input
+        const req = request as { recordingId?: unknown; format?: unknown } | null
+        const recordingId = req && typeof req.recordingId === 'string' ? req.recordingId : ''
+        const format = req && (req.format === 'csv' || req.format === 'srt' || req.format === 'json')
+          ? (req.format as ExportFormat)
+          : null
+        if (!recordingId || !format) {
+          return error('VALIDATION_ERROR', 'Invalid export request: need a recordingId and a csv|srt|json format')
         }
 
-        const { recordingId, format } = args as { recordingId: string; format: string }
-
-        if (format !== 'json' && format !== 'csv' && format !== 'srt') {
-          return error('VALIDATION_ERROR', `Unknown format: ${format}. Expected json, csv, or srt.`)
-        }
-
-        // ── 1. Load the recording row ──────────────────────────────────────────
-        const recording = getRecordingById(recordingId)
-        if (!recording) {
-          return error('NOT_FOUND', `Recording ${recordingId} not found`)
-        }
-
-        // ── 2. Load the transcript row ─────────────────────────────────────────
+        // Load transcript
         const transcript = getTranscriptByRecordingId(recordingId)
         if (!transcript) {
-          return error('NOT_FOUND', `No transcript found for recording ${recordingId}`)
+          return error('NOT_FOUND', 'No transcript to export')
         }
 
-        // ── 3. Defensively parse turns ─────────────────────────────────────────
-        const turns = tryParseJson<Turn[]>(transcript.turns)
-
-        // ── 4. Diarization gate — must run BEFORE any formatting ───────────────
-        if (format === 'csv' || format === 'srt') {
-          if (!turns || turns.length === 0) {
-            return error(
-              'NOT_DIARIZED',
-              `Format "${format}" requires diarization. This recording has no speaker turns.`
-            )
-          }
+        // Parse turns defensively → diarization gate
+        const turns = parseTurns(transcript.turns)
+        const isDiarized = Array.isArray(turns) && turns.length > 0
+        if ((format === 'csv' || format === 'srt') && !isDiarized) {
+          return error(
+            'NOT_DIARIZED',
+            'CSV and SRT export require diarization. Re-transcribe with diarization to enable.'
+          )
         }
 
-        // ── 5. Load speaker roster ─────────────────────────────────────────────
-        const speakerRows = getRecordingSpeakers(recordingId)
-        const speakers: Record<string, string> = {}
-        for (const row of speakerRows) {
-          if (row.contact_id) {
-            const contact = getContactById(row.contact_id)
-            if (contact && contact.name) {
-              speakers[row.file_label] = contact.name
-            }
-          }
-        }
-
-        // ── 6. Parse analysis fields defensively ──────────────────────────────
-        const actionItems = tryParseJson<string[]>(transcript.action_items) ?? []
-        const topics = tryParseJson<string[]>(transcript.topics) ?? []
-        const keyPoints = tryParseJson<string[]>(transcript.key_points) ?? []
-
-        // ── 7. Assemble ExportData ─────────────────────────────────────────────
+        // Recording metadata. Title prefers the AI title; the filename fallbacks have their
+        // file extension stripped so the default save name is not e.g. "My Recording.wav.json".
+        const recording = getRecordingById(recordingId)
+        const stripExt = (name: string): string => name.replace(/\.[^./\\]+$/, '')
+        const fileFallback = recording?.original_filename || recording?.filename
+        const title =
+          transcript.title_suggestion ||
+          (fileFallback ? stripExt(fileFallback) : '') ||
+          'transcript'
         const durationMs =
-          typeof recording.duration_seconds === 'number'
+          recording && typeof recording.duration_seconds === 'number'
             ? Math.round(recording.duration_seconds * 1000)
             : null
 
-        const exportData: ExportData = {
+        // Speaker roster: file_label -> contact name (fallback handled by resolveSpeaker)
+        const speakers: Record<string, string> = {}
+        for (const row of getRecordingSpeakers(recordingId)) {
+          if (!row.contact_id) continue
+          const contact = getContactById(row.contact_id)
+          if (contact) speakers[row.file_label] = contact.name
+        }
+
+        const data: ExportData = {
           recording: {
-            id: recording.id,
-            title: recording.filename,
-            dateRecorded: recording.date_recorded,
+            id: recordingId,
+            title,
+            dateRecorded: recording?.date_recorded ?? '',
             durationMs,
-            language: transcript.language,
+            language: transcript.language ?? '',
             transcriptionProvider: transcript.transcription_provider ?? null,
             transcriptionModel: transcript.transcription_model ?? null
           },
-          fullText: transcript.full_text,
+          fullText: transcript.full_text ?? '',
           turns,
           analysis: {
             summary: transcript.summary ?? null,
-            actionItems,
-            topics,
-            keyPoints,
+            actionItems: parseStringArray(transcript.action_items),
+            topics: parseStringArray(transcript.topics),
+            keyPoints: parseStringArray(transcript.key_points),
             titleSuggestion: transcript.title_suggestion ?? null,
             sentiment: transcript.sentiment ?? null
           },
           speakers
         }
 
-        // ── 8. Format the content ──────────────────────────────────────────────
-        let content: string
-        if (format === 'json') {
-          content = toJson(exportData)
-        } else if (format === 'csv') {
-          content = toCsv(exportData)
-        } else {
-          content = toSrt(exportData)
-        }
+        const content =
+          format === 'csv' ? toCsv(data) : format === 'srt' ? toSrt(data) : toJson(data)
 
-        // ── 9. Derive the default filename ────────────────────────────────────
-        // Prefer the title_suggestion from analysis; fall back to filename with
-        // extension stripped so we don't get "meeting.m4a.json".
-        const rawTitle =
-          transcript.title_suggestion && transcript.title_suggestion.trim().length > 0
-            ? transcript.title_suggestion.trim()
-            : stripExtension(recording.filename)
-
-        const base = sanitizeBasename(rawTitle)
-        const defaultPath = `${base}.${format}`
-
-        // ── 10. Show native save dialog ────────────────────────────────────────
         const win = BrowserWindow.fromWebContents(event.sender)
         if (!win) {
           return error('INTERNAL_ERROR', 'No window found')
         }
 
-        const filterMap: Record<string, Array<{ name: string; extensions: string[] }>> = {
-          json: [{ name: 'JSON', extensions: ['json'] }],
-          csv: [{ name: 'CSV', extensions: ['csv'] }],
-          srt: [{ name: 'SRT Subtitle', extensions: ['srt'] }]
-        }
-
-        const dialogResult = await dialog.showSaveDialog(win, {
+        const defaultPath = `${sanitizeBasename(title)}.${format}`
+        const result = await dialog.showSaveDialog(win, {
           defaultPath,
-          filters: [
-            ...filterMap[format],
-            { name: 'All Files', extensions: ['*'] }
-          ]
+          filters: [DIALOG_FILTERS[format], { name: 'All Files', extensions: ['*'] }]
         })
 
-        if (dialogResult.canceled || !dialogResult.filePath) {
+        if (result.canceled || !result.filePath) {
           return success(null)
         }
 
-        // ── 11. Write the file ─────────────────────────────────────────────────
-        writeFileSync(dialogResult.filePath, content, 'utf-8')
-        return success(dialogResult.filePath)
+        writeFileSync(result.filePath, content, 'utf-8')
+        return success(result.filePath)
       } catch (err) {
         console.error('transcripts:export error:', err)
         return error('INTERNAL_ERROR', 'Failed to export transcript', err)
       }
     }
   )
+
+  console.log('Transcript export IPC handler registered')
 }
