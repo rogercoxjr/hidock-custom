@@ -415,11 +415,14 @@ describe('concurrency guard — write-side contract (DB layer)', () => {
 // ---------------------------------------------------------------------------
 
 describe('FIX 6 — real resummarize handler: guard runs BEFORE the override write', () => {
-  let handlers: Record<string, (...args: unknown[]) => unknown> = {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let handlers: Record<string, (...args: any[]) => any> = {}
 
   beforeEach(() => {
     handlers = {}
-    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: unknown[]) => unknown) => {
+    // Mirror the IPC-layer test wiring: capture each registered handler by channel.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(ipcMain.handle).mockImplementation((channel: string, handler: (...args: any[]) => any) => {
       handlers[channel] = handler
       return undefined as never
     })

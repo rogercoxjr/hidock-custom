@@ -311,7 +311,9 @@ describe('Library Performance', () => {
 
     // This test provides timing data but not real FPS
     // For production, implement Playwright scroll tests
-  })
+  }, 30000) // jsdom render of 5000 items + 100 scroll frames is heavy; the default
+            // 5s timeout flakes under full-suite parallel CPU contention (passes ~3s
+            // in isolation). Give it headroom so the gate is deterministic.
 
   it('applies filters within performance budget', async () => {
     const recordings = generateMockRecordings(1000)
