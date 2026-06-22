@@ -71,10 +71,20 @@ interface TemplateInput {
   enabled?: boolean
 }
 
-// §8.1 client-side caps (service re-validates; this is first-line defense)
-const MAX_NAME = 100
-const MAX_DESCRIPTION = 500
+// §8.1 client-side caps (service re-validates; this is first-line defense).
+//
+// FIX 4: these MUST match the service caps exported from
+// electron/main/services/summarization-templates.ts
+// (NAME_MAX=80, DESCRIPTION_MAX=300, INSTRUCTIONS_MAX=2000,
+//  TRIGGERS_MAX_COUNT=12, TRIGGER_MAX_LEN=80). The renderer (tsconfig.web)
+// cannot import from electron/main, so they are mirrored here — keep them in
+// sync. Diverging values produce a confusing IPC-boundary VALIDATION_ERROR
+// instead of an inline hint.
+const MAX_NAME = 80
+const MAX_DESCRIPTION = 300
 const MAX_INSTRUCTIONS = 2000
+const MAX_TRIGGERS_COUNT = 12
+const MAX_TRIGGER_LEN = 80
 
 // --------------------------------------------------------------------------
 // Types for previewSelection result (mirrored from preload — no cross-boundary import)
@@ -119,10 +129,10 @@ export function SummarizationTemplatesCard() {
 
   // ---- data loading -------------------------------------------------------
   const loadTemplates = useCallback(async () => {
-    const res = await window.electronAPI.summarizationTemplates.list()
-    if (res.success) {
+    const res = await window.electronAPI?.summarizationTemplates?.list?.()
+    if (res?.success) {
       setTemplates(res.data)
-    } else {
+    } else if (res) {
       toast.error('Failed to load templates', (res as FailResult).error?.message)
     }
   }, [])
@@ -163,36 +173,56 @@ export function SummarizationTemplatesCard() {
       toast.error('Instructions are required')
       return
     }
+    // FIX 4: surface the caps client-side before the IPC round-trip so the user
+    // gets an inline hint instead of a confusing IPC-boundary VALIDATION_ERROR.
+    if (trimmedName.length > MAX_NAME) {
+      toast.error(`Template name exceeds ${MAX_NAME} characters`)
+      return
+    }
+    if (formDescription.trim().length > MAX_DESCRIPTION) {
+      toast.error(`Description exceeds ${MAX_DESCRIPTION} characters`)
+      return
+    }
+    const triggers = formTriggers
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (triggers.length > MAX_TRIGGERS_COUNT) {
+      toast.error(`Too many example triggers (max ${MAX_TRIGGERS_COUNT})`)
+      return
+    }
+    const tooLongTrigger = triggers.find((t) => t.length > MAX_TRIGGER_LEN)
+    if (tooLongTrigger) {
+      toast.error(`Each example trigger must be ${MAX_TRIGGER_LEN} characters or fewer`)
+      return
+    }
 
     const payload: TemplateInput = {
-      name: trimmedName.slice(0, MAX_NAME),
-      description: formDescription.trim().slice(0, MAX_DESCRIPTION) || undefined,
-      instructions: trimmedInstructions.slice(0, MAX_INSTRUCTIONS),
-      exampleTriggers: formTriggers
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      name: trimmedName,
+      description: formDescription.trim() || undefined,
+      instructions: trimmedInstructions,
+      exampleTriggers: triggers,
     }
 
     setBusy(true)
     try {
       if (editTarget) {
-        const res = await window.electronAPI.summarizationTemplates.update(editTarget.id, payload)
-        if (res.success) {
+        const res = await window.electronAPI?.summarizationTemplates?.update?.(editTarget.id, payload)
+        if (res?.success) {
           toast.success('Template updated')
           setModalOpen(false)
           await loadTemplates()
         } else {
-          toast.error('Failed to update template', (res as FailResult).error?.message)
+          toast.error('Failed to update template', (res as FailResult | undefined)?.error?.message)
         }
       } else {
-        const res = await window.electronAPI.summarizationTemplates.create(payload)
-        if (res.success) {
+        const res = await window.electronAPI?.summarizationTemplates?.create?.(payload)
+        if (res?.success) {
           toast.success('Template created')
           setModalOpen(false)
           await loadTemplates()
         } else {
-          toast.error('Failed to create template', (res as FailResult).error?.message)
+          toast.error('Failed to create template', (res as FailResult | undefined)?.error?.message)
         }
       }
     } catch (err) {
@@ -206,11 +236,11 @@ export function SummarizationTemplatesCard() {
     const nextEnabled = !t.enabled
     setBusy(true)
     try {
-      const res = await window.electronAPI.summarizationTemplates.setEnabled(t.id, nextEnabled)
-      if (res.success) {
+      const res = await window.electronAPI?.summarizationTemplates?.setEnabled?.(t.id, nextEnabled)
+      if (res?.success) {
         await loadTemplates()
       } else {
-        toast.error('Failed to update template', (res as FailResult).error?.message)
+        toast.error('Failed to update template', (res as FailResult | undefined)?.error?.message)
       }
     } catch (err) {
       toast.error('Unexpected error', err instanceof Error ? err.message : String(err))
@@ -222,12 +252,12 @@ export function SummarizationTemplatesCard() {
   const handleSetDefault = async (t: SummarizationTemplate) => {
     setBusy(true)
     try {
-      const res = await window.electronAPI.summarizationTemplates.update(t.id, { isDefault: true })
-      if (res.success) {
+      const res = await window.electronAPI?.summarizationTemplates?.update?.(t.id, { isDefault: true })
+      if (res?.success) {
         toast.success(`"${t.name}" is now the default template`)
         await loadTemplates()
       } else {
-        toast.error('Failed to set default', (res as FailResult).error?.message)
+        toast.error('Failed to set default', (res as FailResult | undefined)?.error?.message)
       }
     } catch (err) {
       toast.error('Unexpected error', err instanceof Error ? err.message : String(err))
@@ -240,13 +270,13 @@ export function SummarizationTemplatesCard() {
     if (!deleteTarget) return
     setBusy(true)
     try {
-      const res = await window.electronAPI.summarizationTemplates.delete(deleteTarget.id)
-      if (res.success) {
+      const res = await window.electronAPI?.summarizationTemplates?.delete?.(deleteTarget.id)
+      if (res?.success) {
         toast.success(`"${deleteTarget.name}" deleted`)
         setDeleteTarget(null)
         await loadTemplates()
       } else {
-        toast.error('Failed to delete template', (res as FailResult).error?.message)
+        toast.error('Failed to delete template', (res as FailResult | undefined)?.error?.message)
         setDeleteTarget(null)
       }
     } catch (err) {
@@ -268,11 +298,11 @@ export function SummarizationTemplatesCard() {
     setTestResult(null)
     setTestError(null)
     try {
-      const res = await window.electronAPI.summarizationTemplates.previewSelection(id)
-      if (res.success) {
+      const res = await window.electronAPI?.summarizationTemplates?.previewSelection?.(id)
+      if (res?.success) {
         setTestResult(res.data as PreviewSelectionResult)
       } else {
-        const msg = (res as FailResult).error?.message ?? 'Selection preview failed'
+        const msg = (res as FailResult | undefined)?.error?.message ?? 'Selection preview failed'
         setTestError(msg)
       }
     } catch (err) {
@@ -364,18 +394,21 @@ export function SummarizationTemplatesCard() {
                   </Button>
                 )}
 
-                {/* Edit */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-ink-muted hover:text-ink"
-                  onClick={() => openEdit(t)}
-                  disabled={busy}
-                  aria-label={`Edit ${t.name}`}
-                  title={`Edit ${t.name}`}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
+                {/* Edit — hidden for built-in (service rejects via assertNotBuiltin;
+                    withhold the control like Delete/Switch as a first line of defense) */}
+                {!t.isBuiltin && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-ink-muted hover:text-ink"
+                    onClick={() => openEdit(t)}
+                    disabled={busy}
+                    aria-label={`Edit ${t.name}`}
+                    title={`Edit ${t.name}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
 
                 {/* Delete — hidden for built-in */}
                 {!t.isBuiltin && (

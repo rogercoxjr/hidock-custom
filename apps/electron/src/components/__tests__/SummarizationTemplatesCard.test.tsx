@@ -220,6 +220,60 @@ describe('SummarizationTemplatesCard', () => {
     expect(h.delete).not.toHaveBeenCalled()
   })
 
+  // ── FIX 4: client-side caps mirror the service (no reliance on the IPC error) ──
+  it('name input truncates to the 80-char service cap (client-side enforcement)', async () => {
+    render(<SummarizationTemplatesCard />)
+    await waitFor(() => expect(screen.getByText('Sales Brief')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /add template/i }))
+    const nameInput = (await screen.findByLabelText(/template name/i)) as HTMLInputElement
+    fireEvent.change(nameInput, { target: { value: 'x'.repeat(200) } })
+    // Capped at 80 — diverging from the old 100 would let the IPC boundary reject it.
+    expect(nameInput.value.length).toBe(80)
+  })
+
+  it('entering >12 example triggers surfaces a client-side limit and does NOT call create()', async () => {
+    render(<SummarizationTemplatesCard />)
+    await waitFor(() => expect(screen.getByText('Sales Brief')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /add template/i }))
+    const nameInput = await screen.findByLabelText(/template name/i)
+    fireEvent.change(nameInput, { target: { value: 'Many triggers' } })
+    fireEvent.change(screen.getByLabelText(/instructions/i), { target: { value: 'Do something' } })
+    // 13 comma-separated triggers — over the TRIGGERS_MAX_COUNT=12 cap.
+    const triggersInput = screen.getByLabelText(/example triggers/i)
+    fireEvent.change(triggersInput, { target: { value: Array.from({ length: 13 }, (_, i) => `t${i}`).join(', ') } })
+
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(h.create).not.toHaveBeenCalled()
+    expect(h.toast.error).toHaveBeenCalledWith(expect.stringMatching(/example triggers/i))
+  })
+
+  it('entering an example trigger >80 chars surfaces a client-side limit and does NOT call create()', async () => {
+    render(<SummarizationTemplatesCard />)
+    await waitFor(() => expect(screen.getByText('Sales Brief')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /add template/i }))
+    fireEvent.change(await screen.findByLabelText(/template name/i), { target: { value: 'Long trigger' } })
+    fireEvent.change(screen.getByLabelText(/instructions/i), { target: { value: 'Do something' } })
+    fireEvent.change(screen.getByLabelText(/example triggers/i), { target: { value: 'x'.repeat(81) } })
+
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(h.create).not.toHaveBeenCalled()
+    expect(h.toast.error).toHaveBeenCalledWith(expect.stringMatching(/80 characters/i))
+  })
+
+  it('built-in Default has no Edit button (only user templates are editable)', async () => {
+    render(<SummarizationTemplatesCard />)
+    await waitFor(() => expect(screen.getByText('Built-in')).toBeInTheDocument())
+    // Edit control is withheld for the built-in Default (matches Delete/Switch).
+    expect(screen.queryByRole('button', { name: /edit default/i })).not.toBeInTheDocument()
+    // The user template still has its Edit button.
+    expect(screen.getByRole('button', { name: /edit sales brief/i })).toBeInTheDocument()
+  })
+
   it('surfaces an error toast when list() returns { success: false }', async () => {
     h.list.mockResolvedValue({ success: false, error: { code: 'INTERNAL_ERROR', message: 'DB failure' } })
     render(<SummarizationTemplatesCard />)
