@@ -363,7 +363,12 @@ export function validateAnalysis(parsed: unknown, opts: { hasCandidates: boolean
     question_suggestions,
     language: typeof p.language === 'string' ? p.language : undefined,
     selected_meeting_id: typeof p.selected_meeting_id === 'string' ? p.selected_meeting_id : undefined,
-    meeting_confidence: typeof p.meeting_confidence === 'number' ? p.meeting_confidence : undefined,
+    meeting_confidence:
+      typeof p.meeting_confidence === 'number'
+        ? p.meeting_confidence
+        : typeof p.meeting_confidence === 'string' && Number.isFinite(Number(p.meeting_confidence))
+          ? Number(p.meeting_confidence)
+          : undefined,
     selection_reason: typeof p.selection_reason === 'string' ? p.selection_reason : undefined
   }
 }
