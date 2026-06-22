@@ -239,6 +239,10 @@ export function registerSummarizationTemplatesHandlers(): void {
         const templates = userTemplates()
         const config = getConfig()
         const llm = getLlmProvider(config)
+        // Deliberate read-only-preview simplification: meetingSubjects=[] and
+        // userDefaultId=null. The preview only exercises the selector against the
+        // transcript text; it intentionally does NOT resolve the real default template
+        // or meeting context (that full resolution happens in the live Stage-2 path).
         const result = await selectTemplateForTranscript(
           {
             fullText: transcript.full_text,
@@ -272,8 +276,15 @@ export function registerSummarizationTemplatesHandlers(): void {
         return error('VALIDATION_ERROR', 'recordingId must be a non-empty string', null)
       }
       try {
+        // §8.3 concurrency guard — check in-flight FIRST, before creating the template,
+        // so a rejected (in-flight) request never orphans a freshly-created template row
+        // in the user's list. Mirrors the guard-before-write order of resummarizeWithTemplate.
+        if (hasInFlightQueueItem(recordingId)) {
+          return error('VALIDATION_ERROR', 'transcription in progress', null)
+        }
+
         // Read the suggested template from the latest selector run
-        const run = getLatestTemplateRun(recordingId as string)
+        const run = getLatestTemplateRun(recordingId)
         if (!run?.suggestedTemplateJson) {
           return error(
             'NOT_FOUND',
@@ -315,20 +326,16 @@ export function registerSummarizationTemplatesHandlers(): void {
               : [],
         }
 
-        // Create the new user template (sanitize forces is_builtin=0)
+        // Create the new user template (sanitize forces is_builtin=0). Safe to write
+        // now that the in-flight guard above has passed.
         const newTemplate = createTemplate(mergedInput)
 
-        // §8.3 concurrency guard — check BEFORE any write
-        if (hasInFlightQueueItem(recordingId as string)) {
-          return error('VALIDATION_ERROR', 'transcription in progress', null)
-        }
-
         // Write the single-shot override and enqueue a re-summarize
-        setTranscriptTemplateOverride(recordingId as string, newTemplate.id)
-        clearTranscriptStage2Marker(recordingId as string)
+        setTranscriptTemplateOverride(recordingId, newTemplate.id)
+        clearTranscriptStage2Marker(recordingId)
 
         // Enqueue asynchronously (mirrors recording-handlers resummarize path)
-        addToQueue(recordingId as string)
+        addToQueue(recordingId)
         void processQueueManually()
 
         return success(newTemplate)

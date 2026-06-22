@@ -379,14 +379,18 @@ describe('summarizationTemplates:acceptSuggestedTemplate IPC (Phase 4 / Task 14)
     )
   })
 
-  it('rejects with VALIDATION_ERROR when a transcription is in-flight', async () => {
+  it('rejects with VALIDATION_ERROR when a transcription is in-flight (and does NOT orphan a template)', async () => {
     db.hasInFlightQueueItem.mockReturnValue(true)
     const res = await handlers.get('summarizationTemplates:acceptSuggestedTemplate')!({}, 'rec-1') as any
     expect(res).toMatchObject({ success: false })
     expect(res.error.message).toMatch(/transcription in progress/)
-    // Override must NOT have been set
+    // No template row may be created when the guard rejects — guard-before-write
+    // ordering must keep the user's template list free of ghost entries.
+    expect(svc.createTemplate).not.toHaveBeenCalled()
+    // And no override / marker / queue writes either.
     expect(db.setTranscriptTemplateOverride).not.toHaveBeenCalled()
     expect(db.clearTranscriptStage2Marker).not.toHaveBeenCalled()
+    expect(db.addToQueue).not.toHaveBeenCalled()
   })
 
   it('returns NOT_FOUND when no suggested template exists', async () => {
