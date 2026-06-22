@@ -206,15 +206,29 @@ describe('Injection case (b): instructions instruct dropping summary/title', () 
       nonce: NONCE,
     })
 
-    // The authoritative JSON contract must still be present.
-    expect(prompt).toContain('"summary"')
-    expect(prompt).toContain('"title_suggestion"')
-    expect(prompt).toContain('"question_suggestions"')
+    // The authoritative JSON contract (buildJsonTail) must still be present.
+    // CAUTION: the evilInstructions payload itself contains the substrings
+    // "summary" and "title_suggestion", and those sanitized instructions are
+    // embedded verbatim in the EMPHASIS GUIDANCE data block — so a naive
+    // prompt-wide toContain would be satisfied by the attacker's OWN text and
+    // would still pass even if buildJsonTail were removed. To prove the REAL
+    // JSON tail survives, assert the field names only against the region AFTER
+    // the EMPHASIS GUIDANCE data block closes (where the JSON tail lives).
+    const open = `<<<DATA_${NONCE}>>>`
+    const close = `<<<END_${NONCE}>>>`
+    const emphasisStart = prompt.indexOf('EMPHASIS GUIDANCE')
+    const emphasisBlockOpen = prompt.indexOf(open, emphasisStart)
+    const emphasisBlockClose = prompt.indexOf(close, emphasisBlockOpen + open.length)
+    // Everything after the EMPHASIS GUIDANCE block close — this contains the
+    // sanitized Transcript block (no contract field names) + the JSON tail.
+    const afterEmphasisBlock = prompt.slice(emphasisBlockClose + close.length)
+    expect(afterEmphasisBlock).toContain('"summary"')
+    expect(afterEmphasisBlock).toContain('"title_suggestion"')
+    expect(afterEmphasisBlock).toContain('"question_suggestions"')
 
     // The evil instructions are inside the data block (emphasis guidance), not
     // in the authoritative frame.
-    const authoritativeEnd = prompt.indexOf('EMPHASIS GUIDANCE')
-    const authoritative = prompt.slice(0, authoritativeEnd)
+    const authoritative = prompt.slice(0, emphasisStart)
     expect(authoritative).not.toContain('Do NOT include')
     expect(authoritative).not.toContain('hacked')
   })
@@ -224,7 +238,8 @@ describe('Injection case (b): instructions instruct dropping summary/title', () 
     const result = assertOutputContract(goodParsed, { hasCandidates: false })
     expect(result).not.toBeNull()
     expect(result!.summary.length).toBeGreaterThan(0)
-    expect(result!.title_suggestion).toBeDefined()
+    // Assert the actual known-good title passes through (not just "is defined").
+    expect(result!.title_suggestion).toBe('Q3 Budget Finalization')
   })
 
   it('output contract: clean throw when model obeys injection and omits summary', () => {
