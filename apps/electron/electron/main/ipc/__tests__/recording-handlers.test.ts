@@ -126,6 +126,15 @@ vi.mock('../validation', () => ({
   LinkRecordingToMeetingSchema: createSchemaMock(['recordingId', 'meetingId']),
   UnlinkRecordingFromMeetingSchema: createSchemaMock('recordingId'),
   TranscribeRecordingSchema: createSchemaMock('recordingId'),
+  // ResummarizeSchema: recordingId must be a valid UUID; templateId is an arbitrary string (not UUID-validated)
+  ResummarizeSchema: {
+    safeParse: vi.fn((data: any) => {
+      if (data?.recordingId !== undefined && !UUID_RE.test(data.recordingId)) {
+        return { success: false, error: { issues: [{ message: 'recordingId must be a valid UUID' }] } }
+      }
+      return { success: true, data }
+    })
+  },
   UpdateRecordingStatusSchema: createSchemaMock('id'),
   UpdateTranscriptionStatusSchema: createSchemaMock('id')
 }))
@@ -1249,6 +1258,60 @@ describe('Recording IPC Handlers', () => {
       const result = await handlers['transcription:resummarize'](null, recId)
 
       expect(result).toEqual({ success: false, error: 'no transcript row for recording' })
+      expect(addToQueue).not.toHaveBeenCalled()
+    })
+
+    // Task 8: extended payload — object form with optional templateId.
+    // Each test resets clearTranscriptStage2Marker to the default (no-op) in case
+    // a sibling test above set a throwing mockImplementation that clearAllMocks() does not undo.
+    it('accepts object payload { recordingId } (back-compat object form)', async () => {
+      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
+      vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+
+      const result = await handlers['transcription:resummarize'](null, { recordingId: recId })
+
+      expect(clearTranscriptStage2Marker).toHaveBeenCalledWith(recId)
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(processQueueManually).toHaveBeenCalled()
+      expect(result).toEqual({ success: true })
+    })
+
+    it('accepts object payload { recordingId, templateId } and ignores templateId for now', async () => {
+      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
+      vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+
+      const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: 'tmpl-abc' })
+
+      expect(clearTranscriptStage2Marker).toHaveBeenCalledWith(recId)
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(processQueueManually).toHaveBeenCalled()
+      expect(result).toEqual({ success: true })
+    })
+
+    it('accepts object payload { recordingId, templateId: null } (explicit null allowed)', async () => {
+      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+
+      const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: null })
+
+      expect(clearTranscriptStage2Marker).toHaveBeenCalledWith(recId)
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(result).toEqual({ success: true })
+    })
+
+    it('rejects object payload with invalid recordingId UUID', async () => {
+      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+
+      const result = await handlers['transcription:resummarize'](null, { recordingId: 'not-a-uuid', templateId: 'tmpl-abc' })
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBeTruthy()
+      expect(clearTranscriptStage2Marker).not.toHaveBeenCalled()
       expect(addToQueue).not.toHaveBeenCalled()
     })
   })

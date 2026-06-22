@@ -155,6 +155,18 @@ export const TranscribeRecordingSchema = z.object({
 })
 
 /**
+ * Re-summarize recording request (spec §5.3/§5.6).
+ * Accepts an optional templateId so Phase 4 (Task 13) can override the template
+ * without breaking existing renderer callers that pass a bare recordingId string
+ * (the handler normalises bare-string → object before calling safeParse).
+ */
+export const ResummarizeSchema = z.object({
+  recordingId: RecordingIdSchema,
+  templateId: z.string().min(1).nullable().optional()
+})
+export type Resummarize = z.infer<typeof ResummarizeSchema>
+
+/**
  * Recording status enum
  */
 export const RecordingStatusSchema = z.enum(['ready', 'processing', 'deleted', 'error'])

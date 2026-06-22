@@ -51,6 +51,7 @@ import {
   LinkRecordingToMeetingSchema,
   UnlinkRecordingFromMeetingSchema,
   TranscribeRecordingSchema,
+  ResummarizeSchema,
   UpdateRecordingStatusSchema,
   UpdateTranscriptionStatusSchema
 } from './validation'
@@ -431,9 +432,15 @@ export function registerRecordingHandlers(): void {
 
   // Re-summarize (spec §5.3/§5.6): clear the stage marker (keeping the old summary)
   // and enqueue — the worker's resume rule runs Stage 2 only, no audio file needed.
-  ipcMain.handle('transcription:resummarize', async (_, recordingId: unknown): Promise<{ success: boolean; error?: string }> => {
+  // templateId threading + concurrency guard land in Phase 4 Task 13; bare-string wrap kept
+  // for the existing renderer caller (preload/index.ts calls callIPC('transcription:resummarize', recordingId)).
+  ipcMain.handle('transcription:resummarize', async (_, payload: unknown): Promise<{ success: boolean; error?: string }> => {
     try {
-      const result = TranscribeRecordingSchema.safeParse({ recordingId })
+      const normalized =
+        typeof payload === 'object' && payload !== null && 'recordingId' in payload
+          ? payload
+          : { recordingId: payload }
+      const result = ResummarizeSchema.safeParse(normalized)
       if (!result.success) throw new Error(result.error.issues[0]?.message || 'Invalid request')
       clearTranscriptStage2Marker(result.data.recordingId)
       addToQueue(result.data.recordingId)
