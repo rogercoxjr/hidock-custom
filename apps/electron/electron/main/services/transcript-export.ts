@@ -67,3 +67,34 @@ export function sanitizeBasename(title: string): string {
     .trim()
   return cleaned.length > 0 ? cleaned : 'transcript'
 }
+
+/** Complete-record JSON (spec §6.3). Always available; turns is null when not diarized. */
+export function toJson(data: ExportData): string {
+  const record = {
+    version: 1,
+    recording: {
+      id: data.recording.id,
+      title: data.recording.title,
+      dateRecorded: data.recording.dateRecorded,
+      durationMs: data.recording.durationMs,
+      language: data.recording.language,
+      transcriptionProvider: data.recording.transcriptionProvider,
+      transcriptionModel: data.recording.transcriptionModel
+    },
+    transcript: {
+      language: data.recording.language,
+      fullText: data.fullText,
+      turns: data.turns
+    },
+    analysis: {
+      summary: data.analysis.summary,
+      actionItems: data.analysis.actionItems,
+      topics: data.analysis.topics,
+      keyPoints: data.analysis.keyPoints,
+      titleSuggestion: data.analysis.titleSuggestion,
+      sentiment: data.analysis.sentiment
+    },
+    speakers: data.speakers
+  }
+  return JSON.stringify(record, null, 2)
+}

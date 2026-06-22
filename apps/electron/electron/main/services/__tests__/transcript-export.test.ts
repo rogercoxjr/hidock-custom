@@ -3,7 +3,8 @@ import {
   msToClock,
   csvEscape,
   resolveSpeaker,
-  sanitizeBasename
+  sanitizeBasename,
+  toJson
 } from '../transcript-export'
 import type { ExportData } from '../transcript-export'
 
@@ -114,6 +115,70 @@ describe('sanitizeBasename', () => {
   it('falls back to "transcript" when empty after sanitizing', () => {
     expect(sanitizeBasename('   ')).toBe('transcript')
     expect(sanitizeBasename('/\\:*?')).toBe('transcript')
+  })
+})
+
+describe('toJson', () => {
+  it('emits version 1 and the full record for a non-diarized recording (turns null)', () => {
+    const out = JSON.parse(toJson(baseData()))
+    expect(out.version).toBe(1)
+    expect(out.recording).toEqual({
+      id: 'rec1',
+      title: 'Weekly Sync',
+      dateRecorded: '2026-06-22T10:00:00.000Z',
+      durationMs: 123000,
+      language: 'en',
+      transcriptionProvider: 'assemblyai',
+      transcriptionModel: 'best'
+    })
+    expect(out.transcript).toEqual({ language: 'en', fullText: 'Hello world', turns: null })
+    expect(out.analysis).toEqual({
+      summary: 'A short meeting.',
+      actionItems: ['Ship it'],
+      topics: ['release'],
+      keyPoints: ['went well'],
+      titleSuggestion: 'Weekly Sync',
+      sentiment: 'POSITIVE'
+    })
+    expect(out.speakers).toEqual({ Speaker_0: 'Alice Johnson', Speaker_1: 'Speaker_1' })
+  })
+
+  it('includes the turns array verbatim for a diarized recording', () => {
+    const data = baseData()
+    data.turns = [
+      { speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'Hi' },
+      { speaker: 'Speaker_1', startMs: 1000, endMs: 2000, text: 'Hello', sentiment: 'NEUTRAL' }
+    ]
+    const out = JSON.parse(toJson(data))
+    expect(out.transcript.turns).toEqual(data.turns)
+  })
+
+  it('pretty-prints with two-space indentation', () => {
+    expect(toJson(baseData())).toContain('\n  "version": 1')
+  })
+
+  it('serializes a zero-analysis recording with empty arrays and null scalars (no undefined)', () => {
+    const data = baseData()
+    data.analysis = {
+      summary: null,
+      actionItems: [],
+      topics: [],
+      keyPoints: [],
+      titleSuggestion: null,
+      sentiment: null
+    }
+    const text = toJson(data)
+    const out = JSON.parse(text)
+    expect(out.analysis.actionItems).toEqual([]) // not null
+    expect(out.analysis.topics).toEqual([])
+    expect(out.analysis.keyPoints).toEqual([])
+    expect(out.analysis.summary).toBeNull() // present-and-null, not omitted
+    expect(out.analysis.titleSuggestion).toBeNull()
+    expect(out.analysis.sentiment).toBeNull()
+    // JSON.stringify drops undefined keys; assert none were dropped.
+    expect(Object.keys(out.analysis).sort()).toEqual(
+      ['actionItems', 'keyPoints', 'sentiment', 'summary', 'titleSuggestion', 'topics'].sort()
+    )
   })
 })
 
