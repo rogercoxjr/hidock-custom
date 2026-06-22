@@ -1,0 +1,40 @@
+Analyze this meeting transcript and provide:
+1. A brief summary (2-3 sentences)
+2. A list of action items mentioned (as a JSON array of strings)
+3. Key topics discussed (as a JSON array of strings)
+4. Key points or decisions made (as a JSON array of strings)
+5. A short, descriptive title for this recording (3-8 words that capture the essence)
+6. 4-5 specific, context-aware questions that could be asked about this recording
+   - Questions should be SPECIFIC to the content (e.g., "What was decided about the Q3 marketing budget?")
+   - Avoid generic questions (e.g., "What was discussed?" or "Tell me more")
+   - Questions should help users quickly understand key decisions, action items, and outcomes
+
+IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Spanish, write the summary, action items, topics, key points, title, and questions in Spanish. If English, respond in English.
+
+5. Meeting Selection: There is one candidate meeting near this recording's time:
+   1. "Sales Sync" (ID: m1)
+
+   Determine if this recording actually belongs to this meeting based on topics, people, and context.
+   If the content does NOT match the meeting subject, set meeting_confidence to 0.0 and selected_meeting_id to "none".
+
+   "selected_meeting_id": "the meeting ID if it matches, or \"none\" if it doesn't",
+   "meeting_confidence": 0.0 to 1.0,
+   "selection_reason": "why you selected or rejected this meeting"
+
+Transcript:
+Speaker A: hello
+Speaker B: world
+
+Respond in JSON format:
+{
+  "summary": "...",
+  "action_items": ["...", "..."],
+  "topics": ["...", "..."],
+  "key_points": ["...", "..."],
+  "title_suggestion": "Brief Descriptive Title (3-8 words)",
+  "question_suggestions": ["Specific question about decision 1?", "Specific question about action item 2?", "..."],
+  "language": "es" or "en",
+  "selected_meeting_id": "...",
+  "meeting_confidence": 0.0,
+  "selection_reason": "..."
+}
