@@ -38,6 +38,7 @@ import { computeSpeakerOptions } from './asr/speaker-options-policy'
 import { classifyRunOutcome } from './asr/solo-detection'
 import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
+import { buildAnalysisPrompt, validateAnalysis } from './summarization-prompt'
 import { ProviderRateLimitError } from './provider-errors'
 import { BrowserWindow } from 'electron'
 import { getVectorStore } from './vector-store'
@@ -594,33 +595,6 @@ Meeting ${i + 1}: "${m.subject}"
   // Stage-2 key check: getLlmProvider throws the canonical key-missing string.
   const llm = getLlmProvider(config)
 
-  // Build meeting selection prompt if there are multiple candidates
-  let meetingSelectionSection = ''
-  if (candidateMeetings.length > 1) {
-    meetingSelectionSection = `
-5. IMPORTANT - Meeting Selection: Based on the transcript content, determine which meeting this recording most likely belongs to.
-   Analyze mentions of topics, people, projects, or context clues to select the best match.
-
-   Available meetings:
-${candidateMeetings.map((m, i) => `   ${i + 1}. "${m.subject}" (ID: ${m.id})`).join('\n')}
-
-   Include in your response:
-   "selected_meeting_id": "the meeting ID that best matches",
-   "meeting_confidence": 0.0 to 1.0 (how confident you are),
-   "selection_reason": "why you selected this meeting"`
-  } else if (candidateMeetings.length === 1) {
-    meetingSelectionSection = `
-5. Meeting Selection: There is one candidate meeting near this recording's time:
-   1. "${candidateMeetings[0].subject}" (ID: ${candidateMeetings[0].id})
-
-   Determine if this recording actually belongs to this meeting based on topics, people, and context.
-   If the content does NOT match the meeting subject, set meeting_confidence to 0.0 and selected_meeting_id to "none".
-
-   "selected_meeting_id": "the meeting ID if it matches, or \\"none\\" if it doesn't",
-   "meeting_confidence": 0.0 to 1.0,
-   "selection_reason": "why you selected or rejected this meeting"`
-  }
-
   // D5 §6.6: Stage 2 summarizes a SPEAKER-LABELED transcript when structured turns
   // exist — each turn prefixed with the mapped contact name if available, else
   // "Speaker <label>". Falls back to flat full_text for Whisper/Gemini / pre-
@@ -628,36 +602,11 @@ ${candidateMeetings.map((m, i) => `   ${i + 1}. "${m.subject}" (ID: ${m.id})`).j
   const analysisInput = buildAttributedTranscript(recordingId) ?? fullText
 
   // Now analyze the transcription for summary, action items, etc.
-  const analysisPrompt = `Analyze this meeting transcript and provide:
-1. A brief summary (2-3 sentences)
-2. A list of action items mentioned (as a JSON array of strings)
-3. Key topics discussed (as a JSON array of strings)
-4. Key points or decisions made (as a JSON array of strings)
-5. A short, descriptive title for this recording (3-8 words that capture the essence)
-6. 4-5 specific, context-aware questions that could be asked about this recording
-   - Questions should be SPECIFIC to the content (e.g., "What was decided about the Q3 marketing budget?")
-   - Avoid generic questions (e.g., "What was discussed?" or "Tell me more")
-   - Questions should help users quickly understand key decisions, action items, and outcomes
-
-IMPORTANT: Respond in the SAME LANGUAGE as the transcript. If the transcript is in Spanish, write the summary, action items, topics, key points, title, and questions in Spanish. If English, respond in English.
-${meetingSelectionSection}
-
-Transcript:
-${analysisInput}
-
-Respond in JSON format:
-{
-  "summary": "...",
-  "action_items": ["...", "..."],
-  "topics": ["...", "..."],
-  "key_points": ["...", "..."],
-  "title_suggestion": "Brief Descriptive Title (3-8 words)",
-  "question_suggestions": ["Specific question about decision 1?", "Specific question about action item 2?", "..."],
-  "language": "es" or "en"${candidateMeetings.length > 0 ? `,
-  "selected_meeting_id": "...",
-  "meeting_confidence": 0.0,
-  "selection_reason": "..."` : ''}
-}`
+  const analysisPrompt = buildAnalysisPrompt({
+    transcript: analysisInput,
+    candidateMeetings: candidateMeetings.map((m) => ({ id: m.id, subject: m.subject }))
+    // instructions intentionally omitted in Phase 1 — template resolution arrives in Phase 3.
+  })
 
   const analysisText = await llm.generate(analysisPrompt, { json: true })
 
@@ -666,32 +615,21 @@ Respond in JSON format:
   // JSON.parse error path THROW (intentionally changing today's swallow-and-
   // complete behavior). The queue retries Stage 2; the marker stays NULL and any
   // pre-existing summary is untouched. No sentinel strings are ever written.
-  let analysis: {
-    summary?: string
-    action_items?: string[]
-    topics?: string[]
-    key_points?: string[]
-    title_suggestion?: string
-    question_suggestions?: string[]
-    language?: string
-    selected_meeting_id?: string
-    meeting_confidence?: number
-    selection_reason?: string
-  }
-
   const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
   if (!jsonMatch) {
     throw new Error(
       `Analysis JSON extraction failed: no JSON object in response (${analysisText.slice(0, 120)})`
     )
   }
+  let parsed: unknown
   try {
-    analysis = JSON.parse(jsonMatch[0])
+    parsed = JSON.parse(jsonMatch[0])
   } catch (e) {
     throw new Error(
       `Analysis JSON extraction failed: ${e instanceof Error ? e.message : 'parse error'}`
     )
   }
+  const analysis = validateAnalysis(parsed, { hasCandidates: candidateMeetings.length > 0 })
 
   // Meeting-selection validator (spec §5.2): provider-agnostic guard — smaller
   // models return 'none', hallucinated ids, or string confidences far more often
@@ -745,11 +683,11 @@ Respond in JSON format:
   // Stage-2 write: the single atomic marker write (spec §5.3).
   updateTranscriptStage2(recordingId, {
     summary: analysis.summary,
-    action_items: analysis.action_items ? JSON.stringify(analysis.action_items) : undefined,
-    topics: analysis.topics ? JSON.stringify(analysis.topics) : undefined,
-    key_points: analysis.key_points ? JSON.stringify(analysis.key_points) : undefined,
+    action_items: analysis.action_items.length ? JSON.stringify(analysis.action_items) : undefined,
+    topics: analysis.topics.length ? JSON.stringify(analysis.topics) : undefined,
+    key_points: analysis.key_points.length ? JSON.stringify(analysis.key_points) : undefined,
     title_suggestion: analysis.title_suggestion,
-    question_suggestions: analysis.question_suggestions
+    question_suggestions: analysis.question_suggestions.length
       ? JSON.stringify(analysis.question_suggestions)
       : undefined,
     language: analysis.language || 'unknown',
