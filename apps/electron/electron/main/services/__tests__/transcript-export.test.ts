@@ -5,7 +5,8 @@ import {
   resolveSpeaker,
   sanitizeBasename,
   toJson,
-  toCsv
+  toCsv,
+  toSrt
 } from '../transcript-export'
 import type { ExportData } from '../transcript-export'
 
@@ -241,6 +242,41 @@ describe('toCsv', () => {
     expect(rows[2]).toBe('Speaker_1,00:00:01.000,00:00:02.000,Bye,')
     // The sentiment-less row keeps the sentinel cell (5 fields), not 4 — fixed column count.
     expect(rows[2].split(',').length).toBe(5)
+  })
+})
+
+describe('toSrt', () => {
+  it('numbers cues from 1 with HH:MM:SS,mmm timestamps and Speaker: text captions', () => {
+    const out = toSrt(diarized([
+      { speaker: 'Speaker_0', startMs: 0, endMs: 1500, text: 'Hello' },
+      { speaker: 'Speaker_9', startMs: 1500, endMs: 3661001, text: 'World' }
+    ]))
+    expect(out).toBe(
+      '1\r\n' +
+      '00:00:00,000 --> 00:00:01,500\r\n' +
+      'Alice Johnson: Hello\r\n' +
+      '\r\n' +
+      '2\r\n' +
+      '00:00:01,500 --> 01:01:01,001\r\n' +
+      'Speaker_9: World\r\n' +
+      '\r\n'
+    )
+  })
+
+  it('preserves internal newlines in the caption text', () => {
+    const out = toSrt(diarized([
+      { speaker: 'Speaker_0', startMs: 0, endMs: 1000, text: 'line1\nline2' }
+    ]))
+    expect(out).toBe(
+      '1\r\n' +
+      '00:00:00,000 --> 00:00:01,000\r\n' +
+      'Alice Johnson: line1\nline2\r\n' +
+      '\r\n'
+    )
+  })
+
+  it('throws when given an empty turns array (formatter contract guard)', () => {
+    expect(() => toSrt({ ...baseData(), turns: [] })).toThrow()
   })
 })
 

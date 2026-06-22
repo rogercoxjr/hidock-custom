@@ -96,6 +96,22 @@ export function toCsv(data: ExportData): string {
   return BOM + lines.join('\r\n')
 }
 
+/** SRT of turns (spec §6.2). Requires a non-empty turns array (handler-guaranteed). */
+export function toSrt(data: ExportData): string {
+  const turns = data.turns
+  if (!turns || turns.length === 0) {
+    throw new Error('toSrt requires a non-empty turns array')
+  }
+  let out = ''
+  turns.forEach((turn, i) => {
+    const start = msToClock(turn.startMs, ',')
+    const end = msToClock(turn.endMs, ',')
+    const speaker = resolveSpeaker(turn.speaker, data.speakers)
+    out += `${i + 1}\r\n${start} --> ${end}\r\n${speaker}: ${turn.text}\r\n\r\n`
+  })
+  return out
+}
+
 /** Complete-record JSON (spec §6.3). Always available; turns is null when not diarized. */
 export function toJson(data: ExportData): string {
   const record = {
