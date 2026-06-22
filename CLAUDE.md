@@ -549,6 +549,8 @@ Or use automated installer: `python setup.py --auto-install-missing`
 - Use `console.log('[QA-MONITOR]')` directly without toggle check
 - Bypass toggle with `if (true)` or `if (import.meta.env.DEV)` guards alone
 
+**Accepted exception — main-process services:** A main-process service (e.g. `electron/main/services/transcription.ts`) runs in Node, not the renderer, and cannot read the renderer-owned `useUIStore.getState().qaLogsEnabled` toggle without an IPC round-trip. For such code, gating a QA log behind `if (process.env.NODE_ENV !== 'production')` is acceptable: it suppresses the log in production builds, which is the toggle's primary purpose. This exception applies ONLY to main-process services that have no IPC-cheap path to the toggle — preload scripts use the localStorage bridge above, and renderer/React code MUST use the store selector. Prefer an IPC-readable `qaEnabled` flag if one already exists in the service's reach.
+
 **Preload Script Pattern** (context isolation workaround):
 ```typescript
 // electron/preload/index.ts
