@@ -1,20 +1,29 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The latestRun handler only reads a subset of each record's fields. Annotating
+// the mock return types (instead of letting `() => null` pin them to `null`) lets
+// mockReturnValue({...}) type-check — the bare inference caused TS2345.
 const svc = vi.hoisted(() => ({
   listTemplates: vi.fn(() => [{ id: 'builtin-default', name: 'Default', isBuiltin: true }]),
   createTemplate: vi.fn((i: { name: string }) => ({ id: 't1', name: i.name })),
   updateTemplate: vi.fn((id: string) => ({ id, name: 'X' })),
   setEnabled: vi.fn(),
   deleteTemplate: vi.fn(),
-  getTemplateById: vi.fn(() => null),
+  getTemplateById: vi.fn((): { id: string; name: string; instructions: string } | null => null),
 }))
 vi.mock('../../services/summarization-templates', () => svc)
 
 // Mock database functions used by the new latestRun handler.
 const db = vi.hoisted(() => ({
-  getLatestTemplateRun: vi.fn(() => null),
-  getTranscriptByRecordingId: vi.fn(() => null),
+  getLatestTemplateRun: vi.fn((): {
+    selectionKind: string; selectionConfidence: number; suggestedTemplateJson: string | null
+  } | null => null),
+  getTranscriptByRecordingId: vi.fn((): {
+    summarization_template_name: string | null
+    summarization_template_hash: string | null
+    summarization_template_id: string | null
+  } | null => null),
 }))
 vi.mock('../../services/database', () => db)
 
