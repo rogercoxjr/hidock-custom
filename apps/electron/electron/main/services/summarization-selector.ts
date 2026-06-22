@@ -201,7 +201,9 @@ export function prefilter(input: {
   const matched: string[] = []
   for (const tpl of input.templates) {
     if (!tpl.enabled) continue
-    const hits = tpl.exampleTriggers.some((t) => haystack.includes(t.toLowerCase()))
+    // Guard against empty-string triggers: ''.includes-style match is always true,
+    // so a template with '' in exampleTriggers would otherwise match everything.
+    const hits = tpl.exampleTriggers.some((t) => t.length > 0 && haystack.includes(t.toLowerCase()))
     if (hits) matched.push(tpl.id)
   }
 
@@ -367,14 +369,22 @@ export async function selectTemplateForTranscript(
       templates: input.templates,
     })
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`selector timeout after ${timeoutMs}ms`)), timeoutMs)
-    )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`selector timeout after ${timeoutMs}ms`)), timeoutMs)
+    })
 
-    const raw = await Promise.race([
-      llm.generate(prompt, { json: true }),
-      timeoutPromise,
-    ])
+    let raw: string
+    try {
+      raw = await Promise.race([
+        llm.generate(prompt, { json: true }),
+        timeoutPromise,
+      ])
+    } finally {
+      // Clear the timer on BOTH success and failure so a settled race never
+      // leaves an 8s timer dangling (and rejecting an already-settled promise).
+      clearTimeout(timer)
+    }
 
     // ── Step 4: greedy JSON extraction ────────────────────────────────────
     const match = /\{[\s\S]*\}/.exec(raw)

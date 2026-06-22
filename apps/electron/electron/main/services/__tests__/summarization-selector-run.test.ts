@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { selectTemplateForTranscript, prefilter, buildSelectorPrompt } from '../summarization-selector'
 import type { LlmProvider } from '../llm/llm-provider'
 
@@ -22,9 +22,38 @@ describe('prefilter', () => {
   it('returns null on no match', () => {
     expect(prefilter({ templates: tpls, title: 'random chat', meetingSubjects: [] })).toBeNull()
   })
+  it('does NOT match on an empty-string trigger', () => {
+    const withEmpty = [
+      { ...tpls[0], id: 'empty', exampleTriggers: [''] },
+    ]
+    // An empty trigger must not match anything (''.includes-style always-true bug).
+    expect(prefilter({ templates: withEmpty, title: 'literally anything', meetingSubjects: [] })).toBeNull()
+  })
 })
 
 describe('selectTemplateForTranscript', () => {
+  it('prefilter short-circuits WITHOUT calling the LLM', async () => {
+    const generate = vi.fn(async () => '{}')
+    const llm: LlmProvider = { generate }
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], recordingTitle: 'Product demo call', templates: tpls, userDefaultId: null },
+      llm
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
+    expect(generate).not.toHaveBeenCalled()
+  })
+  it('returns promptly on success without waiting for the timeout (timer cleared)', async () => {
+    // generate resolves immediately; a huge timeoutMs would hang the test if the
+    // timer were not cleared on success. elapsedMs must be far below the timeout.
+    const llm = fake(JSON.stringify({ template_id: 'sales', confidence: 0.9, runnerup_confidence: 0.3, reason: 'x' }))
+    const t0 = Date.now()
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, llm, { timeoutMs: 60000 }
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
+    expect(Date.now() - t0).toBeLessThan(1000)
+    expect(r.elapsedMs).toBeLessThan(1000)
+  })
   it('parses selector JSON and applies via decideSelection', async () => {
     const llm = fake(JSON.stringify({ template_id: 'sales', confidence: 0.9, runnerup_confidence: 0.3, reason: 'clear sales call' }))
     const r = await selectTemplateForTranscript(
