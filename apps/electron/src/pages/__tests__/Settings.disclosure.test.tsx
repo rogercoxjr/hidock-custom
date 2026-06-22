@@ -69,6 +69,13 @@ global.window.electronAPI = {
     listModels: vi.fn().mockResolvedValue({ success: true, models: [] }),
     testConnection: vi.fn().mockResolvedValue({ success: true }),
   },
+  summarizationTemplates: {
+    list: vi.fn().mockResolvedValue({ success: true, data: [] }),
+    create: vi.fn().mockResolvedValue({ success: true, data: {} }),
+    update: vi.fn().mockResolvedValue({ success: true, data: {} }),
+    setEnabled: vi.fn().mockResolvedValue({ success: true, data: true }),
+    delete: vi.fn().mockResolvedValue({ success: true, data: true }),
+  },
   storage: {
     getInfo: vi.fn().mockResolvedValue({
       success: true,
