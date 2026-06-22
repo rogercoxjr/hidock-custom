@@ -72,6 +72,7 @@ export interface AppConfig {
     provider: 'gemini' | 'ollama-cloud'  // default 'gemini' = today's fused behavior (spec §5.4)
     ollamaCloudApiKey: string             // safeStorage-encrypted at rest
     ollamaCloudModel: string              // e.g. 'gpt-oss:120b', 'deepseek-v3.1:671b'
+    selectorModel?: string               // cheaper model for template-selector call (optional; '' = use provider default)
   }
   device: {
     autoConnect: boolean
@@ -165,7 +166,8 @@ const DEFAULT_CONFIG: AppConfig = {
   summarization: {
     provider: 'gemini',
     ollamaCloudApiKey: '',
-    ollamaCloudModel: ''
+    ollamaCloudModel: '',
+    selectorModel: ''
   },
   device: {
     autoConnect: true,

@@ -14,9 +14,17 @@
  *   selectTemplateForTranscript(input, llm, opts?) → Promise<TemplateSelectionResult & extras>
  */
 
+import { createHash } from 'crypto'
 import type { SummarizationTemplate } from './summarization-templates'
 import type { LlmProvider } from './llm/llm-provider'
 import { makeNonce, sanitizeUntrusted } from './summarization-prompt'
+
+// ── hashText ───────────────────────────────────────────────────────────────
+
+/** Returns a SHA-256 hex digest of the given text (deterministic). */
+export function hashText(text: string): string {
+  return createHash('sha256').update(text).digest('hex')
+}
 
 // ── Band constants (§5.4) ──────────────────────────────────────────────────
 const AUTO_CONF   = 0.72  // confidence threshold for auto-select

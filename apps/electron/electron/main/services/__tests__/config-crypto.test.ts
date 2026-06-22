@@ -50,7 +50,8 @@ describe('config — summarization section (auto-pipeline P3)', () => {
     expect(cfg.summarization).toEqual({
       provider: 'gemini',
       ollamaCloudApiKey: '',
-      ollamaCloudModel: ''
+      ollamaCloudModel: '',
+      selectorModel: ''
     })
   })
 

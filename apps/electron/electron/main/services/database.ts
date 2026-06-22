@@ -4895,6 +4895,108 @@ export function releaseTranscriptionLock(processId: string): boolean {
   return newProcessId === null
 }
 
+// ── Template-run audit (Task 11) ──────────────────────────────────────────
+
+/** All fields that may be stored for a single template-selector run. */
+export interface TemplateRunRecord {
+  recordingId: string
+  templateId?: string | null
+  selectionKind: string
+  selectionConfidence: number
+  runnerupConfidence?: number
+  candidateScoresJson?: string
+  selectionReason?: string
+  selectorProvider?: string
+  selectorModel?: string
+  selectorElapsedMs?: number
+  fullTextHash?: string
+  suggestedTemplateJson?: string
+  appliedInstructionsHash?: string
+}
+
+/**
+ * Insert an audit row into `transcript_template_runs` for a completed selector run.
+ * The `id` is auto-generated (`tplrun_<uuid>`); `created_at` is set to CURRENT_TIMESTAMP.
+ */
+export function recordTemplateRun(rec: TemplateRunRecord): void {
+  run(
+    `INSERT INTO transcript_template_runs (
+       id, recording_id, template_id, selection_kind, selection_confidence,
+       runnerup_confidence, candidate_scores_json, selection_reason,
+       selector_provider, selector_model, selector_elapsed_ms, full_text_hash,
+       suggested_template_json, applied_instructions_hash, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    [
+      `tplrun_${randomUUID()}`,
+      rec.recordingId,
+      rec.templateId ?? null,
+      rec.selectionKind,
+      rec.selectionConfidence,
+      rec.runnerupConfidence ?? null,
+      rec.candidateScoresJson ?? null,
+      rec.selectionReason ?? null,
+      rec.selectorProvider ?? null,
+      rec.selectorModel ?? null,
+      rec.selectorElapsedMs ?? null,
+      rec.fullTextHash ?? null,
+      rec.suggestedTemplateJson ?? null,
+      rec.appliedInstructionsHash ?? null,
+    ]
+  )
+}
+
+/**
+ * Returns the most-recent template-selector run for the given recording
+ * (ordered by `created_at` DESC, then insertion order via `rowid`),
+ * or `null` when no run exists yet.
+ *
+ * Used as the §5.5 selection cache: if `full_text_hash` matches the current
+ * transcript hash, the caller may reuse the prior selection instead of re-running
+ * the selector.
+ */
+export function getLatestTemplateRun(
+  recordingId: string
+): (TemplateRunRecord & { id: string; createdAt: string }) | null {
+  const r = queryOne<{
+    id: string
+    recording_id: string
+    template_id: string | null
+    selection_kind: string
+    selection_confidence: number
+    runnerup_confidence: number | null
+    candidate_scores_json: string | null
+    selection_reason: string | null
+    selector_provider: string | null
+    selector_model: string | null
+    selector_elapsed_ms: number | null
+    full_text_hash: string | null
+    suggested_template_json: string | null
+    applied_instructions_hash: string | null
+    created_at: string
+  }>(
+    'SELECT * FROM transcript_template_runs WHERE recording_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+    [recordingId]
+  )
+  if (!r) return null
+  return {
+    id: r.id,
+    recordingId: r.recording_id,
+    templateId: r.template_id ?? undefined,
+    selectionKind: r.selection_kind,
+    selectionConfidence: r.selection_confidence,
+    runnerupConfidence: r.runnerup_confidence ?? undefined,
+    candidateScoresJson: r.candidate_scores_json ?? undefined,
+    selectionReason: r.selection_reason ?? undefined,
+    selectorProvider: r.selector_provider ?? undefined,
+    selectorModel: r.selector_model ?? undefined,
+    selectorElapsedMs: r.selector_elapsed_ms ?? undefined,
+    fullTextHash: r.full_text_hash ?? undefined,
+    suggestedTemplateJson: r.suggested_template_json ?? undefined,
+    appliedInstructionsHash: r.applied_instructions_hash ?? undefined,
+    createdAt: r.created_at,
+  }
+}
+
 /**
  * Get the current transcription lock status.
  * @returns Lock status with process_id and timestamps
