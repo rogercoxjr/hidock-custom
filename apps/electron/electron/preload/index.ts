@@ -111,6 +111,30 @@ interface DiarizationRun {
   created_at: string
 }
 
+/** Mirror of SummarizationTemplate from main-process service (inlined to avoid tsconfig.web.json scope). */
+interface SummarizationTemplate {
+  id: string
+  name: string
+  description: string
+  instructions: string
+  exampleTriggers: string[]
+  isDefault: boolean
+  isBuiltin: boolean
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Mirror of TemplateInput from main-process service (inlined to avoid tsconfig.web.json scope). */
+interface TemplateInput {
+  name: string
+  description?: string
+  instructions: string
+  exampleTriggers?: string[]
+  isDefault?: boolean
+  enabled?: boolean
+}
+
 // Type definitions for the API
 export interface ElectronAPI {
   // App
@@ -186,6 +210,15 @@ export interface ElectronAPI {
   diarization: {
     getLatestRun: (recordingId: string) => Promise<Result<DiarizationRun | null>>
     getRunsForRecording: (recordingId: string) => Promise<Result<DiarizationRun[]>>
+  }
+
+  // Summarization Templates — CRUD (Phase 2). Selection/preview/resummarize added in Phases 3-4.
+  summarizationTemplates: {
+    list: () => Promise<Result<SummarizationTemplate[]>>
+    create: (template: TemplateInput) => Promise<Result<SummarizationTemplate>>
+    update: (id: string, patch: Partial<TemplateInput>) => Promise<Result<SummarizationTemplate>>
+    setEnabled: (id: string, enabled: boolean) => Promise<Result<true>>
+    delete: (id: string) => Promise<Result<true>>
   }
 
   // Projects
@@ -666,6 +699,14 @@ const electronAPI: ElectronAPI = {
   diarization: {
     getLatestRun: (recordingId) => callIPC('diarization:getLatestRun', recordingId),
     getRunsForRecording: (recordingId) => callIPC('diarization:getRunsForRecording', recordingId)
+  },
+
+  summarizationTemplates: {
+    list: () => callIPC('summarizationTemplates:list'),
+    create: (template) => callIPC('summarizationTemplates:create', template),
+    update: (id, patch) => callIPC('summarizationTemplates:update', id, patch),
+    setEnabled: (id, enabled) => callIPC('summarizationTemplates:setEnabled', { id, enabled }),
+    delete: (id) => callIPC('summarizationTemplates:delete', { id })
   },
 
   projects: {
