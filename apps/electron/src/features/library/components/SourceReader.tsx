@@ -780,8 +780,7 @@ export function SourceReader({
             }}
           >
             <SelectTrigger
-              size="sm"
-              className="w-auto gap-1"
+              className="h-8 w-auto gap-1 text-sm"
               title="Re-summarize using a specific template (single-shot override)"
               data-testid="resummarize-with-template-trigger"
             >
