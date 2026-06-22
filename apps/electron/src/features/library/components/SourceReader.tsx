@@ -31,6 +31,7 @@ import { useConfigStore } from '@/store/domain/useConfigStore'
 import { labelName } from '@/features/library/utils'
 import type { LabelDefinition } from '@/types'
 import { formatDateTime, formatDuration, formatBytes } from '@/lib/utils'
+import { TemplateChip, SuggestNewBanner } from './TemplateChip'
 
 // Stable empty reference so the labels selector never yields a fresh [] per render
 // (keeps useCallback deps that reference labelItems stable).
@@ -132,6 +133,15 @@ export function SourceReader({
   // Monotonic token so only the latest refreshSpeakers run may write state.
   const refreshTokenRef = useRef(0)
 
+  // Phase 3 (Task 13b): template provenance state — must be declared BEFORE the
+  // recording-change reset effect so setLatestRunView is in scope.
+  const [latestRunView, setLatestRunView] = useState<{
+    confidence: number | null
+    kind: string | null
+    suggestedTemplate: Record<string, unknown> | null
+    instructionsChanged: boolean
+  } | null>(null)
+
   // Reset all state when recording changes. Speaker/suggestion state is reset HERE
   // (keyed on recording id) and NOT on transcript changes — otherwise the batched
   // transcript fetch flipping the `transcript` prop undefined->object would blank
@@ -147,6 +157,7 @@ export function SourceReader({
     setSpeakerAssignments({})
     setSuggestions([])
     setShowSuggestionsBanner(false)
+    setLatestRunView(null)
   }, [recording?.id])
 
   // D5 §6.6: probe staleness whenever the recording or transcript changes. The
@@ -162,6 +173,33 @@ export function SourceReader({
       ?.isSummaryStale?.(recording.id)
       ?.then((stale) => { if (!cancelled) setSummaryStale(stale) })
       ?.catch(() => { if (!cancelled) setSummaryStale(false) })
+    return () => { cancelled = true }
+  }, [recording, transcript])
+
+  // Phase 3 (Task 13b): fetch template provenance (confidence + kind + instructionsChanged)
+  // from the latestRun IPC whenever the recording or transcript changes.
+  useEffect(() => {
+    let cancelled = false
+    if (!recording || !transcript?.full_text) {
+      setLatestRunView(null)
+      return
+    }
+    window.electronAPI?.summarizationTemplates
+      ?.latestRun?.(recording.id)
+      ?.then((res) => {
+        if (cancelled) return
+        if (res?.success && res.data) {
+          setLatestRunView({
+            confidence: res.data.confidence,
+            kind: res.data.kind,
+            suggestedTemplate: res.data.suggestedTemplate,
+            instructionsChanged: res.data.instructionsChanged,
+          })
+        } else {
+          setLatestRunView(null)
+        }
+      })
+      ?.catch(() => { if (!cancelled) setLatestRunView(null) })
     return () => { cancelled = true }
   }, [recording, transcript])
 
@@ -764,6 +802,12 @@ export function SourceReader({
                 </Button>
               </div>
             )}
+            {/* Phase 3 (Task 13b): suggest-new banner — spec §10 precedence:
+                staleness > error > suggest-new. Only render when no higher-priority
+                primary banner is visible. */}
+            {!summaryStale && recording.transcriptionStatus !== 'error' && latestRunView?.kind === 'suggest_new' && (
+              <SuggestNewBanner suggestedTemplate={latestRunView.suggestedTemplate} />
+            )}
             {isLoadingSuggestions && (
               <div className="mb-3 flex items-center gap-2 text-sm text-ink-muted">
                 <RefreshCw className="h-4 w-4 animate-spin text-accent-2" />
@@ -783,6 +827,17 @@ export function SourceReader({
                   suggestions={suggestions}
                   onJumpToTime={onJumpToTime}
                   onChanged={() => { refreshSpeakers().catch(() => {}) }}
+                />
+              </div>
+            )}
+            {/* Phase 3 (Task 13b): template chip — renders just before the transcript
+                viewer so it appears near the summary header. */}
+            {transcript.summarization_template_name && (
+              <div className="mb-2">
+                <TemplateChip
+                  name={transcript.summarization_template_name}
+                  confidence={latestRunView?.confidence}
+                  instructionsChanged={latestRunView?.instructionsChanged}
                 />
               </div>
             )}

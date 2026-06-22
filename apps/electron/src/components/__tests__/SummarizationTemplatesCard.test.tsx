@@ -65,14 +65,15 @@ beforeEach(() => {
   h.setEnabled.mockResolvedValue({ success: true, data: true })
   h.delete.mockResolvedValue({ success: true, data: true })
 
-  // @ts-expect-error partial electronAPI for tests
-  global.window.electronAPI = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(global.window as any).electronAPI = {
     summarizationTemplates: {
       list: h.list,
       create: h.create,
       update: h.update,
       setEnabled: h.setEnabled,
       delete: h.delete,
+      latestRun: vi.fn().mockResolvedValue({ success: false }),
     },
   }
 })

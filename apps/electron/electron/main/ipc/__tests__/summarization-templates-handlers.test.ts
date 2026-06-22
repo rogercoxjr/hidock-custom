@@ -6,9 +6,22 @@ const svc = vi.hoisted(() => ({
   createTemplate: vi.fn((i: { name: string }) => ({ id: 't1', name: i.name })),
   updateTemplate: vi.fn((id: string) => ({ id, name: 'X' })),
   setEnabled: vi.fn(),
-  deleteTemplate: vi.fn()
+  deleteTemplate: vi.fn(),
+  getTemplateById: vi.fn(() => null),
 }))
 vi.mock('../../services/summarization-templates', () => svc)
+
+// Mock database functions used by the new latestRun handler.
+const db = vi.hoisted(() => ({
+  getLatestTemplateRun: vi.fn(() => null),
+  getTranscriptByRecordingId: vi.fn(() => null),
+}))
+vi.mock('../../services/database', () => db)
+
+// Mock summarization-selector's hashText (used for instructionsChanged comparison).
+vi.mock('../../services/summarization-selector', () => ({
+  hashText: vi.fn((s: string) => `hash(${s})`),
+}))
 
 const handlers = new Map<string, (...a: unknown[]) => unknown>()
 vi.mock('electron', () => ({
@@ -17,7 +30,15 @@ vi.mock('electron', () => ({
 
 import { registerSummarizationTemplatesHandlers } from '../summarization-templates-handlers'
 
-beforeEach(() => { handlers.clear(); vi.clearAllMocks(); registerSummarizationTemplatesHandlers() })
+beforeEach(() => {
+  handlers.clear()
+  vi.clearAllMocks()
+  // Restore default mocks for new latestRun dependencies.
+  db.getLatestTemplateRun.mockReturnValue(null)
+  db.getTranscriptByRecordingId.mockReturnValue(null)
+  svc.getTemplateById.mockReturnValue(null)
+  registerSummarizationTemplatesHandlers()
+})
 
 describe('summarizationTemplates IPC', () => {
   it('list returns templates', async () => {
@@ -104,5 +125,88 @@ describe('summarizationTemplates IPC', () => {
     const res = await handlers.get('summarizationTemplates:delete')!({}, { id: 't1' }) as any
     expect(res).toMatchObject({ success: false })
     expect(res.error.code).toBe('INTERNAL_ERROR')
+  })
+})
+
+describe('summarizationTemplates:latestRun IPC (Phase 3 / Task 13b)', () => {
+  it('returns success with null fields when no transcript or run exists', async () => {
+    db.getTranscriptByRecordingId.mockReturnValue(null)
+    db.getLatestTemplateRun.mockReturnValue(null)
+    const res = await handlers.get('summarizationTemplates:latestRun')!({}, 'rec-1') as any
+    expect(res).toMatchObject({ success: true })
+    expect(res.data.name).toBeNull()
+    expect(res.data.confidence).toBeNull()
+    expect(res.data.kind).toBeNull()
+    expect(res.data.suggestedTemplate).toBeNull()
+    expect(res.data.instructionsChanged).toBe(false)
+  })
+
+  it('returns template name from transcript and confidence from run', async () => {
+    db.getTranscriptByRecordingId.mockReturnValue({
+      summarization_template_name: 'Sales call',
+      summarization_template_hash: 'abc123',
+      summarization_template_id: null,
+    })
+    db.getLatestTemplateRun.mockReturnValue({
+      selectionKind: 'applied',
+      selectionConfidence: 0.86,
+      suggestedTemplateJson: null,
+    })
+    const res = await handlers.get('summarizationTemplates:latestRun')!({}, 'rec-1') as any
+    expect(res.success).toBe(true)
+    expect(res.data.name).toBe('Sales call')
+    expect(res.data.confidence).toBeCloseTo(0.86)
+    expect(res.data.kind).toBe('applied')
+    expect(res.data.instructionsChanged).toBe(false)
+  })
+
+  it('returns suggest_new kind with parsed suggestedTemplate', async () => {
+    db.getTranscriptByRecordingId.mockReturnValue({ summarization_template_name: null, summarization_template_hash: null, summarization_template_id: null })
+    db.getLatestTemplateRun.mockReturnValue({
+      selectionKind: 'suggest_new',
+      selectionConfidence: 0.3,
+      suggestedTemplateJson: JSON.stringify({ name: 'Interview notes', instructions: 'Focus on candidate answers.' }),
+    })
+    const res = await handlers.get('summarizationTemplates:latestRun')!({}, 'rec-1') as any
+    expect(res.success).toBe(true)
+    expect(res.data.kind).toBe('suggest_new')
+    expect(res.data.suggestedTemplate).toMatchObject({ name: 'Interview notes' })
+  })
+
+  it('reports instructionsChanged when live template hash differs', async () => {
+    db.getTranscriptByRecordingId.mockReturnValue({
+      summarization_template_name: 'Demo',
+      summarization_template_hash: 'hash(old instructions)',
+      summarization_template_id: 'tpl-1',
+    })
+    db.getLatestTemplateRun.mockReturnValue({ selectionKind: 'applied', selectionConfidence: 0.9, suggestedTemplateJson: null })
+    svc.getTemplateById.mockReturnValue({ id: 'tpl-1', instructions: 'new instructions', name: 'Demo' })
+    const res = await handlers.get('summarizationTemplates:latestRun')!({}, 'rec-1') as any
+    // hashText('new instructions') = 'hash(new instructions)' != 'hash(old instructions)'
+    expect(res.data.instructionsChanged).toBe(true)
+  })
+
+  it('reports instructionsChanged=false when hashes match', async () => {
+    db.getTranscriptByRecordingId.mockReturnValue({
+      summarization_template_name: 'Demo',
+      summarization_template_hash: 'hash(same instructions)',
+      summarization_template_id: 'tpl-1',
+    })
+    db.getLatestTemplateRun.mockReturnValue({ selectionKind: 'applied', selectionConfidence: 0.9, suggestedTemplateJson: null })
+    svc.getTemplateById.mockReturnValue({ id: 'tpl-1', instructions: 'same instructions', name: 'Demo' })
+    const res = await handlers.get('summarizationTemplates:latestRun')!({}, 'rec-1') as any
+    expect(res.data.instructionsChanged).toBe(false)
+  })
+
+  it('rejects non-string recordingId with VALIDATION_ERROR', async () => {
+    const res = await handlers.get('summarizationTemplates:latestRun')!({}, 42) as any
+    expect(res).toMatchObject({ success: false })
+    expect(res.error.code).toBe('VALIDATION_ERROR')
+  })
+
+  it('rejects empty string recordingId with VALIDATION_ERROR', async () => {
+    const res = await handlers.get('summarizationTemplates:latestRun')!({}, '') as any
+    expect(res).toMatchObject({ success: false })
+    expect(res.error.code).toBe('VALIDATION_ERROR')
   })
 })

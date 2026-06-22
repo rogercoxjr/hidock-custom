@@ -135,6 +135,20 @@ interface TemplateInput {
   enabled?: boolean
 }
 
+/** Phase 3: reader chip + banner payload (inlined to avoid tsconfig.web.json scope). */
+interface LatestRunView {
+  /** Denormalized template name from the transcript row, or null. */
+  name: string | null
+  /** Selector confidence (0–1), or null when no run exists. */
+  confidence: number | null
+  /** Selection kind: 'applied' | 'suggest_new' | 'none' | …, or null when no run. */
+  kind: string | null
+  /** Parsed suggest-new payload when kind === 'suggest_new', else null. */
+  suggestedTemplate: Record<string, unknown> | null
+  /** True when the template's instructions changed since this summary was generated. */
+  instructionsChanged: boolean
+}
+
 // Type definitions for the API
 export interface ElectronAPI {
   // App
@@ -212,13 +226,16 @@ export interface ElectronAPI {
     getRunsForRecording: (recordingId: string) => Promise<Result<DiarizationRun[]>>
   }
 
-  // Summarization Templates — CRUD (Phase 2). Selection/preview/resummarize added in Phases 3-4.
+  // Summarization Templates — CRUD (Phase 2) + latestRun reader chip (Phase 3).
+  // Manual override / resummarize are deferred to Phase 4.
   summarizationTemplates: {
     list: () => Promise<Result<SummarizationTemplate[]>>
     create: (template: TemplateInput) => Promise<Result<SummarizationTemplate>>
     update: (id: string, patch: Partial<TemplateInput>) => Promise<Result<SummarizationTemplate>>
     setEnabled: (id: string, enabled: boolean) => Promise<Result<true>>
     delete: (id: string) => Promise<Result<true>>
+    /** Phase 3: provenance for the reader chip + banner. */
+    latestRun: (recordingId: string) => Promise<Result<LatestRunView>>
   }
 
   // Projects
@@ -706,7 +723,8 @@ const electronAPI: ElectronAPI = {
     create: (template) => callIPC('summarizationTemplates:create', template),
     update: (id, patch) => callIPC('summarizationTemplates:update', id, patch),
     setEnabled: (id, enabled) => callIPC('summarizationTemplates:setEnabled', { id, enabled }),
-    delete: (id) => callIPC('summarizationTemplates:delete', { id })
+    delete: (id) => callIPC('summarizationTemplates:delete', { id }),
+    latestRun: (recordingId) => callIPC('summarizationTemplates:latestRun', recordingId),
   },
 
   projects: {

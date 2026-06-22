@@ -94,6 +94,10 @@ export interface Transcript {
   transcription_model: string | null
   title_suggestion: string | null
   question_suggestions: string | null // JSON string of suggested questions
+  /** Provenance: denormalized name of the template that produced this summary (v33+). */
+  summarization_template_name?: string | null
+  /** Provenance: hash of the template instructions revision that produced this summary (v33+). */
+  summarization_template_hash?: string | null
   created_at: string
 }
 
