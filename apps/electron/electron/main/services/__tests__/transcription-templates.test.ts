@@ -528,3 +528,182 @@ declare module '../database' {
     summarization_template_hash?: string | null
   }
 }
+
+// ---------------------------------------------------------------------------
+// Task 15: Provider-parity tests (Gemini-style fenced + Ollama-style bare JSON).
+//
+// Both Fake LLM shapes must drive the full worker flow (selection + templated
+// summarization) to a valid Stage-2 write. The selector's greedy-regex extraction
+// peels the ```json fence for Gemini; Ollama returns bare JSON. Both complete.
+// ---------------------------------------------------------------------------
+
+describe('Task 15 — provider parity: Gemini-style fenced vs Ollama-style bare JSON', () => {
+  /**
+   * Gemini-style Fake: selector returns ```json-fenced prose; analysis returns
+   * bare JSON (Gemini typically obeys the `json` flag for analysis but ignores it
+   * for selector prose). The selector's greedy-regex (/\{[\s\S]*\}/) must peel
+   * the fence and still parse the inner object.
+   */
+  it('Gemini-style Fake (fenced selector): full flow completes with valid Stage-2 write', async () => {
+    const tpl1 = createTemplate({ name: 'Alpha-gemini', instructions: 'Focus on key decisions.', enabled: true })
+    const tpl2 = createTemplate({ name: 'Beta-gemini', instructions: 'Focus on action items.', enabled: true })
+
+    shared.fakeLlm = makeFakeLlm({
+      onSelector: (_prompt) => {
+        shared.selectorCallCount++
+        // Gemini-style: wraps the JSON in a ```json code fence with prose around it.
+        return [
+          'Sure! Here is my template selection based on the transcript:',
+          '```json',
+          JSON.stringify({
+            template_id: tpl1.id,
+            confidence: 0.88,
+            runnerup_confidence: 0.25,
+            reason: 'The recording is about key decisions',
+          }),
+          '```',
+          'I hope this helps with summarization!',
+        ].join('\n')
+      },
+      onAnalysis: (prompt) => {
+        shared.capturedAnalysisPrompts.push(prompt)
+        // Analysis: bare JSON (Gemini obeys `json` flag here).
+        return makeAnalysisJson('Gemini Parity Test')
+      },
+      onActionables: () => '[]',
+    })
+
+    insertRecording('rec-gemini-parity')
+    await transcribeManually('rec-gemini-parity')
+
+    // 1. Selector was invoked (fenced output was parsed successfully).
+    expect(shared.selectorCallCount).toBe(1)
+
+    // 2. Analysis prompt contains tpl1's instructions (template applied).
+    expect(shared.capturedAnalysisPrompts).toHaveLength(1)
+    expect(shared.capturedAnalysisPrompts[0]).toContain('Focus on key decisions.')
+
+    // 3. Stage-2 write was produced: summary stored in DB.
+    const transcript = getTranscriptByRecordingId('rec-gemini-parity')
+    expect(transcript).toBeDefined()
+    expect(transcript!.summary).toBe('A test summary.')
+    expect(transcript!.summarization_template_name).toBe('Alpha-gemini')
+
+    // 4. Run row exists with selection_kind='selected'.
+    const runRows = queryAll<{ selection_kind: string; template_id: string | null }>(
+      'SELECT selection_kind, template_id FROM transcript_template_runs WHERE recording_id = ?',
+      ['rec-gemini-parity']
+    )
+    expect(runRows).toHaveLength(1)
+    expect(runRows[0].selection_kind).toBe('selected')
+    expect(runRows[0].template_id).toBe(tpl1.id)
+
+    void tpl2
+  })
+
+  /**
+   * Ollama-style Fake: selector returns bare JSON with no prose wrapper; analysis
+   * also returns bare JSON. Both stages must parse correctly and complete the flow.
+   */
+  it('Ollama-style Fake (bare JSON): full flow completes with valid Stage-2 write', async () => {
+    const tpl1 = createTemplate({ name: 'Alpha-ollama', instructions: 'Bullet-point all decisions.', enabled: true })
+    const tpl2 = createTemplate({ name: 'Beta-ollama', instructions: 'Focus on action items.', enabled: true })
+
+    shared.fakeLlm = makeFakeLlm({
+      onSelector: (_prompt) => {
+        shared.selectorCallCount++
+        // Ollama-style: returns bare JSON, no code fence, no prose.
+        return JSON.stringify({
+          template_id: tpl1.id,
+          confidence: 0.92,
+          runnerup_confidence: 0.18,
+          reason: 'Decision-heavy recording fits Alpha-ollama',
+        })
+      },
+      onAnalysis: (prompt) => {
+        shared.capturedAnalysisPrompts.push(prompt)
+        // Ollama analysis: bare JSON.
+        return makeAnalysisJson('Ollama Parity Test')
+      },
+      onActionables: () => '[]',
+    })
+
+    insertRecording('rec-ollama-parity')
+    await transcribeManually('rec-ollama-parity')
+
+    // 1. Selector was invoked (bare JSON parsed successfully).
+    expect(shared.selectorCallCount).toBe(1)
+
+    // 2. Analysis prompt contains tpl1's instructions (template applied).
+    expect(shared.capturedAnalysisPrompts).toHaveLength(1)
+    expect(shared.capturedAnalysisPrompts[0]).toContain('Bullet-point all decisions.')
+
+    // 3. Stage-2 write was produced: summary stored in DB.
+    const transcript = getTranscriptByRecordingId('rec-ollama-parity')
+    expect(transcript).toBeDefined()
+    expect(transcript!.summary).toBe('A test summary.')
+    expect(transcript!.summarization_template_name).toBe('Alpha-ollama')
+
+    // 4. Run row exists with selection_kind='selected'.
+    const runRows = queryAll<{ selection_kind: string; template_id: string | null }>(
+      'SELECT selection_kind, template_id FROM transcript_template_runs WHERE recording_id = ?',
+      ['rec-ollama-parity']
+    )
+    expect(runRows).toHaveLength(1)
+    expect(runRows[0].selection_kind).toBe('selected')
+    expect(runRows[0].template_id).toBe(tpl1.id)
+
+    void tpl2
+  })
+
+  /**
+   * Gemini-style selector but with extra text + nested curly braces in the
+   * fenced JSON — confirms the greedy /\{[\s\S]*\}/ correctly extracts the
+   * outermost object (not truncated by inner braces).
+   */
+  it('Gemini-style Fake with nested objects in fence: greedy-regex correctly extracts outer object', async () => {
+    const tpl1 = createTemplate({ name: 'Alpha-nested', instructions: 'Focus on projects.', enabled: true })
+    const tpl2 = createTemplate({ name: 'Beta-nested', instructions: 'Focus on people.', enabled: true })
+
+    shared.fakeLlm = makeFakeLlm({
+      onSelector: (_prompt) => {
+        shared.selectorCallCount++
+        // Nested objects inside the JSON → greedy match must pick the FULL outer object.
+        return [
+          'My analysis:',
+          '```json',
+          JSON.stringify({
+            template_id: tpl1.id,
+            confidence: 0.85,
+            runnerup_confidence: 0.30,
+            reason: 'Project-tracking meeting',
+            // nested object — greedy must handle this
+            suggested_template: null,
+          }),
+          '```',
+        ].join('\n')
+      },
+      onAnalysis: (prompt) => {
+        shared.capturedAnalysisPrompts.push(prompt)
+        return makeAnalysisJson('Nested Greedy Test')
+      },
+      onActionables: () => '[]',
+    })
+
+    insertRecording('rec-nested-greedy')
+    await transcribeManually('rec-nested-greedy')
+
+    expect(shared.selectorCallCount).toBe(1)
+    const transcript = getTranscriptByRecordingId('rec-nested-greedy')
+    expect(transcript!.summary).toBe('A test summary.')
+    expect(transcript!.summarization_template_name).toBe('Alpha-nested')
+
+    const runRows = queryAll<{ selection_kind: string }>(
+      'SELECT selection_kind FROM transcript_template_runs WHERE recording_id = ?',
+      ['rec-nested-greedy']
+    )
+    expect(runRows[0].selection_kind).toBe('selected')
+
+    void tpl2
+  })
+})
