@@ -73,7 +73,7 @@ Normalized input the handler assembles and the formatters consume:
 interface ExportData {
   recording: {
     id: string
-    title: string          // title_suggestion ?? original_filename ?? filename
+    title: string          // trim(title_suggestion) || stripExt(original_filename || filename) || 'transcript'; same value used for the save-dialog default filename
     dateRecorded: string    // ISO from date_recorded
     durationMs: number | null   // duration_seconds * 1000, or null
     language: string
