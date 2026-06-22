@@ -728,6 +728,45 @@ export function SourceReader({
           </Button>
         )}
 
+        {/* Transcript export — JSON always; CSV/SRT only when the transcript is diarized. */}
+        {transcript?.full_text && recordingId && (
+          <Select
+            onValueChange={async (format) => {
+              const api = window.electronAPI
+              if (!api?.transcripts?.export) return
+              try {
+                const res = await api.transcripts.export(recordingId, format as 'csv' | 'srt' | 'json')
+                if (!res.success) {
+                  toast.error('Export failed', res.error.message)
+                } else if (res.data) {
+                  toast.success('Transcript exported', `Saved to ${res.data}`)
+                }
+                // res.data === null → user cancelled the save dialog; no-op.
+              } catch (err) {
+                toast.error('Export failed', err instanceof Error ? err.message : String(err))
+              }
+            }}
+          >
+            <SelectTrigger
+              className="h-8 w-auto gap-1 text-sm"
+              title="Export the transcript to a file"
+              data-testid="transcript-export-trigger"
+            >
+              <Download className="h-4 w-4" />
+              <SelectValue placeholder="Export…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="json">JSON</SelectItem>
+              <SelectItem value="csv" disabled={turns.length === 0}>
+                {turns.length === 0 ? 'CSV — Requires diarization' : 'CSV'}
+              </SelectItem>
+              <SelectItem value="srt" disabled={turns.length === 0}>
+                {turns.length === 0 ? 'SRT — Requires diarization' : 'SRT'}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
         {/* Re-summarize - any recording with a transcript (spec §5.6: healthy + failed).
             Suppressed when the staleness badge is visible (D5-T3): the badge's
             contextual Re-summarize button is the single affordance in that state. */}
