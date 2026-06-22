@@ -3141,6 +3141,10 @@ export function updateTranscriptStage2(recordingId: string, fields: {
   language?: string
   summarization_provider: string
   summarization_model?: string
+  /** Provenance: denormalized display name of the applied template (survives delete/rename). */
+  template_name?: string | null
+  /** Provenance: SHA-256 hex digest of the applied template's instructions. */
+  template_hash?: string | null
 }): void {
   // Existence guard (not getRowsModified(): the run() helper auto-persists
   // after each statement, which resets sql.js's modification counter).
@@ -3157,6 +3161,8 @@ export function updateTranscriptStage2(recordingId: string, fields: {
        title_suggestion = ?, question_suggestions = ?,
        language = COALESCE(language, ?),
        summarization_provider = ?, summarization_model = ?,
+       summarization_template_name = ?, summarization_template_hash = ?,
+       summarization_template_id = NULL,
        created_at = CURRENT_TIMESTAMP
      WHERE recording_id = ?`,
     [
@@ -3169,6 +3175,8 @@ export function updateTranscriptStage2(recordingId: string, fields: {
       fields.language ?? null,
       fields.summarization_provider,
       fields.summarization_model ?? null,
+      fields.template_name ?? null,
+      fields.template_hash ?? null,
       recordingId
     ]
   )

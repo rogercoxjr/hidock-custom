@@ -90,7 +90,23 @@ vi.mock('../database', () => ({
   deleteWindowEmbeddingsForRecording: vi.fn(),
   expireSuggestionsForRecording: vi.fn(),
   run: vi.fn(),
-  queryOne: vi.fn()
+  queryOne: vi.fn(),
+  // Task 12: template resolution helpers (new imports in transcription.ts)
+  queryAll: vi.fn(() => []),
+  recordTemplateRun: vi.fn(),
+  getLatestTemplateRun: vi.fn(() => null)
+}))
+
+vi.mock('../summarization-templates', () => ({
+  userTemplates: vi.fn(() => []),
+  getTemplateById: vi.fn(() => null),
+  BUILTIN_DEFAULT_ID: 'builtin-default'
+}))
+
+vi.mock('../summarization-selector', () => ({
+  selectTemplateForTranscript: vi.fn(async () => ({ kind: 'use_default', confidence: 0, reason: 'mock', elapsedMs: 0 })),
+  prefilter: vi.fn(() => null),
+  hashText: vi.fn((t: string) => `hash-${t.length}`)
 }))
 
 vi.mock('../asr/asr-provider', () => ({

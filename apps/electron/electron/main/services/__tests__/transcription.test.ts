@@ -57,7 +57,24 @@ vi.mock('../database', () => ({
   clearStaleTranscriptionLock: vi.fn(), // Called on startTranscriptionProcessor()
   resetStuckTranscriptions: vi.fn().mockReturnValue({ recordingsReset: 0, queueItemsReset: 0 }), // Called on startTranscriptionProcessor()
   run: vi.fn(),
-  queryOne: vi.fn()
+  queryOne: vi.fn(),
+  // Task 12: template resolution helpers (new imports in transcription.ts)
+  queryAll: vi.fn(() => []),
+  recordTemplateRun: vi.fn(),
+  getLatestTemplateRun: vi.fn(() => null)
+}))
+
+// Task 12: mock new module imports so they don't execute real DB calls
+vi.mock('../summarization-templates', () => ({
+  userTemplates: vi.fn(() => []),
+  getTemplateById: vi.fn(() => null),
+  BUILTIN_DEFAULT_ID: 'builtin-default'
+}))
+
+vi.mock('../summarization-selector', () => ({
+  selectTemplateForTranscript: vi.fn(async () => ({ kind: 'use_default', confidence: 0, reason: 'mock', elapsedMs: 0 })),
+  prefilter: vi.fn(() => null),
+  hashText: vi.fn((t: string) => `hash-${t.length}`)
 }))
 
 // Mock electron
