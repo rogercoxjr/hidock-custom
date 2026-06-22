@@ -637,14 +637,22 @@ describe('Task 15 — provider parity: Gemini-style fenced vs Ollama-style bare 
     expect(transcript!.summary).toBe('A test summary.')
     expect(transcript!.summarization_template_name).toBe('Alpha-gemini')
 
-    // 4. Run row exists with selection_kind='selected'.
-    const runRows = queryAll<{ selection_kind: string; template_id: string | null }>(
-      'SELECT selection_kind, template_id FROM transcript_template_runs WHERE recording_id = ?',
+    // FIX 5: assert the PROVENANCE write (would survive a no-op fake summary that
+    // is always 'A test summary.'). The template hash must be a 64-char lowercase
+    // hex SHA-256, and the audit row's applied_instructions_hash must tie back to it.
+    expect(transcript!.summarization_template_hash).toMatch(/^[0-9a-f]{64}$/)
+
+    // 4. Run row exists with selection_kind='selected' + provenance tied to the
+    //    atomic Stage-2 write, and selector_model holds the REAL model (FIX 2).
+    const runRows = queryAll<{ selection_kind: string; template_id: string | null; applied_instructions_hash: string | null; selector_model: string | null }>(
+      'SELECT selection_kind, template_id, applied_instructions_hash, selector_model FROM transcript_template_runs WHERE recording_id = ? ORDER BY created_at DESC, rowid DESC',
       ['rec-gemini-parity']
     )
     expect(runRows).toHaveLength(1)
     expect(runRows[0].selection_kind).toBe('selected')
     expect(runRows[0].template_id).toBe(tpl1.id)
+    expect(runRows[0].applied_instructions_hash).toBe(transcript!.summarization_template_hash)
+    expect(runRows[0].selector_model).toBe('gemini-2.0-flash')
 
     void tpl2
   })
@@ -692,14 +700,21 @@ describe('Task 15 — provider parity: Gemini-style fenced vs Ollama-style bare 
     expect(transcript!.summary).toBe('A test summary.')
     expect(transcript!.summarization_template_name).toBe('Alpha-ollama')
 
-    // 4. Run row exists with selection_kind='selected'.
-    const runRows = queryAll<{ selection_kind: string; template_id: string | null }>(
-      'SELECT selection_kind, template_id FROM transcript_template_runs WHERE recording_id = ?',
+    // FIX 5: assert the PROVENANCE write for the bare-JSON (Ollama) provider shape.
+    expect(transcript!.summarization_template_hash).toMatch(/^[0-9a-f]{64}$/)
+
+    // 4. Run row exists with selection_kind='selected' + provenance tied to the
+    //    atomic Stage-2 write. (This Gemini-provider config summarizes via gemini,
+    //    so selector_model is the real gemini model — FIX 2.)
+    const runRows = queryAll<{ selection_kind: string; template_id: string | null; applied_instructions_hash: string | null; selector_model: string | null }>(
+      'SELECT selection_kind, template_id, applied_instructions_hash, selector_model FROM transcript_template_runs WHERE recording_id = ? ORDER BY created_at DESC, rowid DESC',
       ['rec-ollama-parity']
     )
     expect(runRows).toHaveLength(1)
     expect(runRows[0].selection_kind).toBe('selected')
     expect(runRows[0].template_id).toBe(tpl1.id)
+    expect(runRows[0].applied_instructions_hash).toBe(transcript!.summarization_template_hash)
+    expect(runRows[0].selector_model).toBe('gemini-2.0-flash')
 
     void tpl2
   })
