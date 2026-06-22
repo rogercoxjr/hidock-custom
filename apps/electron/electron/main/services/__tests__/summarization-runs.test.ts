@@ -3,10 +3,10 @@
  *
  * Tests for the template-run audit writer + selection-cache lookup primitives
  * (Task 11). Covers:
- *   - recordTemplateRun round-trips all columns
+ *   - recordTemplateRun round-trips all columns (incl. selector_model — the audit
+ *     column is KEPT and now stores the model the selector actually ran on, FIX 2)
  *   - getLatestTemplateRun returns the most-recent row by created_at (and null when none)
  *   - hashText is deterministic (same input → same hex; different input → different hex)
- *   - config.summarization.selectorModel has the correct default
  *
  * Uses the REAL sql.js in-memory database (v33 harness).
  * Tmp prefix: 'hidock-summ-runs-'
@@ -212,8 +212,10 @@ describe('recordTemplateRun + getLatestTemplateRun', () => {
   })
 })
 
-// ── config selectorModel type-check ────────────────────────────────────────
-// The AppConfig.summarization.selectorModel field is declared optional (?: string).
-// We verify this at the type level only — the TypeScript compiler will catch any
-// regression. Runtime default coverage is in config.ts itself (selectorModel: '').
-// (No runtime describe block needed here — the type check is the test.)
+// ── selector_model audit column (FIX 2) ─────────────────────────────────────
+// The dead `config.summarization.selectorModel` field and the `opts.selectorModel`
+// selector param were pruned: the selector always runs on the summarization
+// provider's model. The `selector_model` AUDIT COLUMN is intentionally KEPT and
+// now stores that real model (see the round-trip test above, which writes/asserts
+// 'gemini-2.0-flash'). The worker (transcription.ts) passes the summarization
+// model into recordTemplateRun({ selectorModel }) so telemetry stays truthful.

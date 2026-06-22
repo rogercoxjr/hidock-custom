@@ -49,8 +49,7 @@ const shared = vi.hoisted(() => {
     summarization: {
       provider: 'gemini' as string,
       ollamaCloudApiKey: '',
-      ollamaCloudModel: '',
-      selectorModel: undefined as string | undefined
+      ollamaCloudModel: ''
     }
   }
 })
@@ -181,8 +180,7 @@ beforeEach(async () => {
   shared.summarization = {
     provider: 'gemini',
     ollamaCloudApiKey: '',
-    ollamaCloudModel: '',
-    selectorModel: undefined
+    ollamaCloudModel: ''
   }
 
   await initializeDatabase()

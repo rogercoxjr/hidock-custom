@@ -350,7 +350,7 @@ export type SelectorResult = TemplateSelectionResult & {
 export async function selectTemplateForTranscript(
   input: SelectorInput,
   llm: LlmProvider,
-  opts?: { timeoutMs?: number; selectorModel?: string },
+  opts?: { timeoutMs?: number },
 ): Promise<SelectorResult> {
   const start = Date.now()
 

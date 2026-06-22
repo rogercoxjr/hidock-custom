@@ -612,6 +612,13 @@ Meeting ${i + 1}: "${m.subject}"
   const userDefaultId = candidates.find((t) => t.isDefault)?.id ?? null
   const meetingSubjects = candidateMeetings.map((m) => m.subject)
   const fullTextHash = hashText(fullText)
+  // The model the summarization/selector LLM actually runs on (getLlmProvider
+  // binds the selector to the SAME provider as the summarizer). Used for the
+  // truthful telemetry write below — there is no separate selector model (FIX 2).
+  const summarizationModel =
+    config.summarization.provider === 'ollama-cloud'
+      ? config.summarization.ollamaCloudModel
+      : config.transcription.geminiModel // gemini summarization reuses the transcription model (spec §5.2)
 
   let resolvedInstructions = ''
   let resolvedTemplateId: string | null = null
@@ -669,8 +676,7 @@ Meeting ${i + 1}: "${m.subject}"
         const selLlm = getLlmProvider(config)
         const sel = await selectTemplateForTranscript(
           { fullText, meetingSubjects, recordingTitle: recording.filename, filename: recording.filename, templates: candidates, userDefaultId },
-          selLlm,
-          { selectorModel: config.summarization.selectorModel }
+          selLlm
         )
         selectionKind = sel.kind
         selectionConfidence = sel.confidence
@@ -697,7 +703,7 @@ Meeting ${i + 1}: "${m.subject}"
     // best-effort observability trace (low-volume, one log per Stage-2 run).
     console.log('[QA-MONITOR]', JSON.stringify({
       kind: selectionKind, confidence: selectionConfidence, runnerUp,
-      provider: config.summarization.provider, model: config.summarization.selectorModel, elapsedMs
+      provider: config.summarization.provider, model: summarizationModel, elapsedMs
     }))
   }
 
@@ -794,10 +800,7 @@ Meeting ${i + 1}: "${m.subject}"
       : undefined,
     language: analysis.language || 'unknown',
     summarization_provider: config.summarization.provider,
-    summarization_model:
-      config.summarization.provider === 'ollama-cloud'
-        ? config.summarization.ollamaCloudModel
-        : config.transcription.geminiModel, // gemini summarization reuses the transcription model (spec §5.2)
+    summarization_model: summarizationModel,
     template_name: resolvedTemplateName,
     template_hash: resolvedTemplateHash
   })
@@ -812,7 +815,9 @@ Meeting ${i + 1}: "${m.subject}"
     runnerupConfidence: runnerUp,
     selectionReason,
     selectorProvider: config.summarization.provider,
-    selectorModel: config.summarization.selectorModel,
+    // Truthful telemetry (FIX 2): the model the selector actually ran on — the
+    // summarization provider's model. No separate selector model exists.
+    selectorModel: summarizationModel,
     selectorElapsedMs: elapsedMs,
     fullTextHash,
     suggestedTemplateJson: suggestedJson,
