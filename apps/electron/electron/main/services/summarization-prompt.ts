@@ -303,3 +303,67 @@ ${close}
 
 ${jsonTail}`
 }
+
+// ---------------------------------------------------------------------------
+// Post-parse validator
+// ---------------------------------------------------------------------------
+
+export interface ValidatedAnalysis {
+  summary: string
+  action_items: string[]
+  topics: string[]
+  key_points: string[]
+  title_suggestion?: string
+  question_suggestions: string[]
+  language?: string
+  selected_meeting_id?: string
+  meeting_confidence?: number
+  selection_reason?: string
+}
+
+function coerceStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) throw new Error(`Analysis validation failed: ${field} must be an array`)
+  return value.filter((v): v is string => typeof v === 'string' && v.length > 0)
+}
+
+export function validateAnalysis(parsed: unknown, opts: { hasCandidates: boolean }): ValidatedAnalysis {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Analysis validation failed: not an object')
+  }
+  const p = parsed as Record<string, unknown>
+  if (typeof p.summary !== 'string' || p.summary.trim().length === 0) {
+    throw new Error('Analysis validation failed: summary must be a non-empty string')
+  }
+  if (p.summary.length > 20000) {
+    throw new Error('Analysis validation failed: summary exceeds 20000 chars')
+  }
+  if (p.title_suggestion !== undefined) {
+    if (typeof p.title_suggestion !== 'string') {
+      throw new Error('Analysis validation failed: title_suggestion must be a string')
+    }
+    if (p.title_suggestion.length > 120) {
+      throw new Error('Analysis validation failed: title_suggestion exceeds 120 chars')
+    }
+  }
+  const action_items = coerceStringArray(p.action_items, 'action_items')
+  const topics = coerceStringArray(p.topics, 'topics')
+  const key_points = coerceStringArray(p.key_points, 'key_points')
+  const question_suggestions = coerceStringArray(p.question_suggestions, 'question_suggestions')
+  if (opts.hasCandidates) {
+    if (!('selected_meeting_id' in p) || !('meeting_confidence' in p)) {
+      throw new Error('Analysis validation failed: meeting-selection keys missing for candidate meetings')
+    }
+  }
+  return {
+    summary: p.summary,
+    action_items,
+    topics,
+    key_points,
+    title_suggestion: p.title_suggestion as string | undefined,
+    question_suggestions,
+    language: typeof p.language === 'string' ? p.language : undefined,
+    selected_meeting_id: typeof p.selected_meeting_id === 'string' ? p.selected_meeting_id : undefined,
+    meeting_confidence: typeof p.meeting_confidence === 'number' ? p.meeting_confidence : undefined,
+    selection_reason: typeof p.selection_reason === 'string' ? p.selection_reason : undefined
+  }
+}

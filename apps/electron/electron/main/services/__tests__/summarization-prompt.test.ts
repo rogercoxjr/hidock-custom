@@ -117,3 +117,40 @@ describe('buildAnalysisPrompt — template emphasis + nonce framing', () => {
     expect(makeNonce()).not.toBe(n)
   })
 })
+
+import { validateAnalysis } from '../summarization-prompt'
+
+describe('validateAnalysis — type-aware throw-only', () => {
+  const ok = { summary: 'A summary', action_items: ['a'], topics: ['t'], key_points: ['k'],
+    title_suggestion: 'Title', question_suggestions: ['Q?'], language: 'en' }
+
+  it('passes a well-formed object', () => {
+    expect(validateAnalysis(ok, { hasCandidates: false }).summary).toBe('A summary')
+  })
+  it('throws on empty summary', () => {
+    expect(() => validateAnalysis({ ...ok, summary: '' }, { hasCandidates: false })).toThrow()
+  })
+  it('throws on non-string summary', () => {
+    expect(() => validateAnalysis({ ...ok, summary: 42 }, { hasCandidates: false })).toThrow()
+  })
+  it('throws on oversized summary (>20000)', () => {
+    expect(() => validateAnalysis({ ...ok, summary: 'x'.repeat(20001) }, { hasCandidates: false })).toThrow()
+  })
+  it('throws on oversized title (>120)', () => {
+    expect(() => validateAnalysis({ ...ok, title_suggestion: 'x'.repeat(121) }, { hasCandidates: false })).toThrow()
+  })
+  it('coerces array entries: drops non-strings', () => {
+    const r = validateAnalysis({ ...ok, action_items: ['a', 5, null, 'b'] }, { hasCandidates: false })
+    expect(r.action_items).toEqual(['a', 'b'])
+  })
+  it('throws when action_items is not an array', () => {
+    expect(() => validateAnalysis({ ...ok, action_items: 'nope' }, { hasCandidates: false })).toThrow()
+  })
+  it('throws when meeting keys missing but candidates exist', () => {
+    expect(() => validateAnalysis(ok, { hasCandidates: true })).toThrow()
+  })
+  it('passes when meeting keys present and candidates exist', () => {
+    const withMeeting = { ...ok, selected_meeting_id: 'm1', meeting_confidence: 0.8, selection_reason: 'r' }
+    expect(validateAnalysis(withMeeting, { hasCandidates: true }).selected_meeting_id).toBe('m1')
+  })
+})
