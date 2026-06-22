@@ -149,3 +149,40 @@ describe('CRUD', () => {
     expect(getTemplateById(t.id)).toBeNull()
   })
 })
+
+describe('default mutual-exclusivity (FIX 1)', () => {
+  it('setting one template default clears is_default on the previously-default row', () => {
+    const a = createTemplate({ name: 'Alpha-def', instructions: 'i', isDefault: true })
+    expect(getTemplateById(a.id)?.isDefault).toBe(true)
+
+    const b = createTemplate({ name: 'Beta-def', instructions: 'i' })
+    // Promote b to default → a must be demoted in the same operation.
+    updateTemplate(b.id, { isDefault: true })
+
+    expect(getTemplateById(b.id)?.isDefault).toBe(true)
+    expect(getTemplateById(a.id)?.isDefault).toBe(false)
+
+    // Invariant: at most one user row holds is_default=1.
+    const defaults = userTemplates().filter((t) => t.isDefault)
+    expect(defaults).toHaveLength(1)
+    expect(defaults[0].id).toBe(b.id)
+  })
+
+  it('updating a default template without touching isDefault leaves it default and unique', () => {
+    const a = createTemplate({ name: 'Gamma-def', instructions: 'i', isDefault: true })
+    const b = createTemplate({ name: 'Delta-def', instructions: 'i' })
+    void b
+    // Edit a's description only — isDefault is inherited (true) and must stay unique.
+    updateTemplate(a.id, { description: 'edited' })
+    const defaults = userTemplates().filter((t) => t.isDefault)
+    expect(defaults).toHaveLength(1)
+    expect(defaults[0].id).toBe(a.id)
+  })
+
+  it('demoting the only default (isDefault:false) leaves zero defaults', () => {
+    const a = createTemplate({ name: 'Epsilon-def', instructions: 'i', isDefault: true })
+    updateTemplate(a.id, { isDefault: false })
+    expect(getTemplateById(a.id)?.isDefault).toBe(false)
+    expect(userTemplates().filter((t) => t.isDefault)).toHaveLength(0)
+  })
+})

@@ -63,7 +63,10 @@ export interface SanitizedTemplate {
 }
 
 export function sanitizeTemplateInput(input: TemplateInput, opts?: { existingNames?: string[] }): SanitizedTemplate {
-  const name = (input.name ?? '').trim()
+  // MINOR: scrub the name like description/instructions/triggers so the four
+  // user-supplied fields are uniformly stripped of <<< / >>> delimiter runs and
+  // control chars (latent today since both prompt sinks re-sanitize, but consistent).
+  const name = scrub((input.name ?? '').trim())
   const rawInstructions = scrub((input.instructions ?? '').trim())
   if (!name) throw new Error('Template name is required')
   if (!rawInstructions) throw new Error('Template instructions are required')
@@ -110,6 +113,19 @@ function existingUserNames(excludeId?: string): string[] {
   ).map((r) => r.name)
 }
 
+/**
+ * Mutual-exclusivity helper (FIX 1): clear is_default on every OTHER user row so
+ * no two user templates can hold is_default=1 at once. Built-in rows are never
+ * default and are excluded by is_builtin=0. Each run() auto-saves the DB image.
+ * Pass the row being promoted as `keepId` so it is not cleared.
+ */
+function clearOtherDefaults(keepId: string): void {
+  run(
+    'UPDATE summarization_templates SET is_default = 0, updated_at = CURRENT_TIMESTAMP WHERE id != ? AND is_builtin = 0 AND is_default = 1',
+    [keepId]
+  )
+}
+
 export function createTemplate(input: TemplateInput): SummarizationTemplate {
   const s = sanitizeTemplateInput(input, { existingNames: existingUserNames() })
   const id = `summtpl_${randomUUID()}`
@@ -119,6 +135,8 @@ export function createTemplate(input: TemplateInput): SummarizationTemplate {
      VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
     [id, s.name, s.description, s.instructions, JSON.stringify(s.exampleTriggers), s.isDefault ? 1 : 0, s.enabled ? 1 : 0]
   )
+  // Enforce single-default invariant when creating a row already marked default.
+  if (s.isDefault) clearOtherDefaults(id)
   return getTemplateById(id)!
 }
 
@@ -147,6 +165,9 @@ export function updateTemplate(id: string, patch: Partial<TemplateInput>): Summa
      WHERE id=?`,
     [s.name, s.description, s.instructions, JSON.stringify(s.exampleTriggers), s.isDefault ? 1 : 0, s.enabled ? 1 : 0, id]
   )
+  // Mutual exclusivity (FIX 1): when this row is (now) the default, demote every
+  // other user row in the same operation so only one user template is default.
+  if (s.isDefault) clearOtherDefaults(id)
   return getTemplateById(id)!
 }
 

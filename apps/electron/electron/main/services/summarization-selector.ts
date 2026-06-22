@@ -66,14 +66,19 @@ export interface TemplateSelectionResult {
 // ── decideSelection ────────────────────────────────────────────────────────
 
 /**
- * Applies the band logic from spec §5.4.
+ * Applies the band logic from spec §5.3/§5.4.
  *
  * Band rules (evaluated in order):
  *  1. Unknown templateId (not in userTemplates)      → use_default
  *  2. conf ≥ AUTO_CONF AND margin ≥ AUTO_MARGIN      → selected
- *  3. conf ≥ LOW_CONF (0.50–0.71, or tight margin)  → use_default (advisory)
- *  4. conf < LOW_CONF + suggestedTemplate present    → suggest_new
+ *  3. mid band (conf ≥ LOW_CONF but not auto-select):
+ *       - if userDefaultId resolves to an ENABLED, non-builtin user template → selected (default applied)
+ *       - else                                       → use_default (advisory, base prompt)
+ *  4. conf < LOW_CONF + suggestedTemplate present    → suggest_new (default does NOT apply here)
  *  5. conf < LOW_CONF, no suggestion                 → use_default
+ *
+ * The mid-band default (§5.3) only applies in band 3 — the low band (<0.50)
+ * NEVER promotes to 'selected' even when a default is configured.
  *
  * Confidence is clamped to [0, 1] before band evaluation.
  * margin = confidence - (runnerUpConfidence ?? 0); never NaN.
@@ -81,7 +86,7 @@ export interface TemplateSelectionResult {
 export function decideSelection(
   parsed: ParsedSelection,
   userTemplates: SummarizationTemplate[],
-  _userDefaultId: string | null,
+  userDefaultId: string | null,
 ): TemplateSelectionResult {
   // Clamp confidence first — NaN becomes 0 via Math.max/min chain
   const rawConf = typeof parsed.confidence === 'number' && !isNaN(parsed.confidence)
@@ -118,9 +123,23 @@ export function decideSelection(
     }
   }
 
-  // Rule 3: mid-band — advisory use_default (confidence in range but margin too small,
-  //          or confidence 0.50–0.71 regardless of margin)
+  // Rule 3: mid-band — confidence in range but not auto-selectable (margin too
+  //          small, or confidence 0.50–0.71 regardless of margin). Spec §5.3:
+  //          apply the user's default template when one is configured AND resolves
+  //          to an enabled, non-deleted, non-builtin user template; otherwise fall
+  //          back to the advisory use_default (base prompt).
   if (conf >= LOW_CONF) {
+    const defaultTemplate = userDefaultId
+      ? userTemplates.find((t) => t.id === userDefaultId && t.enabled && !t.isBuiltin)
+      : undefined
+    if (defaultTemplate) {
+      return {
+        kind: 'selected',
+        templateId: defaultTemplate.id,
+        confidence: conf,
+        reason: `Default template applied for uncertain match (conf=${conf.toFixed(2)}, margin=${margin.toFixed(2)})`,
+      }
+    }
     return {
       kind: 'use_default',
       confidence: conf,

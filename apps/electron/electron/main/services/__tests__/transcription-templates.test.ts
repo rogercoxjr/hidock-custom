@@ -257,6 +257,56 @@ describe('Task 12 — template resolution in Stage-2 worker', () => {
     void tpl2 // suppress unused warning
   })
 
+  it('FIX 1 mid-band default: selector returns 0.60 conf → user default template applied, selected run row', async () => {
+    // Two user templates; tpl2 is the user's default. Selector returns a mid-band
+    // (0.50 ≤ conf < 0.72) result for tpl1 — not auto-selectable — so the worker
+    // must apply the configured default (tpl2), not the base prompt.
+    const tpl1 = createTemplate({ name: 'Alpha-mid', instructions: 'Focus on decisions.', enabled: true })
+    const tpl2 = createTemplate({ name: 'Beta-mid', instructions: 'Use the DEFAULT template guidance.', enabled: true, isDefault: true })
+
+    shared.fakeLlm = makeFakeLlm({
+      onSelector: (_prompt) => {
+        shared.selectorCallCount++
+        // Mid band: confidence 0.60, low margin — falls into the §5.3 mid band.
+        return JSON.stringify({
+          template_id: tpl1.id,
+          confidence: 0.6,
+          runnerup_confidence: 0.55,
+          reason: 'uncertain'
+        })
+      },
+      onAnalysis: (prompt) => {
+        shared.capturedAnalysisPrompts.push(prompt)
+        return makeAnalysisJson('Mid Band Default')
+      },
+      onActionables: () => '[]'
+    })
+
+    insertRecording('rec-midband')
+    await transcribeManually('rec-midband')
+
+    expect(shared.selectorCallCount).toBe(1)
+    // Analysis prompt carries the DEFAULT template's instructions (tpl2), not tpl1's.
+    expect(shared.capturedAnalysisPrompts).toHaveLength(1)
+    expect(shared.capturedAnalysisPrompts[0]).toContain('Use the DEFAULT template guidance.')
+    expect(shared.capturedAnalysisPrompts[0]).not.toContain('Focus on decisions.')
+
+    // Provenance points at the default template.
+    const transcript = getTranscriptByRecordingId('rec-midband')
+    expect(transcript!.summarization_template_name).toBe('Beta-mid')
+
+    // Audit row: selection_kind='selected' (the default WAS selected), template_id=tpl2.
+    const runRows = queryAll<{ selection_kind: string; template_id: string | null }>(
+      'SELECT selection_kind, template_id FROM transcript_template_runs WHERE recording_id = ?',
+      ['rec-midband']
+    )
+    expect(runRows).toHaveLength(1)
+    expect(runRows[0].selection_kind).toBe('selected')
+    expect(runRows[0].template_id).toBe(tpl2.id)
+
+    void tpl1
+  })
+
   it('suggest_new: LLM returns low confidence + suggested_template → base prompt, suggest_new run row, summary written', async () => {
     // Seed 2 user templates so the selector gate fires.
     const tpl1 = createTemplate({ name: 'Alpha-sg', instructions: 'Focus on decisions.', enabled: true })
