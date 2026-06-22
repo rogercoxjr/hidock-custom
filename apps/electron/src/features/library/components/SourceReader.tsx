@@ -142,6 +142,10 @@ export function SourceReader({
     instructionsChanged: boolean
   } | null>(null)
 
+  // Phase 4 (Task 13): "Re-summarize with…" dropdown state.
+  const [userTemplates, setUserTemplates] = useState<Array<{ id: string; name: string }>>([])
+  const [isResummarizingWithTemplate, setIsResummarizingWithTemplate] = useState(false)
+
   // Reset all state when recording changes. Speaker/suggestion state is reset HERE
   // (keyed on recording id) and NOT on transcript changes — otherwise the batched
   // transcript fetch flipping the `transcript` prop undefined->object would blank
@@ -202,6 +206,27 @@ export function SourceReader({
       ?.catch(() => { if (!cancelled) setLatestRunView(null) })
     return () => { cancelled = true }
   }, [recording, transcript])
+
+  // Phase 4 (Task 13): load the enabled user templates for the "Re-summarize with…"
+  // dropdown whenever the component mounts (templates are stable across recordings).
+  // Only non-builtin enabled templates are shown (user-defined ones).
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI?.summarizationTemplates
+      ?.list?.()
+      ?.then((res) => {
+        if (cancelled) return
+        if (res?.success && Array.isArray(res.data)) {
+          setUserTemplates(
+            res.data
+              .filter((t: { enabled: boolean; isBuiltin: boolean }) => t.enabled && !t.isBuiltin)
+              .map((t: { id: string; name: string }) => ({ id: t.id, name: t.name }))
+          )
+        }
+      })
+      ?.catch(() => { if (!cancelled) setUserTemplates([]) })
+    return () => { cancelled = true }
+  }, [])
 
   /**
    * Re-fetch the recording's turns (transcripts:getByRecordingId), its
@@ -718,6 +743,59 @@ export function SourceReader({
             <RefreshCw className="h-4 w-4" />
             Re-summarize
           </Button>
+        )}
+
+        {/* Phase 4 (Task 13): "Re-summarize with…" dropdown — single-shot template override.
+            Visible when there is a transcript AND at least one enabled user template exists.
+            Calls resummarizeWithTemplate (concurrency-guarded, spec §8.3). */}
+        {transcript?.full_text && onResummarize && !summaryStale && userTemplates.length > 0 && (
+          <Select
+            disabled={
+              recording.transcriptionStatus === 'pending' ||
+              recording.transcriptionStatus === 'processing' ||
+              isResummarizingWithTemplate
+            }
+            onValueChange={async (templateId) => {
+              if (!recording || isResummarizingWithTemplate) return
+              setIsResummarizingWithTemplate(true)
+              try {
+                const res = await window.electronAPI?.summarizationTemplates?.resummarizeWithTemplate?.(
+                  recording.id,
+                  templateId
+                )
+                if (!res?.success) {
+                  toast.error(
+                    'Re-summarize failed',
+                    res?.error ?? 'Unknown error'
+                  )
+                } else {
+                  // Trigger parent refresh (same path as plain Re-summarize).
+                  onResummarize()
+                }
+              } catch (err) {
+                toast.error('Re-summarize failed', err instanceof Error ? err.message : String(err))
+              } finally {
+                setIsResummarizingWithTemplate(false)
+              }
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className="w-auto gap-1"
+              title="Re-summarize using a specific template (single-shot override)"
+              data-testid="resummarize-with-template-trigger"
+            >
+              <RefreshCw className={`h-4 w-4 ${isResummarizingWithTemplate ? 'animate-spin' : ''}`} />
+              <SelectValue placeholder="with template…" />
+            </SelectTrigger>
+            <SelectContent>
+              {userTemplates.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
 
         {/* D5 §6.8: Re-transcribe (re-runs ASR with speaker detection) — only for

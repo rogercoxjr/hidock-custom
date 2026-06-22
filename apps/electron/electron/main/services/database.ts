@@ -3193,6 +3193,32 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
   run('UPDATE transcripts SET summarization_provider = NULL, summarization_model = NULL WHERE recording_id = ?', [recordingId])
 }
 
+/** Phase 4 (Task 13): write the single-shot override column so the worker picks up
+ *  the requested template on its next Stage-2 pass.  The worker's Stage-2 write
+ *  (updateTranscriptStage2) atomically nulls the column after consuming it, ensuring
+ *  it is applied exactly once.  Throws when no transcript row exists so the caller
+ *  (recording-handlers) can surface a proper error rather than a silent no-op. */
+export function setTranscriptTemplateOverride(recordingId: string, templateId: string | null): void {
+  const existing = queryOne<{ id: string }>('SELECT id FROM transcripts WHERE recording_id = ?', [recordingId])
+  if (!existing) {
+    throw new Error(`setTranscriptTemplateOverride: no transcript row for recording ${recordingId}`)
+  }
+  run('UPDATE transcripts SET summarization_template_id = ? WHERE recording_id = ?', [templateId, recordingId])
+}
+
+/** Phase 4 (Task 13): concurrency guard — returns true when the recording has a
+ *  transcription_queue row in `pending` OR `processing` state.  The resummarize
+ *  handler uses this to reject a re-summarize request with "transcription in progress"
+ *  before writing any override, so a rejected call leaves the DB unchanged.
+ *  Spec §8.3 is authoritative: reject-if-in-flight, no last-write-wins. */
+export function hasInFlightQueueItem(recordingId: string): boolean {
+  const row = queryOne<{ c: number }>(
+    "SELECT COUNT(*) AS c FROM transcription_queue WHERE recording_id = ? AND status IN ('pending','processing')",
+    [recordingId]
+  )
+  return (row?.c ?? 0) > 0
+}
+
 /** D5 §6.8: re-transcribe support — clears BOTH stage markers so the worker
  *  short-circuit (`full_text && summarization_provider`) AND the Stage-2-only
  *  resume rule (`full_text && !summarization_provider`) are both defeated, forcing
@@ -3211,7 +3237,8 @@ export function clearTranscriptForRetranscribe(recordingId: string): void {
            speakers = NULL,
            sentiment = NULL,
            summarization_provider = NULL,
-           summarization_model = NULL
+           summarization_model = NULL,
+           summarization_template_id = NULL
      WHERE recording_id = ?`,
     [recordingId]
   )

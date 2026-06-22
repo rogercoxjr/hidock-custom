@@ -226,8 +226,8 @@ export interface ElectronAPI {
     getRunsForRecording: (recordingId: string) => Promise<Result<DiarizationRun[]>>
   }
 
-  // Summarization Templates — CRUD (Phase 2) + latestRun reader chip (Phase 3).
-  // Manual override / resummarize are deferred to Phase 4.
+  // Summarization Templates — CRUD (Phase 2) + latestRun reader chip (Phase 3)
+  // + resummarizeWithTemplate single-shot override (Phase 4).
   summarizationTemplates: {
     list: () => Promise<Result<SummarizationTemplate[]>>
     create: (template: TemplateInput) => Promise<Result<SummarizationTemplate>>
@@ -236,6 +236,13 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<Result<true>>
     /** Phase 3: provenance for the reader chip + banner. */
     latestRun: (recordingId: string) => Promise<Result<LatestRunView>>
+    /**
+     * Phase 4: single-shot template override — write `templateId` onto the transcript
+     * row and enqueue a re-summarize.  Rejects with { success: false, error: 'transcription
+     * in progress' } if a queue item is pending/processing (spec §8.3).
+     * Thin wrapper over the same `transcription:resummarize` channel.
+     */
+    resummarizeWithTemplate: (recordingId: string, templateId: string | null) => Promise<{ success: boolean; error?: string }>
   }
 
   // Projects
@@ -725,6 +732,11 @@ const electronAPI: ElectronAPI = {
     setEnabled: (id, enabled) => callIPC('summarizationTemplates:setEnabled', { id, enabled }),
     delete: (id) => callIPC('summarizationTemplates:delete', { id }),
     latestRun: (recordingId) => callIPC('summarizationTemplates:latestRun', recordingId),
+    // Phase 4: thin wrapper — routes through the same channel as transcription.resummarize
+    // but always sends the object form { recordingId, templateId } so the handler
+    // threads the templateId through the concurrency guard + override write.
+    resummarizeWithTemplate: (recordingId, templateId) =>
+      callIPC('transcription:resummarize', { recordingId, templateId }),
   },
 
   projects: {

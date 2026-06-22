@@ -41,7 +41,9 @@ import {
   deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
   rependFailedItems,
-  isSummaryStale
+  isSummaryStale,
+  setTranscriptTemplateOverride,
+  hasInFlightQueueItem
 } from '../services/database'
 import { getConfig } from '../services/config'
 import {
@@ -432,8 +434,9 @@ export function registerRecordingHandlers(): void {
 
   // Re-summarize (spec §5.3/§5.6): clear the stage marker (keeping the old summary)
   // and enqueue — the worker's resume rule runs Stage 2 only, no audio file needed.
-  // templateId threading + concurrency guard land in Phase 4 Task 13; bare-string wrap kept
-  // for the existing renderer caller (preload/index.ts calls callIPC('transcription:resummarize', recordingId)).
+  // Phase 4 (Task 13): concurrency guard (spec §8.3 — reject-if-in-flight, no last-write-wins)
+  // + single-shot templateId override write.  Bare-string wrap kept for the existing renderer
+  // caller (preload transcription.resummarize passes a bare recordingId string).
   ipcMain.handle('transcription:resummarize', async (_, payload: unknown): Promise<{ success: boolean; error?: string }> => {
     try {
       const normalized =
@@ -442,8 +445,14 @@ export function registerRecordingHandlers(): void {
           : { recordingId: payload }
       const result = ResummarizeSchema.safeParse(normalized)
       if (!result.success) throw new Error(result.error.issues[0]?.message || 'Invalid request')
-      clearTranscriptStage2Marker(result.data.recordingId)
-      addToQueue(result.data.recordingId)
+      const { recordingId, templateId } = result.data
+      // §8.3 concurrency guard — check BEFORE any write so a rejected call leaves DB unchanged.
+      if (hasInFlightQueueItem(recordingId)) {
+        return { success: false, error: 'transcription in progress' }
+      }
+      if (templateId !== undefined) setTranscriptTemplateOverride(recordingId, templateId)
+      clearTranscriptStage2Marker(recordingId)
+      addToQueue(recordingId)
       void processQueueManually()
       return { success: true }
     } catch (error) {
