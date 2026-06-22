@@ -1,0 +1,117 @@
+// @vitest-environment node
+import { describe, it, expect, vi } from 'vitest'
+import { selectTemplateForTranscript, prefilter, buildSelectorPrompt } from '../summarization-selector'
+import type { LlmProvider } from '../llm/llm-provider'
+
+const tpls = [
+  { id: 'sales', name: 'Sales', description: 'sales calls', instructions: 'i', exampleTriggers: ['demo'], isDefault: false, isBuiltin: false, enabled: true, createdAt: '', updatedAt: '' },
+  { id: 'hr', name: 'HR', description: 'interviews', instructions: 'i', exampleTriggers: ['interview'], isDefault: false, isBuiltin: false, enabled: true, createdAt: '', updatedAt: '' }
+]
+
+function fake(json: string): LlmProvider {
+  return { generate: async () => json }
+}
+
+describe('prefilter', () => {
+  it('selects the single trigger match', () => {
+    expect(prefilter({ templates: tpls, title: 'Product demo call', meetingSubjects: [] })).toBe('sales')
+  })
+  it('returns null on ambiguity', () => {
+    expect(prefilter({ templates: tpls, title: 'demo and interview', meetingSubjects: [] })).toBeNull()
+  })
+  it('returns null on no match', () => {
+    expect(prefilter({ templates: tpls, title: 'random chat', meetingSubjects: [] })).toBeNull()
+  })
+  it('does NOT match on an empty-string trigger', () => {
+    const withEmpty = [
+      { ...tpls[0], id: 'empty', exampleTriggers: [''] },
+    ]
+    // An empty trigger must not match anything (''.includes-style always-true bug).
+    expect(prefilter({ templates: withEmpty, title: 'literally anything', meetingSubjects: [] })).toBeNull()
+  })
+})
+
+describe('selectTemplateForTranscript', () => {
+  it('prefilter short-circuits WITHOUT calling the LLM', async () => {
+    const generate = vi.fn(async () => '{}')
+    const llm: LlmProvider = { generate }
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], recordingTitle: 'Product demo call', templates: tpls, userDefaultId: null },
+      llm
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
+    expect(generate).not.toHaveBeenCalled()
+  })
+  it('returns promptly on success without waiting for the timeout (timer cleared)', async () => {
+    // generate resolves immediately; a huge timeoutMs would hang the test if the
+    // timer were not cleared on success. elapsedMs must be far below the timeout.
+    const llm = fake(JSON.stringify({ template_id: 'sales', confidence: 0.9, runnerup_confidence: 0.3, reason: 'x' }))
+    const t0 = Date.now()
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, llm, { timeoutMs: 60000 }
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
+    expect(Date.now() - t0).toBeLessThan(1000)
+    expect(r.elapsedMs).toBeLessThan(1000)
+  })
+  it('parses selector JSON and applies via decideSelection', async () => {
+    const llm = fake(JSON.stringify({ template_id: 'sales', confidence: 0.9, runnerup_confidence: 0.3, reason: 'clear sales call' }))
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, llm
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
+  })
+  it('isolates LLM failure → use_default', async () => {
+    const llm: LlmProvider = { generate: async () => { throw new Error('429 rate limited') } }
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, llm
+    )
+    expect(r.kind).toBe('use_default')
+    expect(r.reason).toContain('selector-failed')
+  })
+  it('isolates timeout → use_default', async () => {
+    const llm: LlmProvider = { generate: () => new Promise((res) => setTimeout(() => res('{}'), 1000)) }
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, llm, { timeoutMs: 20 }
+    )
+    expect(r.kind).toBe('use_default')
+  })
+  it('isolates unparseable output → use_default', async () => {
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, fake('not json')
+    )
+    expect(r.kind).toBe('use_default')
+  })
+  it('parses Gemini-style ```json-fenced prose (json flag ignored)', async () => {
+    const llm = fake('Here is my choice:\n```json\n{"template_id":"sales","confidence":0.9,"runnerup_confidence":0.3,"reason":"x"}\n```')
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, llm
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
+  })
+  it('greedy extraction handles a nested suggested_template object (top-level object, not truncated)', async () => {
+    const llm = fake(JSON.stringify({
+      confidence: 0.2, reason: 'no fit',
+      suggested_template: { name: 'New', description: 'd', instructions: 'i', exampleTriggers: ['x'] }
+    }))
+    const r = await selectTemplateForTranscript(
+      { fullText: 'x'.repeat(200), meetingSubjects: [], templates: tpls, userDefaultId: null }, llm
+    )
+    expect(r.kind).toBe('suggest_new')
+    expect(r.suggestedTemplate?.name).toBe('New')
+  })
+})
+
+describe('buildSelectorPrompt', () => {
+  it('never includes template instructions, wraps metadata in nonce blocks', () => {
+    // MINOR: use a distinctive multi-word sentinel as the instructions VALUE so
+    // the not.toContain assertion can actually catch an instructions leak (the
+    // old single-char 'i' fixture made the check effectively vacuous).
+    const SENTINEL = 'SECRET_INSTRUCTIONS_SHOULD_NEVER_LEAK'
+    const tplsWithSentinel = tpls.map((t) => ({ ...t, instructions: SENTINEL }))
+    const p = buildSelectorPrompt({ excerpt: 'hi', meetingSubjects: ['Standup'], templates: tplsWithSentinel, nonce: 'N' })
+    expect(p).not.toContain(SENTINEL)         // template instructions must NEVER appear in the selector prompt
+    expect(p).toContain('<<<DATA_N>>>')
+    expect(p).toContain('Sales')              // name IS sent
+  })
+})

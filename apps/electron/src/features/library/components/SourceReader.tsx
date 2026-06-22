@@ -31,6 +31,7 @@ import { useConfigStore } from '@/store/domain/useConfigStore'
 import { labelName } from '@/features/library/utils'
 import type { LabelDefinition } from '@/types'
 import { formatDateTime, formatDuration, formatBytes } from '@/lib/utils'
+import { TemplateChip, SuggestNewBanner } from './TemplateChip'
 
 // Stable empty reference so the labels selector never yields a fresh [] per render
 // (keeps useCallback deps that reference labelItems stable).
@@ -132,6 +133,19 @@ export function SourceReader({
   // Monotonic token so only the latest refreshSpeakers run may write state.
   const refreshTokenRef = useRef(0)
 
+  // Phase 3 (Task 13b): template provenance state — must be declared BEFORE the
+  // recording-change reset effect so setLatestRunView is in scope.
+  const [latestRunView, setLatestRunView] = useState<{
+    confidence: number | null
+    kind: string | null
+    suggestedTemplate: Record<string, unknown> | null
+    instructionsChanged: boolean
+  } | null>(null)
+
+  // Phase 4 (Task 13): "Re-summarize with…" dropdown state.
+  const [userTemplates, setUserTemplates] = useState<Array<{ id: string; name: string }>>([])
+  const [isResummarizingWithTemplate, setIsResummarizingWithTemplate] = useState(false)
+
   // Reset all state when recording changes. Speaker/suggestion state is reset HERE
   // (keyed on recording id) and NOT on transcript changes — otherwise the batched
   // transcript fetch flipping the `transcript` prop undefined->object would blank
@@ -147,6 +161,7 @@ export function SourceReader({
     setSpeakerAssignments({})
     setSuggestions([])
     setShowSuggestionsBanner(false)
+    setLatestRunView(null)
   }, [recording?.id])
 
   // D5 §6.6: probe staleness whenever the recording or transcript changes. The
@@ -164,6 +179,54 @@ export function SourceReader({
       ?.catch(() => { if (!cancelled) setSummaryStale(false) })
     return () => { cancelled = true }
   }, [recording, transcript])
+
+  // Phase 3 (Task 13b): fetch template provenance (confidence + kind + instructionsChanged)
+  // from the latestRun IPC whenever the recording or transcript changes.
+  useEffect(() => {
+    let cancelled = false
+    if (!recording || !transcript?.full_text) {
+      setLatestRunView(null)
+      return
+    }
+    window.electronAPI?.summarizationTemplates
+      ?.latestRun?.(recording.id)
+      ?.then((res) => {
+        if (cancelled) return
+        if (res?.success && res.data) {
+          setLatestRunView({
+            confidence: res.data.confidence,
+            kind: res.data.kind,
+            suggestedTemplate: res.data.suggestedTemplate,
+            instructionsChanged: res.data.instructionsChanged,
+          })
+        } else {
+          setLatestRunView(null)
+        }
+      })
+      ?.catch(() => { if (!cancelled) setLatestRunView(null) })
+    return () => { cancelled = true }
+  }, [recording, transcript])
+
+  // Phase 4 (Task 13): load the enabled user templates for the "Re-summarize with…"
+  // dropdown whenever the component mounts (templates are stable across recordings).
+  // Only non-builtin enabled templates are shown (user-defined ones).
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI?.summarizationTemplates
+      ?.list?.()
+      ?.then((res) => {
+        if (cancelled) return
+        if (res?.success && Array.isArray(res.data)) {
+          setUserTemplates(
+            res.data
+              .filter((t: { enabled: boolean; isBuiltin: boolean }) => t.enabled && !t.isBuiltin)
+              .map((t: { id: string; name: string }) => ({ id: t.id, name: t.name }))
+          )
+        }
+      })
+      ?.catch(() => { if (!cancelled) setUserTemplates([]) })
+    return () => { cancelled = true }
+  }, [])
 
   /**
    * Re-fetch the recording's turns (transcripts:getByRecordingId), its
@@ -682,6 +745,58 @@ export function SourceReader({
           </Button>
         )}
 
+        {/* Phase 4 (Task 13): "Re-summarize with…" dropdown — single-shot template override.
+            Visible when there is a transcript AND at least one enabled user template exists.
+            Calls resummarizeWithTemplate (concurrency-guarded, spec §8.3). */}
+        {transcript?.full_text && onResummarize && !summaryStale && userTemplates.length > 0 && (
+          <Select
+            disabled={
+              recording.transcriptionStatus === 'pending' ||
+              recording.transcriptionStatus === 'processing' ||
+              isResummarizingWithTemplate
+            }
+            onValueChange={async (templateId) => {
+              if (!recording || isResummarizingWithTemplate) return
+              setIsResummarizingWithTemplate(true)
+              try {
+                const res = await window.electronAPI?.summarizationTemplates?.resummarizeWithTemplate?.(
+                  recording.id,
+                  templateId
+                )
+                if (!res?.success) {
+                  toast.error(
+                    'Re-summarize failed',
+                    res?.error ?? 'Unknown error'
+                  )
+                } else {
+                  // Trigger parent refresh (same path as plain Re-summarize).
+                  onResummarize()
+                }
+              } catch (err) {
+                toast.error('Re-summarize failed', err instanceof Error ? err.message : String(err))
+              } finally {
+                setIsResummarizingWithTemplate(false)
+              }
+            }}
+          >
+            <SelectTrigger
+              className="h-8 w-auto gap-1 text-sm"
+              title="Re-summarize using a specific template (single-shot override)"
+              data-testid="resummarize-with-template-trigger"
+            >
+              <RefreshCw className={`h-4 w-4 ${isResummarizingWithTemplate ? 'animate-spin' : ''}`} />
+              <SelectValue placeholder="with template…" />
+            </SelectTrigger>
+            <SelectContent>
+              {userTemplates.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {/* D5 §6.8: Re-transcribe (re-runs ASR with speaker detection) — only for
             an already-transcribed recording; gated behind a confirm dialog. */}
         {transcript?.full_text && onTranscribe && (
@@ -764,6 +879,20 @@ export function SourceReader({
                 </Button>
               </div>
             )}
+            {/* Phase 3 (Task 13b) / Phase 4 (Task 14): suggest-new banner — spec §10 precedence:
+                staleness > error > suggest-new. Only render when no higher-priority
+                primary banner is visible. */}
+            {!summaryStale && recording.transcriptionStatus !== 'error' && latestRunView?.kind === 'suggest_new' && (
+              <SuggestNewBanner
+                suggestedTemplate={latestRunView.suggestedTemplate}
+                recordingId={recording.id}
+                onAccepted={() => {
+                  // Clear the suggest-new banner and let the parent refresh the transcript
+                  setLatestRunView(null)
+                  onResummarize?.()
+                }}
+              />
+            )}
             {isLoadingSuggestions && (
               <div className="mb-3 flex items-center gap-2 text-sm text-ink-muted">
                 <RefreshCw className="h-4 w-4 animate-spin text-accent-2" />
@@ -783,6 +912,17 @@ export function SourceReader({
                   suggestions={suggestions}
                   onJumpToTime={onJumpToTime}
                   onChanged={() => { refreshSpeakers().catch(() => {}) }}
+                />
+              </div>
+            )}
+            {/* Phase 3 (Task 13b): template chip — renders just before the transcript
+                viewer so it appears near the summary header. */}
+            {transcript.summarization_template_name && (
+              <div className="mb-2">
+                <TemplateChip
+                  name={transcript.summarization_template_name}
+                  confidence={latestRunView?.confidence}
+                  instructionsChanged={latestRunView?.instructionsChanged}
                 />
               </div>
             )}

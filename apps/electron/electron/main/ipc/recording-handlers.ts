@@ -41,7 +41,9 @@ import {
   deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
   rependFailedItems,
-  isSummaryStale
+  isSummaryStale,
+  setTranscriptTemplateOverride,
+  hasInFlightQueueItem
 } from '../services/database'
 import { getConfig } from '../services/config'
 import {
@@ -51,6 +53,7 @@ import {
   LinkRecordingToMeetingSchema,
   UnlinkRecordingFromMeetingSchema,
   TranscribeRecordingSchema,
+  ResummarizeSchema,
   UpdateRecordingStatusSchema,
   UpdateTranscriptionStatusSchema
 } from './validation'
@@ -431,12 +434,30 @@ export function registerRecordingHandlers(): void {
 
   // Re-summarize (spec §5.3/§5.6): clear the stage marker (keeping the old summary)
   // and enqueue — the worker's resume rule runs Stage 2 only, no audio file needed.
-  ipcMain.handle('transcription:resummarize', async (_, recordingId: unknown): Promise<{ success: boolean; error?: string }> => {
+  // Phase 4 (Task 13): concurrency guard (spec §8.3 — reject-if-in-flight, no last-write-wins)
+  // + single-shot templateId override write.  Bare-string wrap kept for the existing renderer
+  // caller (preload transcription.resummarize passes a bare recordingId string).
+  ipcMain.handle('transcription:resummarize', async (_, payload: unknown): Promise<{ success: boolean; error?: string }> => {
     try {
-      const result = TranscribeRecordingSchema.safeParse({ recordingId })
+      const normalized =
+        typeof payload === 'object' && payload !== null && 'recordingId' in payload
+          ? payload
+          : { recordingId: payload }
+      const result = ResummarizeSchema.safeParse(normalized)
       if (!result.success) throw new Error(result.error.issues[0]?.message || 'Invalid request')
-      clearTranscriptStage2Marker(result.data.recordingId)
-      addToQueue(result.data.recordingId)
+      const { recordingId, templateId } = result.data
+      // §8.3 concurrency guard — check BEFORE any write so a rejected call leaves DB unchanged.
+      if (hasInFlightQueueItem(recordingId)) {
+        return { success: false, error: 'transcription in progress' }
+      }
+      // FIX 3: ALWAYS reset the single-shot override to the requested value (null when
+      // none requested). The success-path nulling lives in updateTranscriptStage2, so a
+      // FAILED Stage-2 leaves a stale override behind; without this a later plain
+      // re-summarize would silently re-apply that template. Setting null here starts
+      // every plain re-summarize from a clean selector/Default state.
+      setTranscriptTemplateOverride(recordingId, templateId ?? null)
+      clearTranscriptStage2Marker(recordingId)
+      addToQueue(recordingId)
       void processQueueManually()
       return { success: true }
     } catch (error) {

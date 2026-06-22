@@ -72,6 +72,9 @@ export interface AppConfig {
     provider: 'gemini' | 'ollama-cloud'  // default 'gemini' = today's fused behavior (spec §5.4)
     ollamaCloudApiKey: string             // safeStorage-encrypted at rest
     ollamaCloudModel: string              // e.g. 'gpt-oss:120b', 'deepseek-v3.1:671b'
+    // NOTE: there is intentionally no separate selector model — the template
+    // selector always runs on the summarization provider's model (see
+    // getLlmProvider). A dead `selectorModel` field was pruned (FIX 2).
   }
   device: {
     autoConnect: boolean

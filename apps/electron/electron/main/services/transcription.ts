@@ -32,13 +32,17 @@ import {
   deleteLabelEmbeddingsForRecording,
   deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
-  insertDiarizationRun
+  insertDiarizationRun,
+  recordTemplateRun,
+  getLatestTemplateRun
 } from './database'
 import { computeSpeakerOptions } from './asr/speaker-options-policy'
 import { classifyRunOutcome } from './asr/solo-detection'
 import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
 import { buildAnalysisPrompt, validateAnalysis } from './summarization-prompt'
+import { userTemplates, getTemplateById } from './summarization-templates'
+import { selectTemplateForTranscript, prefilter, hashText } from './summarization-selector'
 import { ProviderRateLimitError } from './provider-errors'
 import { BrowserWindow } from 'electron'
 import { getVectorStore } from './vector-store'
@@ -601,11 +605,113 @@ Meeting ${i + 1}: "${m.subject}"
   // migration / zero-speaker rows. The LLM call + JSON parse are unchanged.
   const analysisInput = buildAttributedTranscript(recordingId) ?? fullText
 
+  // ===== Template resolution (spec §8.4) =====
+  const transcriptRow = getTranscriptByRecordingId(recordingId)
+  const overrideId = transcriptRow?.summarization_template_id ?? null
+  const candidates = userTemplates()
+  const userDefaultId = candidates.find((t) => t.isDefault)?.id ?? null
+  const meetingSubjects = candidateMeetings.map((m) => m.subject)
+  const fullTextHash = hashText(fullText)
+  // The model the summarization/selector LLM actually runs on (getLlmProvider
+  // binds the selector to the SAME provider as the summarizer). Used for the
+  // truthful telemetry write below — there is no separate selector model (FIX 2).
+  const summarizationModel =
+    config.summarization.provider === 'ollama-cloud'
+      ? config.summarization.ollamaCloudModel
+      : config.transcription.geminiModel // gemini summarization reuses the transcription model (spec §5.2)
+
+  let resolvedInstructions = ''
+  let resolvedTemplateId: string | null = null
+  let resolvedTemplateName: string | null = null
+  let resolvedTemplateHash: string | null = null
+  let selectionKind = 'use_default'
+  let selectionConfidence = 0
+  let selectionReason = 'default'
+  let runnerUp: number | undefined
+  let elapsedMs: number | undefined
+  let suggestedJson: string | undefined
+
+  const resolveById = (id: string | null) => {
+    if (!id) return null
+    const t = getTemplateById(id)
+    return t && t.enabled && !t.isBuiltin ? t : null
+  }
+  const applyTemplate = (t: { id: string; name: string; instructions: string }) => {
+    resolvedInstructions = t.instructions
+    resolvedTemplateId = t.id
+    resolvedTemplateName = t.name
+    resolvedTemplateHash = hashText(t.instructions)
+  }
+
+  if (overrideId) {
+    const t = resolveById(overrideId)
+    if (t) {
+      applyTemplate(t)
+      selectionKind = 'manual'
+      selectionConfidence = 1
+      selectionReason = 'manual override'
+    }
+    // else fall through to Default (id gone/disabled)
+  } else if (candidates.length >= 2) {
+    // Selection cache (§5.5): reuse prior selection if full_text unchanged.
+    const prior = getLatestTemplateRun(recordingId)
+    if (prior && prior.fullTextHash === fullTextHash && prior.selectionKind !== 'manual') {
+      const t = prior.templateId ? resolveById(prior.templateId) : null
+      if (t) applyTemplate(t)
+      selectionKind = t ? 'selected' : 'use_default'
+      selectionConfidence = prior.selectionConfidence
+      selectionReason = 'cache: ' + (prior.selectionReason ?? '')
+    } else {
+      // Deterministic prefilter first.
+      const pre = prefilter({ templates: candidates, title: recording.filename, filename: recording.filename, meetingSubjects })
+      if (pre) {
+        const preTemplate = resolveById(pre)
+        if (preTemplate) {
+          applyTemplate(preTemplate)
+          selectionKind = 'selected'
+          selectionConfidence = 1
+          selectionReason = 'prefilter trigger match'
+        }
+      } else {
+        const selLlm = getLlmProvider(config)
+        const sel = await selectTemplateForTranscript(
+          { fullText, meetingSubjects, recordingTitle: recording.filename, filename: recording.filename, templates: candidates, userDefaultId },
+          selLlm
+        )
+        selectionKind = sel.kind
+        selectionConfidence = sel.confidence
+        selectionReason = sel.reason
+        runnerUp = sel.runnerUpConfidence
+        elapsedMs = sel.elapsedMs
+        if (sel.kind === 'selected' && sel.templateId) {
+          const t = resolveById(sel.templateId)
+          if (t) applyTemplate(t)
+          else selectionKind = 'use_default'
+        } else if (sel.kind === 'suggest_new' && sel.suggestedTemplate) {
+          suggestedJson = JSON.stringify(sel.suggestedTemplate)
+        }
+      }
+    }
+  }
+
+  // QA-log the resolution (gated: only in dev when debug output is active).
+  // Main-process services have no direct access to the renderer Zustand store;
+  // use the same always-off-in-prod guard used elsewhere in the main process.
+  if (process.env.NODE_ENV !== 'production') {
+    // Note: the renderer qaLogsEnabled toggle is not accessible from the main
+    // process without an IPC round-trip; log unconditionally in dev as a
+    // best-effort observability trace (low-volume, one log per Stage-2 run).
+    console.log('[QA-MONITOR]', JSON.stringify({
+      kind: selectionKind, confidence: selectionConfidence, runnerUp,
+      provider: config.summarization.provider, model: summarizationModel, elapsedMs
+    }))
+  }
+
   // Now analyze the transcription for summary, action items, etc.
   const analysisPrompt = buildAnalysisPrompt({
     transcript: analysisInput,
-    candidateMeetings: candidateMeetings.map((m) => ({ id: m.id, subject: m.subject }))
-    // instructions intentionally omitted in Phase 1 — template resolution arrives in Phase 3.
+    candidateMeetings: candidateMeetings.map((m) => ({ id: m.id, subject: m.subject })),
+    instructions: resolvedInstructions
   })
 
   const analysisText = await llm.generate(analysisPrompt, { json: true })
@@ -681,6 +787,8 @@ Meeting ${i + 1}: "${m.subject}"
   const isFirstTitle = !preUpdate?.title_suggestion
 
   // Stage-2 write: the single atomic marker write (spec §5.3).
+  // Provenance fields (template_name, template_hash) and the override-consume
+  // (summarization_template_id = NULL) are written atomically in the same UPDATE.
   updateTranscriptStage2(recordingId, {
     summary: analysis.summary,
     action_items: analysis.action_items.length ? JSON.stringify(analysis.action_items) : undefined,
@@ -692,10 +800,28 @@ Meeting ${i + 1}: "${m.subject}"
       : undefined,
     language: analysis.language || 'unknown',
     summarization_provider: config.summarization.provider,
-    summarization_model:
-      config.summarization.provider === 'ollama-cloud'
-        ? config.summarization.ollamaCloudModel
-        : config.transcription.geminiModel // gemini summarization reuses the transcription model (spec §5.2)
+    summarization_model: summarizationModel,
+    template_name: resolvedTemplateName,
+    template_hash: resolvedTemplateHash
+  })
+
+  // Audit: record the selector run on every successful Stage-2 write (including
+  // the Default path where template_id=null and selection_kind='use_default').
+  recordTemplateRun({
+    recordingId,
+    templateId: resolvedTemplateId,
+    selectionKind,
+    selectionConfidence,
+    runnerupConfidence: runnerUp,
+    selectionReason,
+    selectorProvider: config.summarization.provider,
+    // Truthful telemetry (FIX 2): the model the selector actually ran on — the
+    // summarization provider's model. No separate selector model exists.
+    selectorModel: summarizationModel,
+    selectorElapsedMs: elapsedMs,
+    fullTextHash,
+    suggestedTemplateJson: suggestedJson,
+    appliedInstructionsHash: resolvedTemplateHash ?? undefined
   })
   // AI-13: Use standard enum value 'complete' (not 'transcribed').
   // Same point as today (immediately after the Stage-2 UPDATE, before the tail).

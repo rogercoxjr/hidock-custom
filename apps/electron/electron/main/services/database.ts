@@ -3141,6 +3141,10 @@ export function updateTranscriptStage2(recordingId: string, fields: {
   language?: string
   summarization_provider: string
   summarization_model?: string
+  /** Provenance: denormalized display name of the applied template (survives delete/rename). */
+  template_name?: string | null
+  /** Provenance: SHA-256 hex digest of the applied template's instructions. */
+  template_hash?: string | null
 }): void {
   // Existence guard (not getRowsModified(): the run() helper auto-persists
   // after each statement, which resets sql.js's modification counter).
@@ -3157,6 +3161,8 @@ export function updateTranscriptStage2(recordingId: string, fields: {
        title_suggestion = ?, question_suggestions = ?,
        language = COALESCE(language, ?),
        summarization_provider = ?, summarization_model = ?,
+       summarization_template_name = ?, summarization_template_hash = ?,
+       summarization_template_id = NULL,
        created_at = CURRENT_TIMESTAMP
      WHERE recording_id = ?`,
     [
@@ -3169,6 +3175,8 @@ export function updateTranscriptStage2(recordingId: string, fields: {
       fields.language ?? null,
       fields.summarization_provider,
       fields.summarization_model ?? null,
+      fields.template_name ?? null,
+      fields.template_hash ?? null,
       recordingId
     ]
   )
@@ -3183,6 +3191,32 @@ export function clearTranscriptStage2Marker(recordingId: string): void {
     throw new Error(`clearTranscriptStage2Marker: no transcript row for recording ${recordingId}`)
   }
   run('UPDATE transcripts SET summarization_provider = NULL, summarization_model = NULL WHERE recording_id = ?', [recordingId])
+}
+
+/** Phase 4 (Task 13): write the single-shot override column so the worker picks up
+ *  the requested template on its next Stage-2 pass.  The worker's Stage-2 write
+ *  (updateTranscriptStage2) atomically nulls the column after consuming it, ensuring
+ *  it is applied exactly once.  Throws when no transcript row exists so the caller
+ *  (recording-handlers) can surface a proper error rather than a silent no-op. */
+export function setTranscriptTemplateOverride(recordingId: string, templateId: string | null): void {
+  const existing = queryOne<{ id: string }>('SELECT id FROM transcripts WHERE recording_id = ?', [recordingId])
+  if (!existing) {
+    throw new Error(`setTranscriptTemplateOverride: no transcript row for recording ${recordingId}`)
+  }
+  run('UPDATE transcripts SET summarization_template_id = ? WHERE recording_id = ?', [templateId, recordingId])
+}
+
+/** Phase 4 (Task 13): concurrency guard — returns true when the recording has a
+ *  transcription_queue row in `pending` OR `processing` state.  The resummarize
+ *  handler uses this to reject a re-summarize request with "transcription in progress"
+ *  before writing any override, so a rejected call leaves the DB unchanged.
+ *  Spec §8.3 is authoritative: reject-if-in-flight, no last-write-wins. */
+export function hasInFlightQueueItem(recordingId: string): boolean {
+  const row = queryOne<{ c: number }>(
+    "SELECT COUNT(*) AS c FROM transcription_queue WHERE recording_id = ? AND status IN ('pending','processing')",
+    [recordingId]
+  )
+  return (row?.c ?? 0) > 0
 }
 
 /** D5 §6.8: re-transcribe support — clears BOTH stage markers so the worker
@@ -3203,7 +3237,8 @@ export function clearTranscriptForRetranscribe(recordingId: string): void {
            speakers = NULL,
            sentiment = NULL,
            summarization_provider = NULL,
-           summarization_model = NULL
+           summarization_model = NULL,
+           summarization_template_id = NULL
      WHERE recording_id = ?`,
     [recordingId]
   )
@@ -4893,6 +4928,108 @@ export function releaseTranscriptionLock(processId: string): boolean {
     : null
 
   return newProcessId === null
+}
+
+// ── Template-run audit (Task 11) ──────────────────────────────────────────
+
+/** All fields that may be stored for a single template-selector run. */
+export interface TemplateRunRecord {
+  recordingId: string
+  templateId?: string | null
+  selectionKind: string
+  selectionConfidence: number
+  runnerupConfidence?: number
+  candidateScoresJson?: string
+  selectionReason?: string
+  selectorProvider?: string
+  selectorModel?: string
+  selectorElapsedMs?: number
+  fullTextHash?: string
+  suggestedTemplateJson?: string
+  appliedInstructionsHash?: string
+}
+
+/**
+ * Insert an audit row into `transcript_template_runs` for a completed selector run.
+ * The `id` is auto-generated (`tplrun_<uuid>`); `created_at` is set to CURRENT_TIMESTAMP.
+ */
+export function recordTemplateRun(rec: TemplateRunRecord): void {
+  run(
+    `INSERT INTO transcript_template_runs (
+       id, recording_id, template_id, selection_kind, selection_confidence,
+       runnerup_confidence, candidate_scores_json, selection_reason,
+       selector_provider, selector_model, selector_elapsed_ms, full_text_hash,
+       suggested_template_json, applied_instructions_hash, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    [
+      `tplrun_${randomUUID()}`,
+      rec.recordingId,
+      rec.templateId ?? null,
+      rec.selectionKind,
+      rec.selectionConfidence,
+      rec.runnerupConfidence ?? null,
+      rec.candidateScoresJson ?? null,
+      rec.selectionReason ?? null,
+      rec.selectorProvider ?? null,
+      rec.selectorModel ?? null,
+      rec.selectorElapsedMs ?? null,
+      rec.fullTextHash ?? null,
+      rec.suggestedTemplateJson ?? null,
+      rec.appliedInstructionsHash ?? null,
+    ]
+  )
+}
+
+/**
+ * Returns the most-recent template-selector run for the given recording
+ * (ordered by `created_at` DESC, then insertion order via `rowid`),
+ * or `null` when no run exists yet.
+ *
+ * Used as the §5.5 selection cache: if `full_text_hash` matches the current
+ * transcript hash, the caller may reuse the prior selection instead of re-running
+ * the selector.
+ */
+export function getLatestTemplateRun(
+  recordingId: string
+): (TemplateRunRecord & { id: string; createdAt: string }) | null {
+  const r = queryOne<{
+    id: string
+    recording_id: string
+    template_id: string | null
+    selection_kind: string
+    selection_confidence: number
+    runnerup_confidence: number | null
+    candidate_scores_json: string | null
+    selection_reason: string | null
+    selector_provider: string | null
+    selector_model: string | null
+    selector_elapsed_ms: number | null
+    full_text_hash: string | null
+    suggested_template_json: string | null
+    applied_instructions_hash: string | null
+    created_at: string
+  }>(
+    'SELECT * FROM transcript_template_runs WHERE recording_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+    [recordingId]
+  )
+  if (!r) return null
+  return {
+    id: r.id,
+    recordingId: r.recording_id,
+    templateId: r.template_id ?? undefined,
+    selectionKind: r.selection_kind,
+    selectionConfidence: r.selection_confidence,
+    runnerupConfidence: r.runnerup_confidence ?? undefined,
+    candidateScoresJson: r.candidate_scores_json ?? undefined,
+    selectionReason: r.selection_reason ?? undefined,
+    selectorProvider: r.selector_provider ?? undefined,
+    selectorModel: r.selector_model ?? undefined,
+    selectorElapsedMs: r.selector_elapsed_ms ?? undefined,
+    fullTextHash: r.full_text_hash ?? undefined,
+    suggestedTemplateJson: r.suggested_template_json ?? undefined,
+    appliedInstructionsHash: r.applied_instructions_hash ?? undefined,
+    createdAt: r.created_at,
+  }
 }
 
 /**
