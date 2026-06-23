@@ -268,7 +268,8 @@ describe('SpeakersPanel (AC2/AC3)', () => {
           onChanged={vi.fn()}
         />
       )
-      expect(await screen.findByText(/→ Alice/i)).toBeInTheDocument()
+      // Name now leads in the chip (QOL #4 removed the stat-line badge).
+      expect(await screen.findByText('Alice')).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /assign contact to a/i }))
       expect(
         await screen.findByRole('button', { name: /clear assignment for alice/i })

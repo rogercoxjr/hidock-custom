@@ -180,6 +180,12 @@ export function SpeakersPanel({
 
   const readOnly = labels.length <= 1
 
+  // QOL #4: resolve an assigned contact name for a diarization label, or null.
+  // Named resolveName to avoid colliding with the per-row `const displayName`
+  // string declared inside labels.map (~526).
+  const resolveName = (label: string): string | null =>
+    assignedSpeakers?.[label]?.contactName ?? assignedNames?.[label] ?? null
+
   // Group pending suggestions by their primary label.
   useEffect(() => {
     setResolvedIds(new Set())
@@ -568,16 +574,33 @@ export function SpeakersPanel({
                   className="group/jump -my-1 -ml-1 flex shrink-0 items-center gap-1 rounded-sm py-1 pl-1 pr-1.5 transition-colors hover:bg-accent-2-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-2"
                 >
                   <Play className="h-3 w-3 shrink-0 text-ink-muted opacity-0 transition-opacity group-hover/jump:opacity-100 group-hover/jump:text-accent-2" aria-hidden />
-                  <span className="w-8 shrink-0 font-mono text-[13px] font-semibold text-ink group-hover/jump:text-accent-2">{label}</span>
+                  <span className="flex shrink-0 items-center gap-1 font-semibold text-ink group-hover/jump:text-accent-2">
+                    {assignedName ? (
+                      <>
+                        <span className="text-[13px]">{assignedName}</span>
+                        <span data-testid="speaker-letter-tag" className="font-mono text-[11px] text-ink-muted">{label}</span>
+                      </>
+                    ) : (
+                      <span className="w-8 font-mono text-[13px]">{label}</span>
+                    )}
+                  </span>
                 </button>
               ) : (
-                <span className="w-8 shrink-0 font-mono text-[13px] font-semibold text-ink">{label}</span>
+                <span className="flex shrink-0 items-center gap-1 font-semibold text-ink">
+                  {assignedName ? (
+                    <>
+                      <span className="text-[13px]">{assignedName}</span>
+                      <span data-testid="speaker-letter-tag" className="font-mono text-[11px] text-ink-muted">{label}</span>
+                    </>
+                  ) : (
+                    <span className="w-8 font-mono text-[13px]">{label}</span>
+                  )}
+                </span>
               )}
               <span className="flex-1 text-xs text-ink-muted">
                 <span>{count} turns</span>
                 <span> &bull; </span>
                 <span>{formatTalkTime(talkMs)}</span>
-                {assignedName && <span className="ml-2 font-medium text-ink">→ {assignedName}</span>}
               </span>
 
               {!readOnly && (
@@ -694,7 +717,9 @@ export function SpeakersPanel({
                       aria-label={`Merge into ${target.label}`}
                       onClick={() => mergeInto(label, target.label)}
                     >
-                      Merge into {target.label}
+                      {resolveName(target.label)
+                        ? `Merge into ${resolveName(target.label)} (${target.label})`
+                        : `Merge into ${target.label}`}
                     </button>
                   ))}
               </div>
@@ -831,7 +856,16 @@ export function SpeakersPanel({
               key={`${t.startMs}-${t.speaker}`}
               className="relative flex items-start gap-2.5 rounded-lg border border-border bg-surface-sunken/60 p-2.5"
             >
-              <span className="w-6 shrink-0 font-mono text-xs font-semibold text-ink">{t.speaker}</span>
+              <span className="flex w-auto shrink-0 items-center gap-1 text-xs font-semibold text-ink">
+                {resolveName(t.speaker) ? (
+                  <>
+                    <span>{resolveName(t.speaker)}</span>
+                    <span data-testid="speaker-letter-tag" className="font-mono text-ink-muted">{t.speaker}</span>
+                  </>
+                ) : (
+                  <span className="w-6 font-mono">{t.speaker}</span>
+                )}
+              </span>
               <span className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">{t.text}</span>
               <Button
                 variant="ghost"
@@ -854,7 +888,9 @@ export function SpeakersPanel({
                         onClick={() => reassignTurn(i, target.label)}
                         disabled={busy}
                       >
-                        Reassign to {target.label}
+                        {resolveName(target.label)
+                          ? `Reassign to ${resolveName(target.label)} (${target.label})`
+                          : `Reassign to ${target.label}`}
                       </button>
                     ))}
                 </div>
