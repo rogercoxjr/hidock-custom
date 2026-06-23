@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { selectTemplateForTranscript, prefilter, buildSelectorPrompt } from '../summarization-selector'
 import type { LlmProvider } from '../llm/llm-provider'
+import { sermonTemplate, salesTemplate } from './fixtures/templates'
 
 const tpls = [
   { id: 'sales', name: 'Sales', description: 'sales calls', instructions: 'i', exampleTriggers: ['demo'], isDefault: false, isBuiltin: false, enabled: true, createdAt: '', updatedAt: '' },
@@ -99,6 +100,67 @@ describe('selectTemplateForTranscript', () => {
     )
     expect(r.kind).toBe('suggest_new')
     expect(r.suggestedTemplate?.name).toBe('New')
+  })
+})
+
+describe('prefilter searches the transcript excerpt', () => {
+  it('matches a trigger found only in the excerpt (not the filename)', () => {
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'external-2026-06-22-19-00-18',
+      filename: 'external-2026-06-22-19-00-18.m4a',
+      meetingSubjects: [],
+      excerpt: 'Welcome to todays sermon on the book of Romans.',
+    })
+    expect(id).toBe('tpl-sermon')
+  })
+
+  it('trigger in title/filename still matches without excerpt (existing behavior preserved)', () => {
+    // REGRESSION GUARD: the new `excerpt ?? ''` must be APPENDED to the haystack,
+    // not REPLACE it. A trigger present only in the title (no excerpt) must still
+    // match, proving the prior title/filename/subjects matching is intact.
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'Sunday sermon notes',
+      filename: 'x.m4a',
+      meetingSubjects: [],
+      excerpt: '',
+    })
+    expect(id).toBe('tpl-sermon')
+  })
+
+  it('returns null when two templates trigger in the excerpt (ambiguous)', () => {
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'meeting',
+      filename: 'meeting.m4a',
+      meetingSubjects: [],
+      excerpt: 'First the sermon, then we discussed pricing.',
+    })
+    expect(id).toBeNull()
+  })
+
+  it('returns null when no trigger appears anywhere', () => {
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'standup',
+      filename: 'standup.m4a',
+      meetingSubjects: ['daily standup'],
+      excerpt: 'We synced on the sprint backlog.',
+    })
+    expect(id).toBeNull()
+  })
+
+  it('still ignores empty-string triggers (no match-everything)', () => {
+    const emptyTrig = { ...salesTemplate, id: 'tpl-empty', exampleTriggers: [''] }
+    const id = prefilter({
+      templates: [emptyTrig],
+      title: 'x',
+      filename: 'x.m4a',
+      meetingSubjects: [],
+      excerpt: 'literally anything',
+    })
+    expect(id).toBeNull()
   })
 })
 

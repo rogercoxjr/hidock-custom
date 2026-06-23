@@ -218,11 +218,13 @@ export function prefilter(input: {
   title?: string
   filename?: string
   meetingSubjects: string[]
+  excerpt?: string
 }): string | null {
   const haystack = [
     input.title ?? '',
     input.filename ?? '',
     ...input.meetingSubjects,
+    input.excerpt ?? '',
   ].join(' ').toLowerCase()
 
   const matched: string[] = []

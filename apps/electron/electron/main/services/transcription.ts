@@ -42,7 +42,7 @@ import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
 import { buildAnalysisPrompt, validateAnalysis } from './summarization-prompt'
 import { userTemplates, getTemplateById } from './summarization-templates'
-import { selectTemplateForTranscript, prefilter, hashText } from './summarization-selector'
+import { selectTemplateForTranscript, prefilter, buildExcerpt, hashText } from './summarization-selector'
 import { ProviderRateLimitError } from './provider-errors'
 import { BrowserWindow } from 'electron'
 import { getVectorStore } from './vector-store'
@@ -663,7 +663,7 @@ Meeting ${i + 1}: "${m.subject}"
       selectionReason = 'cache: ' + (prior.selectionReason ?? '')
     } else {
       // Deterministic prefilter first.
-      const pre = prefilter({ templates: candidates, title: recording.filename, filename: recording.filename, meetingSubjects })
+      const pre = prefilter({ templates: candidates, title: recording.filename, filename: recording.filename, meetingSubjects, excerpt: buildExcerpt(fullText) })
       if (pre) {
         const preTemplate = resolveById(pre)
         if (preTemplate) {
