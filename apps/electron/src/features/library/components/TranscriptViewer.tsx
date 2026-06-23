@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useMemo, useState } from 'react'
 import { TimeAnchor } from './TimeAnchor'
-import { ChevronDown, ChevronRight, ListOrdered, Users } from 'lucide-react'
+import { ArrowUp, ChevronDown, ChevronRight, ListOrdered, Users } from 'lucide-react'
 import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
 import { SegmentedToggle } from '@/components/ui/segmented-toggle'
@@ -131,6 +131,8 @@ function parseTranscriptSegments(transcript: string): TranscriptSegment[] {
   return segments
 }
 
+const RETURN_TO_TOP_THRESHOLD = 300
+
 export function TranscriptViewer({
   transcript,
   turns,
@@ -146,6 +148,7 @@ export function TranscriptViewer({
   const [actionItemsExpanded, setActionItemsExpanded] = useState(true)
   const [transcriptExpanded, setTranscriptExpanded] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
+  const [showTop, setShowTop] = useState(false)
 
   const hasStructuredTurns = !!turns && turns.length > 0
 
@@ -220,6 +223,26 @@ export function TranscriptViewer({
     }
   }, [currentSegmentIndex, viewMode])
 
+  // QOL #1: show a floating "back to top" control once the transcript scrolls past
+  // RETURN_TO_TOP_THRESHOLD. Listener lives on the scroll container (containerRef).
+  // Deps = [transcriptExpanded]: containerRef's div only exists while the transcript
+  // section is expanded. When collapsed, containerRef.current is null; re-binding on
+  // re-expansion re-attaches to the freshly mounted element. Deps must NOT be [] (the
+  // listener would never re-attach after a collapse/expand cycle) and need NOT include
+  // viewMode (the scroll container is the same element across timeline/by-speaker — the
+  // toggle swaps only its children — so the listener stays bound when the view changes).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) {
+      setShowTop(false)
+      return
+    }
+    const onScroll = () => setShowTop(el.scrollTop > RETURN_TO_TOP_THRESHOLD)
+    onScroll()
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [transcriptExpanded])
+
   // If transcript has no timestamps, render as plain text
   const hasTimestamps = hasStructuredTurns || segments.length > 1 || (segments.length === 1 && segments[0].startMs > 0)
 
@@ -271,7 +294,8 @@ export function TranscriptViewer({
           )}
         </button>
         {transcriptExpanded && (
-          <div ref={containerRef} className="mt-2 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-xs">
+          <div className="relative">
+            <div ref={containerRef} className="mt-2 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-xs">
             {hasTimestamps ? (
               <div className="space-y-4">
                 {/* View-mode toggle (timeline / by speaker) — only when grouping is meaningful */}
@@ -412,6 +436,18 @@ export function TranscriptViewer({
               </div>
             ) : (
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcript}</p>
+            )}
+            </div>
+            {showTop && (
+              <button
+                type="button"
+                aria-label="Back to top"
+                title="Back to top"
+                onClick={() => containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface shadow-md transition-colors hover:bg-surface-hover"
+              >
+                <ArrowUp className="h-4 w-4 text-ink-muted" />
+              </button>
             )}
           </div>
         )}
