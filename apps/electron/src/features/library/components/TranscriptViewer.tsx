@@ -21,9 +21,7 @@ interface TranscriptViewerProps {
   speakerNames?: Record<string, string>
   currentTimeMs?: number
   onSeek: (startMs: number, endMs?: number) => void
-  showSummary?: boolean
   showActionItems?: boolean
-  summary?: string
   actionItems?: string[]
 }
 
@@ -139,15 +137,12 @@ export function TranscriptViewer({
   speakerNames,
   currentTimeMs,
   onSeek,
-  showSummary = true,
   showActionItems = true,
-  summary,
   actionItems
 }: TranscriptViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const activeSegmentRef = useRef<HTMLDivElement>(null)
 
-  const [summaryExpanded, setSummaryExpanded] = useState(true)
   const [actionItemsExpanded, setActionItemsExpanded] = useState(true)
   const [transcriptExpanded, setTranscriptExpanded] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
@@ -234,29 +229,6 @@ export function TranscriptViewer({
 
   return (
     <div className="space-y-4">
-      {/* Summary Section */}
-      {showSummary && summary && (
-        <div>
-          <button
-            onClick={() => setSummaryExpanded(!summaryExpanded)}
-            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
-            aria-expanded={summaryExpanded}
-          >
-            <Eyebrow tone="muted">Summary</Eyebrow>
-            {summaryExpanded ? (
-              <ChevronDown className="h-4 w-4 text-ink-muted" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-ink-muted" />
-            )}
-          </button>
-          {summaryExpanded && (
-            <div className="mt-2 rounded-lg border border-border bg-surface p-3 shadow-xs">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{summary}</p>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Action Items Section */}
       {showActionItems && actionItems && actionItems.length > 0 && (
         <div>
