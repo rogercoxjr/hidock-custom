@@ -43,6 +43,28 @@ describe('selectTemplateForTranscript', () => {
     expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
     expect(generate).not.toHaveBeenCalled()
   })
+  it('Step-1 prefilter content-routes on a trigger only in fullText (preview == worker)', async () => {
+    // AC4: previewSelection calls this function directly. With a generic
+    // title/filename but the trigger word ('sermon') ONLY in the transcript
+    // body, the Step-1 prefilter must resolve via the excerpt — identically to
+    // the live worker — WITHOUT invoking the LLM.
+    const generate = vi.fn(async () => '{}')
+    const llm: LlmProvider = { generate }
+    const r = await selectTemplateForTranscript(
+      {
+        fullText: 'Welcome to todays sermon on the book of Romans. '.repeat(5),
+        meetingSubjects: [],
+        recordingTitle: 'external-2026-06-22-19-00-18',
+        filename: 'external-2026-06-22-19-00-18.m4a',
+        templates: [sermonTemplate, salesTemplate],
+        userDefaultId: null,
+      },
+      llm
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'tpl-sermon' })
+    expect(r.reason).toContain('prefilter')
+    expect(generate).not.toHaveBeenCalled()
+  })
   it('returns promptly on success without waiting for the timeout (timer cleared)', async () => {
     // generate resolves immediately; a huge timeoutMs would hang the test if the
     // timer were not cleared on success. elapsedMs must be far below the timeout.

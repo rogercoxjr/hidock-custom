@@ -368,12 +368,18 @@ export async function selectTemplateForTranscript(
   }
 
   try {
+    // Computed once and shared by both the Step-1 prefilter (so the preview /
+    // dry-run content-routes identically to the live worker) and the Step-2
+    // length guard + LLM prompt below.
+    const excerpt = buildExcerpt(input.fullText)
+
     // ── Step 1: zero-LLM prefilter ────────────────────────────────────────
     const prefilterId = prefilter({
       templates: input.templates,
       title: input.recordingTitle,
       filename: input.filename,
       meetingSubjects: input.meetingSubjects,
+      excerpt,
     })
     if (prefilterId !== null) {
       return {
@@ -386,7 +392,6 @@ export async function selectTemplateForTranscript(
     }
 
     // ── Step 2: excerpt + length guard ────────────────────────────────────
-    const excerpt = buildExcerpt(input.fullText)
     if (excerpt.length < SELECTOR_EXCERPT_MIN_CHARS) {
       return failSafe('too-short')
     }
