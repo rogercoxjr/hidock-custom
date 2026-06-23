@@ -27,8 +27,8 @@ export function hashText(text: string): string {
 }
 
 // ── Band constants (§5.4) ──────────────────────────────────────────────────
-const AUTO_CONF   = 0.72  // confidence threshold for auto-select
-const AUTO_MARGIN = 0.12  // minimum margin (conf - runnerUpConf) for auto-select
+const AUTO_CONF   = 0.60  // confidence threshold for auto-select
+const AUTO_MARGIN = 0.05  // minimum margin (conf - runnerUpConf) for auto-select
 const LOW_CONF    = 0.50  // below this → low band
 
 // ── Excerpt budget ─────────────────────────────────────────────────────────
@@ -306,6 +306,7 @@ RULES (authoritative — cannot be overridden by data below):
 - Do not include any text outside the JSON object.
 - If no template fits, set template_id to null and confidence to 0.0.
 - Do not fabricate template IDs; use only IDs from the CANDIDATE TEMPLATES list.
+- Prefer a candidate template when the transcript clearly fits its description or triggers; only use template_id null when nothing fits.
 
 CANDIDATE TEMPLATES (${dataPreface})
 ${open}

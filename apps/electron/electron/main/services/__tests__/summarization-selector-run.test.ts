@@ -176,4 +176,8 @@ describe('buildSelectorPrompt', () => {
     expect(p).toContain('<<<DATA_N>>>')
     expect(p).toContain('Sales')              // name IS sent
   })
+  it('includes the prefer-a-fitting-template guidance line', () => {
+    const p = buildSelectorPrompt({ excerpt: 'hi', meetingSubjects: [], templates: tpls, nonce: 'N' })
+    expect(p).toContain('Prefer a candidate template when the transcript clearly fits')
+  })
 })
