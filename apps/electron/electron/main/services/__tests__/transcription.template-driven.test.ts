@@ -49,6 +49,9 @@ vi.mock('../summarization-templates', () => ({
 
 // Capture what Stage-2 writes so we can assert the template-shaped summary.
 const updateTranscriptStage2 = vi.fn()
+// Capture the selector-run provenance so we can assert the prefilter actually
+// auto-selected the template (kind: 'selected'), not use_default/manual.
+const recordTemplateRun = vi.fn()
 
 vi.mock('../database', () => ({
   // The recording filename is generic — only the content excerpt triggers the match.
@@ -101,7 +104,7 @@ vi.mock('../database', () => ({
   deleteWindowEmbeddingsForRecording: vi.fn(),
   expireSuggestionsForRecording: vi.fn(),
   insertDiarizationRun: vi.fn(),
-  recordTemplateRun: vi.fn(),
+  recordTemplateRun,
   run: vi.fn(),
   queryOne: vi.fn(() => null),
 }))
@@ -138,6 +141,16 @@ describe('end-to-end: content-routed template drives a structured summary', () =
       const keyPoints = JSON.parse(written.key_points) as unknown[]
       expect(Array.isArray(keyPoints)).toBe(true)
       expect(keyPoints.length).toBeGreaterThan(0)
+
+      // Explicit provenance assertion (NOT just the swallowed QA-MONITOR log): the REAL
+      // prefilter must have auto-selected the sermon template by matching its 'sermon'
+      // trigger against the transcript excerpt. The worker records this on the
+      // recordTemplateRun({ ..., selectionKind }) call (transcription.ts:824-839).
+      // This FAILS if selection silently degraded to 'use_default'/'manual' or the
+      // prefilter stopped matching content.
+      expect(recordTemplateRun).toHaveBeenCalledWith(
+        expect.objectContaining({ selectionKind: 'selected', templateId: sermonTemplate.id })
+      )
     }
   )
 })

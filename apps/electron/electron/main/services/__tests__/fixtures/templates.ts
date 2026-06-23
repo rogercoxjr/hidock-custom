@@ -4,6 +4,8 @@ export const sermonTemplate: SummarizationTemplate = {
   id: 'tpl-sermon',
   name: 'Church Sermon',
   description: 'Sermon summarization',
+  // Any non-empty `instructions` value drives the template path in buildAnalysisPrompt
+  // (emits the SUMMARY & EMPHASIS INSTRUCTIONS frame); the exact text is not asserted.
   instructions: 'sermon guidance',
   exampleTriggers: ['sermon'],
   isDefault: false,
