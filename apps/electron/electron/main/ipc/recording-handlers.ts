@@ -42,8 +42,7 @@ import {
   expireSuggestionsForRecording,
   rependFailedItems,
   isSummaryStale,
-  setTranscriptTemplateOverride,
-  hasInFlightQueueItem
+  setTranscriptTemplateOverride
 } from '../services/database'
 import { getConfig } from '../services/config'
 import {
@@ -446,9 +445,11 @@ export function registerRecordingHandlers(): void {
       const result = ResummarizeSchema.safeParse(normalized)
       if (!result.success) throw new Error(result.error.issues[0]?.message || 'Invalid request')
       const { recordingId, templateId } = result.data
-      // §8.3 concurrency guard — check BEFORE any write so a rejected call leaves DB unchanged.
-      if (hasInFlightQueueItem(recordingId)) {
-        return { success: false, error: 'transcription in progress' }
+      // §8.3 transcript-existence guard — block only when no transcript exists yet.
+      // Re-summarize is Stage-2-only; it must not be blocked by a parked Stage-1 queue item.
+      const existingForGuard = getTranscriptByRecordingId(recordingId)
+      if (!existingForGuard || !existingForGuard.full_text || !existingForGuard.full_text.trim()) {
+        return { success: false, error: 'No transcript to summarize yet — transcribe this recording first.' }
       }
       // FIX 3: ALWAYS reset the single-shot override to the requested value (null when
       // none requested). The success-path nulling lives in updateTranscriptStage2, so a

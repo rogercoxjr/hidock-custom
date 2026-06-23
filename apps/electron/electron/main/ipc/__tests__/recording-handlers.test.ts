@@ -1227,9 +1227,10 @@ describe('Recording IPC Handlers', () => {
     // spec §5.3/§5.6: clears the stage marker (keeping the old summary) and
     // enqueues — the worker's resume rule runs Stage 2 only.
     it('clears the stage marker, enqueues, and triggers the queue processor', async () => {
-      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      const { clearTranscriptStage2Marker, addToQueue, getTranscriptByRecordingId } = await import('../../services/database')
       const { processQueueManually } = await import('../../services/transcription')
       const recId = '550e8400-e29b-41d4-a716-446655440000'
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Transcript.' } as any)
 
       const result = await handlers['transcription:resummarize'](null, recId)
 
@@ -1251,8 +1252,9 @@ describe('Recording IPC Handlers', () => {
     })
 
     it('surfaces a clear-marker failure as an error result', async () => {
-      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      const { clearTranscriptStage2Marker, addToQueue, getTranscriptByRecordingId } = await import('../../services/database')
       const recId = '550e8400-e29b-41d4-a716-446655440000'
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Transcript.' } as any)
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => {
         throw new Error('no transcript row for recording')
       })
@@ -1267,9 +1269,10 @@ describe('Recording IPC Handlers', () => {
     // Each test resets clearTranscriptStage2Marker to the default (no-op) in case
     // a sibling test above set a throwing mockImplementation that clearAllMocks() does not undo.
     it('accepts object payload { recordingId } (back-compat object form)', async () => {
-      const { clearTranscriptStage2Marker, addToQueue } = await import('../../services/database')
+      const { clearTranscriptStage2Marker, addToQueue, getTranscriptByRecordingId } = await import('../../services/database')
       const { processQueueManually } = await import('../../services/transcription')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Transcript.' } as any)
       const recId = '550e8400-e29b-41d4-a716-446655440000'
 
       const result = await handlers['transcription:resummarize'](null, { recordingId: recId })
@@ -1282,9 +1285,10 @@ describe('Recording IPC Handlers', () => {
 
     // Task 13 (Phase 4): templateId is now threaded — setTranscriptTemplateOverride is called.
     it('accepts object payload { recordingId, templateId } and writes the override', async () => {
-      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride } = await import('../../services/database')
+      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, getTranscriptByRecordingId } = await import('../../services/database')
       const { processQueueManually } = await import('../../services/transcription')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Transcript.' } as any)
       const recId = '550e8400-e29b-41d4-a716-446655440000'
 
       const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: 'tmpl-abc' })
@@ -1297,8 +1301,9 @@ describe('Recording IPC Handlers', () => {
     })
 
     it('accepts object payload { recordingId, templateId: null } and writes null override', async () => {
-      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride } = await import('../../services/database')
+      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, getTranscriptByRecordingId } = await import('../../services/database')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Transcript.' } as any)
       const recId = '550e8400-e29b-41d4-a716-446655440000'
 
       const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: null })
@@ -1320,43 +1325,60 @@ describe('Recording IPC Handlers', () => {
       expect(addToQueue).not.toHaveBeenCalled()
     })
 
-    // Task 13 (Phase 4): concurrency guard — spec §8.3 reject-if-in-flight.
-    it('pending in-flight → rejects with "transcription in progress", override NOT written, no enqueue', async () => {
-      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, hasInFlightQueueItem } =
+    // Task 13 (Phase 4): transcript-existence guard — spec §8.3 updated to block only on missing transcript.
+    it('in-flight queue row with full_text present → PROCEEDS (override written, marker cleared, enqueued)', async () => {
+      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, getTranscriptByRecordingId } =
         await import('../../services/database')
+      const { processQueueManually } = await import('../../services/transcription')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
-      vi.mocked(hasInFlightQueueItem).mockReturnValue(true) // pending in-flight
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Transcript text here.' } as any)
       const recId = '550e8400-e29b-41d4-a716-446655440000'
 
       const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: 'tmpl-t2' })
 
-      expect(result).toEqual({ success: false, error: 'transcription in progress' })
-      expect(setTranscriptTemplateOverride).not.toHaveBeenCalled()  // guard ran before write
-      expect(clearTranscriptStage2Marker).not.toHaveBeenCalled()
-      expect(addToQueue).not.toHaveBeenCalled()
+      expect(result).toEqual({ success: true })
+      expect(setTranscriptTemplateOverride).toHaveBeenCalledWith(recId, 'tmpl-t2')
+      expect(clearTranscriptStage2Marker).toHaveBeenCalledWith(recId)
+      expect(addToQueue).toHaveBeenCalledWith(recId)
+      expect(processQueueManually).toHaveBeenCalled()
     })
 
-    it('processing in-flight → rejects with "transcription in progress", override NOT written, no enqueue', async () => {
-      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, hasInFlightQueueItem } =
+    it('no transcript (null) → rejects with "No transcript to summarize yet", no write, no enqueue', async () => {
+      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, getTranscriptByRecordingId } =
         await import('../../services/database')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
-      vi.mocked(hasInFlightQueueItem).mockReturnValue(true) // processing in-flight
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue(undefined)
       const recId = '550e8400-e29b-41d4-a716-446655440000'
 
       const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: 'tmpl-t2' })
 
-      expect(result).toEqual({ success: false, error: 'transcription in progress' })
+      expect(result).toEqual({ success: false, error: 'No transcript to summarize yet — transcribe this recording first.' })
       expect(setTranscriptTemplateOverride).not.toHaveBeenCalled()
       expect(clearTranscriptStage2Marker).not.toHaveBeenCalled()
       expect(addToQueue).not.toHaveBeenCalled()
     })
 
-    it('idle → accepts: override written, marker cleared, queue enqueued', async () => {
-      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, hasInFlightQueueItem } =
+    it('empty full_text → rejects with "No transcript to summarize yet", no write, no enqueue', async () => {
+      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, getTranscriptByRecordingId } =
+        await import('../../services/database')
+      vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: '   ' } as any)
+      const recId = '550e8400-e29b-41d4-a716-446655440000'
+
+      const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: 'tmpl-t2' })
+
+      expect(result).toEqual({ success: false, error: 'No transcript to summarize yet — transcribe this recording first.' })
+      expect(setTranscriptTemplateOverride).not.toHaveBeenCalled()
+      expect(clearTranscriptStage2Marker).not.toHaveBeenCalled()
+      expect(addToQueue).not.toHaveBeenCalled()
+    })
+
+    it('transcript exists → accepts: override written, marker cleared, queue enqueued', async () => {
+      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, getTranscriptByRecordingId } =
         await import('../../services/database')
       const { processQueueManually } = await import('../../services/transcription')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
-      vi.mocked(hasInFlightQueueItem).mockReturnValue(false) // no in-flight
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Transcript text.' } as any)
       const recId = '550e8400-e29b-41d4-a716-446655440000'
 
       const result = await handlers['transcription:resummarize'](null, { recordingId: recId, templateId: 'tmpl-t2' })
@@ -1372,10 +1394,10 @@ describe('Recording IPC Handlers', () => {
     // override to null so a stale single-shot override left by a FAILED Stage-2
     // never silently applies a template the user didn't request this run.
     it('no templateId in payload → setTranscriptTemplateOverride(recId, null) clears any stale override', async () => {
-      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, hasInFlightQueueItem } =
+      const { clearTranscriptStage2Marker, addToQueue, setTranscriptTemplateOverride, getTranscriptByRecordingId } =
         await import('../../services/database')
       vi.mocked(clearTranscriptStage2Marker).mockImplementation(() => undefined)
-      vi.mocked(hasInFlightQueueItem).mockReturnValue(false)
+      vi.mocked(getTranscriptByRecordingId).mockReturnValue({ full_text: 'Some transcript.' } as any)
       const recId = '550e8400-e29b-41d4-a716-446655440000'
 
       const result = await handlers['transcription:resummarize'](null, recId)
