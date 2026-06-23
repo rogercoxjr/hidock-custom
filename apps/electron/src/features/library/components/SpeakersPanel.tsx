@@ -132,6 +132,8 @@ export function SpeakersPanel({
   const [openReassignTurn, setOpenReassignTurn] = useState<number | null>(null)
   // The per-turn reassign list can be long; collapsed by default.
   const [turnsExpanded, setTurnsExpanded] = useState(false)
+  // Panel-level collapse: default expanded so all speaker rows are visible.
+  const [panelExpanded, setPanelExpanded] = useState(true)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   // Optimistically hide suggestions the user just resolved (confirm/dismiss) so the chip
@@ -508,13 +510,28 @@ export function SpeakersPanel({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Eyebrow tone="muted">Speakers</Eyebrow>
+        <button
+          type="button"
+          onClick={() => setPanelExpanded((v) => !v)}
+          aria-expanded={panelExpanded}
+          aria-label={`${panelExpanded ? 'Collapse' : 'Expand'} speakers panel`}
+          className="flex items-center gap-2 rounded-sm transition-colors hover:bg-surface-hover"
+        >
+          <Eyebrow tone="muted">Speakers</Eyebrow>
+          {panelExpanded ? (
+            <ChevronDown className="h-4 w-4 text-ink-muted" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-ink-muted" />
+          )}
+        </button>
         {visibleSuggestions.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => void dismissAllSuggestions()} disabled={busy}>
             Dismiss all suggestions
           </Button>
         )}
       </div>
+      {panelExpanded && (
+      <>
       {!enableVoiceprintCapture && (
         <p className="text-xs italic text-ink-muted">
           Voice memory is off — assignments won&apos;t be remembered. Enable in Settings → Privacy.
@@ -847,6 +864,8 @@ export function SpeakersPanel({
           </div>
           )}
         </div>
+      )}
+      </>
       )}
 
       <AlertDialog open={unbankDialogOpen} onOpenChange={setUnbankDialogOpen}>
