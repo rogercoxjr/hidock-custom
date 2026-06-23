@@ -149,6 +149,7 @@ export function TranscriptViewer({
   const [transcriptExpanded, setTranscriptExpanded] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
   const [showTop, setShowTop] = useState(false)
+  const [collapsedSpeakers, setCollapsedSpeakers] = useState<Set<string>>(new Set())
 
   const hasStructuredTurns = !!turns && turns.length > 0
 
@@ -212,6 +213,15 @@ export function TranscriptViewer({
 
     return { groups, totalDurationMs }
   }, [segments, speakerNames])
+
+  const toggleSpeaker = (key: string) => {
+    setCollapsedSpeakers((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   // Auto-scroll to current segment during playback (timeline view only)
   useEffect(() => {
@@ -398,43 +408,63 @@ export function TranscriptViewer({
                     </div>
 
                     {/* per-speaker cards */}
-                    {speakerGroups.groups.map((g) => (
-                      <div key={g.key} className="rounded-lg border border-border bg-surface p-3 shadow-xs">
-                        <div className="mb-3 flex items-center gap-3">
-                          <PersonAvatar name={g.name} color={g.color} size={30} />
-                          <div className="min-w-0 flex-1">
-                            <span className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
-                              {g.name}
-                            </span>
-                            <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
-                              {formatTimestamp(g.durationMs / 1000)} · {g.segCount} segment{g.segCount === 1 ? '' : 's'} · {Math.round(g.pct * 100)}%
+                    {speakerGroups.groups.map((g) => {
+                      const collapsed = collapsedSpeakers.has(g.key)
+                      return (
+                        <div key={g.key} className="rounded-lg border border-border bg-surface p-3 shadow-xs">
+                          <div className="mb-3 flex items-center gap-3">
+                            <PersonAvatar name={g.name} color={g.color} size={30} />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
+                                {g.name}
+                              </span>
+                              <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
+                                {formatTimestamp(g.durationMs / 1000)} · {g.segCount} segment{g.segCount === 1 ? '' : 's'} · {Math.round(g.pct * 100)}%
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleSpeaker(g.key)}
+                              aria-expanded={!collapsed}
+                              aria-label={`${collapsed ? 'Expand' : 'Collapse'} speaker ${g.name}`}
+                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-surface-hover"
+                            >
+                              {collapsed ? (
+                                <ChevronRight className="h-4 w-4 text-ink-muted" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-ink-muted" />
+                              )}
+                            </button>
                           </div>
+                          {!collapsed && (
+                            <>
+                              {/* per-speaker talk-time bar */}
+                              <div className="mb-3.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{ width: `${Math.max(g.pct * 100, 1)}%`, background: g.color }}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                {g.segments.map((seg, j) => (
+                                  <div key={j} className="flex gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover">
+                                    <TimeAnchor
+                                      startMs={seg.startMs}
+                                      endMs={seg.endMs}
+                                      onSeek={onSeek}
+                                      className="w-11 flex-none px-0 text-[11px] no-underline hover:underline"
+                                    >
+                                      {null}
+                                    </TimeAnchor>
+                                    <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-foreground">{seg.text}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
                         </div>
-                        {/* per-speaker talk-time bar */}
-                        <div className="mb-3.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${Math.max(g.pct * 100, 1)}%`, background: g.color }}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {g.segments.map((seg, j) => (
-                            <div key={j} className="flex gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover">
-                              <TimeAnchor
-                                startMs={seg.startMs}
-                                endMs={seg.endMs}
-                                onSeek={onSeek}
-                                className="w-11 flex-none px-0 text-[11px] no-underline hover:underline"
-                              >
-                                {null}
-                              </TimeAnchor>
-                              <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-foreground">{seg.text}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
