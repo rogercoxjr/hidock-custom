@@ -339,6 +339,7 @@ export interface ElectronAPI {
     getByRecordingIds: (recordingIds: string[]) => Promise<Record<string, any>>
     search: (query: string) => Promise<any[]>
     updateTurns: (request: { recordingId: string; turns: unknown[] }) => Promise<Result<{ recordingId: string }>>
+    export: (recordingId: string, format: 'csv' | 'srt' | 'json') => Promise<Result<string | null>>
   }
 
   // Database - Queue
@@ -828,7 +829,8 @@ const electronAPI: ElectronAPI = {
     getByRecordingId: (recordingId) => callIPC('db:get-transcript', recordingId),
     getByRecordingIds: (recordingIds) => callIPC('db:get-transcripts-by-recording-ids', recordingIds),
     search: (query) => callIPC('db:search-transcripts', query),
-    updateTurns: (request) => callIPC('transcripts:updateTurns', request)
+    updateTurns: (request) => callIPC('transcripts:updateTurns', request),
+    export: (recordingId, format) => callIPC('transcripts:export', { recordingId, format })
   },
 
   queue: {

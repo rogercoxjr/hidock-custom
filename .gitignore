@@ -207,3 +207,6 @@ nul
 
 # diarization tuning spike (throwaway)
 apps/electron/scripts/aai-diarization-tune.mjs
+
+# SDD scratch (briefs/reports/ledgers) — never commit, at any depth
+.superpowers/

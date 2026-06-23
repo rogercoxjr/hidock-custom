@@ -87,6 +87,7 @@ export type ErrorCode =
   | 'INTERNAL_ERROR'
   | 'UNAUTHORIZED'
   | 'RATE_LIMITED'
+  | 'NOT_DIARIZED'
 
 // =============================================================================
 // RAG Filter Types
