@@ -56,6 +56,14 @@ export function setMainWindowForTranscription(win: BrowserWindow): void {
   mainWindow = win
 }
 
+/**
+ * Truthful queue-pickup label: a Stage-2-only resume short-circuits ASR, so it is a
+ * re-summarize, not a re-transcribe. Stage-1 (fresh / re-transcribe) keeps "Transcribing:".
+ */
+export function getQueuePickupLabel(filename: string, stage2Only: boolean): string {
+  return stage2Only ? `Re-summarizing: ${filename}` : `Transcribing: ${filename}`
+}
+
 export function startTranscriptionProcessor(): void {
   if (processingInterval) {
     console.log('Transcription processor already running')
@@ -448,7 +456,6 @@ async function transcribeRecording(
     return
   }
 
-  console.log(`Transcribing: ${recording.filename}`)
   // AI-13: Use standard enum values matching Recording.transcription_status
   updateRecordingTranscriptionStatus(recordingId, 'processing')
 
@@ -458,6 +465,7 @@ async function transcribeRecording(
 
   // Resume rule (spec §5.3): full_text set + marker NULL -> run Stage 2 only.
   const stage2Only = Boolean(existing?.full_text && !existing.summarization_provider)
+  console.log(getQueuePickupLabel(recording.filename, stage2Only))
   let fullText: string
 
   if (stage2Only) {
