@@ -663,7 +663,13 @@ Meeting ${i + 1}: "${m.subject}"
       selectionReason = 'cache: ' + (prior.selectionReason ?? '')
     } else {
       // Deterministic prefilter first.
-      const pre = prefilter({ templates: candidates, title: recording.filename, filename: recording.filename, meetingSubjects, excerpt: buildExcerpt(fullText) })
+      const pre = prefilter({
+        templates: candidates,
+        title: recording.filename,
+        filename: recording.filename,
+        meetingSubjects,
+        excerpt: buildExcerpt(fullText),
+      })
       if (pre) {
         const preTemplate = resolveById(pre)
         if (preTemplate) {

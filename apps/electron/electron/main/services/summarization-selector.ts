@@ -208,7 +208,8 @@ const SELECTOR_DEFAULT_TIMEOUT_MS = 8000
 /**
  * Deterministic zero-LLM pre-filter.
  *
- * Builds a single lowercase haystack from title + filename + meetingSubjects.
+ * Builds a single lowercase haystack from title + filename + meetingSubjects +
+ * (optional) transcript excerpt.
  * For each enabled template, checks whether any of its exampleTriggers is a
  * substring of the haystack (case-insensitive). Returns the id of the UNIQUE
  * matching template, or null if zero or more-than-one match.
