@@ -14,7 +14,7 @@ describe('TranscriptViewer — return-to-top (QOL #1)', () => {
     expect(screen.queryByRole('button', { name: /back to top/i })).not.toBeInTheDocument()
 
     // the scroll container is the element with overflow-y-auto + max-h-[60vh]
-    const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+    const container = screen.getByTestId('transcript-scroll-container') as HTMLDivElement
     expect(container).toBeTruthy()
     const scrollTo = vi.fn()
     container.scrollTo = scrollTo as unknown as typeof container.scrollTo
@@ -25,6 +25,10 @@ describe('TranscriptViewer — return-to-top (QOL #1)', () => {
 
     const btn = screen.getByRole('button', { name: /back to top/i })
     expect(btn).toBeInTheDocument()
+    // structural guard: the button must live on the relative parent, NOT inside the
+    // scrolling child (jsdom has no layout engine, so a role/name query alone would
+    // still pass if a future change re-nested the button where it would scroll away).
+    expect(container.contains(btn)).toBe(false)
 
     fireEvent.click(btn)
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
@@ -35,7 +39,7 @@ describe('TranscriptViewer — return-to-top (QOL #1)', () => {
 
   it('hides the button again when scrolled back under the threshold', () => {
     render(<TranscriptViewer transcript="" turns={makeTwoSpeakerTurns()} onSeek={vi.fn()} />)
-    const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+    const container = screen.getByTestId('transcript-scroll-container') as HTMLDivElement
     Object.defineProperty(container, 'scrollTop', { value: 500, configurable: true })
     fireEvent.scroll(container)
     expect(screen.getByRole('button', { name: /back to top/i })).toBeInTheDocument()

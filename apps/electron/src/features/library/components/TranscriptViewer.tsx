@@ -295,7 +295,11 @@ export function TranscriptViewer({
         </button>
         {transcriptExpanded && (
           <div className="relative">
-            <div ref={containerRef} className="mt-2 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-xs">
+            <div
+              ref={containerRef}
+              data-testid="transcript-scroll-container"
+              className="mt-2 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-xs"
+            >
             {hasTimestamps ? (
               <div className="space-y-4">
                 {/* View-mode toggle (timeline / by speaker) — only when grouping is meaningful */}
