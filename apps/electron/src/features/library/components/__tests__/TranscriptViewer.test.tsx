@@ -18,7 +18,7 @@ function makeTurns(): Turn[] {
 describe('TranscriptViewer — structured turns (AC3/AC8)', () => {
   it('renders structured turns with speaker badges when turns present', () => {
     render(
-      <TranscriptViewer transcript="ignored flat text" turns={makeTurns()} onSeek={vi.fn()} showSummary={false} />
+      <TranscriptViewer transcript="ignored flat text" turns={makeTurns()} onSeek={vi.fn()} />
     )
     expect(screen.getByText('Opening remarks.')).toBeInTheDocument()
     expect(screen.getByText('A reply.')).toBeInTheDocument()
@@ -36,7 +36,6 @@ describe('TranscriptViewer — structured turns (AC3/AC8)', () => {
         turns={makeTurns()}
         speakerNames={{ A: 'Alice', B: 'Bob' }}
         onSeek={vi.fn()}
-        showSummary={false}
       />
     )
     expect(screen.getByText('Alice')).toBeInTheDocument()
@@ -50,7 +49,6 @@ describe('TranscriptViewer — structured turns (AC3/AC8)', () => {
       <TranscriptViewer
         transcript={'[00:00] Alice: Hello\n[00:05] Bob: Hi'}
         onSeek={vi.fn()}
-        showSummary={false}
       />
     )
     // legacy parser extracts "Alice"/"Bob" as text-prefix speakers
@@ -61,7 +59,24 @@ describe('TranscriptViewer — structured turns (AC3/AC8)', () => {
   })
 
   it('REGRESSION: plain text (no timestamps, no turns) renders as a single block (AC8)', () => {
-    render(<TranscriptViewer transcript="Just some plain text." onSeek={vi.fn()} showSummary={false} />)
+    render(<TranscriptViewer transcript="Just some plain text." onSeek={vi.fn()} />)
     expect(screen.getByText('Just some plain text.')).toBeInTheDocument()
+  })
+})
+
+describe('TranscriptViewer — no summary section (QOL #5)', () => {
+  it('does not render a Summary section even when a summary string would have been passed', () => {
+    render(
+      <TranscriptViewer
+        transcript="Plain transcript body."
+        actionItems={['Do the thing']}
+        showActionItems
+        onSeek={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Summary')).not.toBeInTheDocument()
+    // Action items remain owned by TranscriptViewer
+    expect(screen.getByText('Action Items')).toBeInTheDocument()
+    expect(screen.getByText('Do the thing')).toBeInTheDocument()
   })
 })

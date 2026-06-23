@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useMemo, useState } from 'react'
 import { TimeAnchor } from './TimeAnchor'
-import { ChevronDown, ChevronRight, ListOrdered, Users } from 'lucide-react'
+import { ArrowUp, ChevronDown, ChevronRight, ListOrdered, Users } from 'lucide-react'
 import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
 import { SegmentedToggle } from '@/components/ui/segmented-toggle'
@@ -21,9 +21,7 @@ interface TranscriptViewerProps {
   speakerNames?: Record<string, string>
   currentTimeMs?: number
   onSeek: (startMs: number, endMs?: number) => void
-  showSummary?: boolean
   showActionItems?: boolean
-  summary?: string
   actionItems?: string[]
 }
 
@@ -133,24 +131,25 @@ function parseTranscriptSegments(transcript: string): TranscriptSegment[] {
   return segments
 }
 
+const RETURN_TO_TOP_THRESHOLD = 300
+
 export function TranscriptViewer({
   transcript,
   turns,
   speakerNames,
   currentTimeMs,
   onSeek,
-  showSummary = true,
   showActionItems = true,
-  summary,
   actionItems
 }: TranscriptViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const activeSegmentRef = useRef<HTMLDivElement>(null)
 
-  const [summaryExpanded, setSummaryExpanded] = useState(true)
   const [actionItemsExpanded, setActionItemsExpanded] = useState(true)
   const [transcriptExpanded, setTranscriptExpanded] = useState(true)
   const [viewMode, setViewMode] = useState<ViewMode>('timeline')
+  const [showTop, setShowTop] = useState(false)
+  const [collapsedSpeakers, setCollapsedSpeakers] = useState<Set<string>>(new Set())
 
   const hasStructuredTurns = !!turns && turns.length > 0
 
@@ -215,6 +214,15 @@ export function TranscriptViewer({
     return { groups, totalDurationMs }
   }, [segments, speakerNames])
 
+  const toggleSpeaker = (key: string) => {
+    setCollapsedSpeakers((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   // Auto-scroll to current segment during playback (timeline view only)
   useEffect(() => {
     if (viewMode === 'timeline' && currentSegmentIndex >= 0 && activeSegmentRef.current) {
@@ -225,6 +233,26 @@ export function TranscriptViewer({
     }
   }, [currentSegmentIndex, viewMode])
 
+  // QOL #1: show a floating "back to top" control once the transcript scrolls past
+  // RETURN_TO_TOP_THRESHOLD. Listener lives on the scroll container (containerRef).
+  // Deps = [transcriptExpanded]: containerRef's div only exists while the transcript
+  // section is expanded. When collapsed, containerRef.current is null; re-binding on
+  // re-expansion re-attaches to the freshly mounted element. Deps must NOT be [] (the
+  // listener would never re-attach after a collapse/expand cycle) and need NOT include
+  // viewMode (the scroll container is the same element across timeline/by-speaker — the
+  // toggle swaps only its children — so the listener stays bound when the view changes).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) {
+      setShowTop(false)
+      return
+    }
+    const onScroll = () => setShowTop(el.scrollTop > RETURN_TO_TOP_THRESHOLD)
+    onScroll()
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [transcriptExpanded])
+
   // If transcript has no timestamps, render as plain text
   const hasTimestamps = hasStructuredTurns || segments.length > 1 || (segments.length === 1 && segments[0].startMs > 0)
 
@@ -234,29 +262,6 @@ export function TranscriptViewer({
 
   return (
     <div className="space-y-4">
-      {/* Summary Section */}
-      {showSummary && summary && (
-        <div>
-          <button
-            onClick={() => setSummaryExpanded(!summaryExpanded)}
-            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
-            aria-expanded={summaryExpanded}
-          >
-            <Eyebrow tone="muted">Summary</Eyebrow>
-            {summaryExpanded ? (
-              <ChevronDown className="h-4 w-4 text-ink-muted" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-ink-muted" />
-            )}
-          </button>
-          {summaryExpanded && (
-            <div className="mt-2 rounded-lg border border-border bg-surface p-3 shadow-xs">
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{summary}</p>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Action Items Section */}
       {showActionItems && actionItems && actionItems.length > 0 && (
         <div>
@@ -299,7 +304,12 @@ export function TranscriptViewer({
           )}
         </button>
         {transcriptExpanded && (
-          <div ref={containerRef} className="mt-2 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-xs">
+          <div className="relative">
+            <div
+              ref={containerRef}
+              data-testid="transcript-scroll-container"
+              className="mt-2 max-h-[60vh] overflow-y-auto rounded-lg border border-border bg-surface p-3 shadow-xs"
+            >
             {hasTimestamps ? (
               <div className="space-y-4">
                 {/* View-mode toggle (timeline / by speaker) — only when grouping is meaningful */}
@@ -398,48 +408,80 @@ export function TranscriptViewer({
                     </div>
 
                     {/* per-speaker cards */}
-                    {speakerGroups.groups.map((g) => (
-                      <div key={g.key} className="rounded-lg border border-border bg-surface p-3 shadow-xs">
-                        <div className="mb-3 flex items-center gap-3">
-                          <PersonAvatar name={g.name} color={g.color} size={30} />
-                          <div className="min-w-0 flex-1">
-                            <span className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
-                              {g.name}
-                            </span>
-                            <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
-                              {formatTimestamp(g.durationMs / 1000)} · {g.segCount} segment{g.segCount === 1 ? '' : 's'} · {Math.round(g.pct * 100)}%
+                    {speakerGroups.groups.map((g) => {
+                      const collapsed = collapsedSpeakers.has(g.key)
+                      return (
+                        <div key={g.key} className="rounded-lg border border-border bg-surface p-3 shadow-xs">
+                          <div className="mb-3 flex items-center gap-3">
+                            <PersonAvatar name={g.name} color={g.color} size={30} />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-display text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">
+                                {g.name}
+                              </span>
+                              <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
+                                {formatTimestamp(g.durationMs / 1000)} · {g.segCount} segment{g.segCount === 1 ? '' : 's'} · {Math.round(g.pct * 100)}%
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleSpeaker(g.key)}
+                              aria-expanded={!collapsed}
+                              aria-label={`${collapsed ? 'Expand' : 'Collapse'} speaker ${g.name}`}
+                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm transition-colors hover:bg-surface-hover"
+                            >
+                              {collapsed ? (
+                                <ChevronRight className="h-4 w-4 text-ink-muted" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-ink-muted" />
+                              )}
+                            </button>
                           </div>
+                          {!collapsed && (
+                            <>
+                              {/* per-speaker talk-time bar */}
+                              <div className="mb-3.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{ width: `${Math.max(g.pct * 100, 1)}%`, background: g.color }}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-2">
+                                {g.segments.map((seg, j) => (
+                                  <div key={j} className="flex gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover">
+                                    <TimeAnchor
+                                      startMs={seg.startMs}
+                                      endMs={seg.endMs}
+                                      onSeek={onSeek}
+                                      className="w-11 flex-none px-0 text-[11px] no-underline hover:underline"
+                                    >
+                                      {null}
+                                    </TimeAnchor>
+                                    <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-foreground">{seg.text}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
                         </div>
-                        {/* per-speaker talk-time bar */}
-                        <div className="mb-3.5 h-1.5 overflow-hidden rounded-full bg-surface-sunken">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${Math.max(g.pct * 100, 1)}%`, background: g.color }}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {g.segments.map((seg, j) => (
-                            <div key={j} className="flex gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover">
-                              <TimeAnchor
-                                startMs={seg.startMs}
-                                endMs={seg.endMs}
-                                onSeek={onSeek}
-                                className="w-11 flex-none px-0 text-[11px] no-underline hover:underline"
-                              >
-                                {null}
-                              </TimeAnchor>
-                              <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-foreground">{seg.text}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
             ) : (
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcript}</p>
+            )}
+            </div>
+            {showTop && (
+              <button
+                type="button"
+                aria-label="Back to top"
+                title="Back to top"
+                onClick={() => containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface shadow-md transition-colors hover:bg-surface-hover"
+              >
+                <ArrowUp className="h-4 w-4 text-ink-muted" />
+              </button>
             )}
           </div>
         )}

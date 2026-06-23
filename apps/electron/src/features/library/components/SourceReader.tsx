@@ -17,7 +17,7 @@ import type { Turn } from '../types/turns'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 import { Transcript, Meeting, parseJsonArray } from '@/types'
-import { Calendar, Download, Trash2, Wand2, RefreshCw, Play, Square, Pencil, Check, Edit2, Link, X, ExternalLink, FolderOpen, AlertCircle } from 'lucide-react'
+import { Calendar, Download, Trash2, Wand2, RefreshCw, Play, Square, Pencil, Check, Edit2, Link, X, ExternalLink, FolderOpen, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -32,6 +32,7 @@ import { labelName } from '@/features/library/utils'
 import type { LabelDefinition } from '@/types'
 import { formatDateTime, formatDuration, formatBytes } from '@/lib/utils'
 import { TemplateChip, SuggestNewBanner } from './TemplateChip'
+import { Eyebrow } from '@/components/harbor/Eyebrow'
 
 // Stable empty reference so the labels selector never yields a fresh [] per render
 // (keeps useCallback deps that reference labelItems stable).
@@ -90,6 +91,9 @@ export function SourceReader({
   onNavigateToMeeting,
   onMetadataEdited
 }: SourceReaderProps) {
+
+  // Summary collapse state (QOL #5 — summary is now at the top of the reader)
+  const [summaryExpanded, setSummaryExpanded] = useState(true)
 
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -939,6 +943,29 @@ export function SourceReader({
               </div>
             )}
 
+            {/* QOL #5: summary moved to the top of the reader (was inside TranscriptViewer). */}
+            {transcript.summary && (
+              <div className="mb-4">
+                <button
+                  onClick={() => setSummaryExpanded(!summaryExpanded)}
+                  className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
+                  aria-expanded={summaryExpanded}
+                >
+                  <Eyebrow tone="muted">Summary</Eyebrow>
+                  {summaryExpanded ? (
+                    <ChevronDown className="h-4 w-4 text-ink-muted" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-ink-muted" />
+                  )}
+                </button>
+                {summaryExpanded && (
+                  <div className="mt-2 rounded-lg border border-border bg-surface p-3 shadow-xs">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcript.summary}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Speakers panel — structured turns only (hidden when no turns) */}
             {hasStructuredTurns && (
               <div className="mb-4">
@@ -971,9 +998,7 @@ export function SourceReader({
               speakerNames={speakerNames}
               currentTimeMs={currentTimeMs}
               onSeek={onSeek || (() => {})}
-              showSummary={true}
               showActionItems={true}
-              summary={transcript.summary ?? undefined}
               actionItems={parseJsonArray<string>(transcript.action_items)}
             />
           </>
