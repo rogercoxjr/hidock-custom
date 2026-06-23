@@ -455,7 +455,7 @@ describe('FIX 6 — real resummarize handler: transcript-existence guard', () =>
       'SELECT COUNT(*) AS c FROM transcription_queue WHERE recording_id = ?',
       [REC_ID]
     )
-    expect(allRows?.c).toBeGreaterThanOrEqual(1)
+    expect(allRows?.c).toBe(1)
   })
 
   it('no transcript row → handler returns "No transcript to summarize yet" AND no writes', async () => {
