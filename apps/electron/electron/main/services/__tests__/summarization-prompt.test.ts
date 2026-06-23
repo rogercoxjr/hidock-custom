@@ -45,13 +45,13 @@ describe('buildAnalysisPrompt — template emphasis + nonce framing', () => {
     expect(out).toContain('<<<DATA_TESTNONCE>>>')
     expect(out).toContain('<<<END_TESTNONCE>>>')
     expect(out).toContain('Emphasize budget decisions.')
-    expect(out).toContain('data / emphasis guidance only')
+    expect(out).toContain('instructions that shape the summary field')
     // The fixed JSON contract still present.
     expect(out).toContain('"title_suggestion"')
     expect(out).toContain('"question_suggestions"')
     // The instructions must appear ONLY inside the EMPHASIS GUIDANCE data block,
     // never in the authoritative region above it.
-    const emphasisHeader = 'EMPHASIS GUIDANCE'
+    const emphasisHeader = 'SUMMARY & EMPHASIS INSTRUCTIONS'
     const authoritativeRegion = out.slice(0, out.indexOf(emphasisHeader))
     expect(authoritativeRegion).not.toContain('Emphasize budget decisions.')
     // And it lives between the open/close markers of a data block.

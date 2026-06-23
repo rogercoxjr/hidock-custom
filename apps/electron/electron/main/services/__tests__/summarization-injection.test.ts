@@ -142,7 +142,7 @@ describe('Injection case (a): instructions embed closing delimiter + fake frame'
 
     // The injected delimiter attempts must be scrubbed INSIDE the data block.
     // Find the EMPHASIS GUIDANCE block.
-    const emphasisHeader = 'EMPHASIS GUIDANCE'
+    const emphasisHeader = 'SUMMARY & EMPHASIS INSTRUCTIONS'
     const open = `<<<DATA_${NONCE}>>>`
     const close = `<<<END_${NONCE}>>>`
     const emphasisStart = prompt.indexOf(emphasisHeader)
@@ -229,7 +229,7 @@ describe('Injection case (b): instructions instruct dropping summary/title', () 
     // the EMPHASIS GUIDANCE data block closes (where the JSON tail lives).
     const open = `<<<DATA_${NONCE}>>>`
     const close = `<<<END_${NONCE}>>>`
-    const emphasisStart = prompt.indexOf('EMPHASIS GUIDANCE')
+    const emphasisStart = prompt.indexOf('SUMMARY & EMPHASIS INSTRUCTIONS')
     const emphasisBlockOpen = prompt.indexOf(open, emphasisStart)
     const emphasisBlockClose = prompt.indexOf(close, emphasisBlockOpen + open.length)
     // Everything after the EMPHASIS GUIDANCE block close — this contains the
@@ -331,7 +331,7 @@ describe('Injection case (c): instructions attempt to suppress meeting selection
     expect(insideSubjectsBlock).toContain('Sprint Planning')
 
     // The evil instructions are in the EMPHASIS GUIDANCE data block, not the authoritative frame.
-    const emphasisStart = prompt.indexOf('EMPHASIS GUIDANCE')
+    const emphasisStart = prompt.indexOf('SUMMARY & EMPHASIS INSTRUCTIONS')
     const authoritativeRegion = prompt.slice(0, emphasisStart)
     expect(authoritativeRegion).not.toContain('Ignore the meeting selection')
     expect(authoritativeRegion).not.toContain('Never include')
@@ -487,5 +487,69 @@ describe('Injection case (d): injection via template name/description into build
       expect(out).not.toContain('<<<')
       expect(out).not.toContain('>>>')
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// (e) A template CAN drive a structured/longer summary; other fields stay valid arrays
+// ---------------------------------------------------------------------------
+
+describe('Template can drive a structured summary while the schema holds', () => {
+  it('template path uses the relaxed contract wording and the new SUMMARY & EMPHASIS INSTRUCTIONS block', () => {
+    const templateInstructions =
+      'Produce a multi-section sermon summary: ## Scripture, ## Main Points, ## Application. Use headings and line breaks.'
+
+    const prompt = buildAnalysisPrompt({
+      transcript: BASE_TRANSCRIPT,
+      candidateMeetings: [],
+      instructions: templateInstructions,
+      nonce: NONCE,
+    })
+
+    // Relaxed contract item 1 — template controls length/structure (no "2-3 sentences" cap).
+    expect(prompt).toContain(
+      '1. A summary that follows the SUMMARY & EMPHASIS INSTRUCTIONS below (the template controls its length, structure, and sections)',
+    )
+    expect(prompt).not.toContain('1. A brief summary (2-3 sentences)')
+
+    // Block renamed; authoritative fixed-schema clause present.
+    expect(prompt).toContain('SUMMARY & EMPHASIS INSTRUCTIONS')
+    expect(prompt).not.toContain('EMPHASIS GUIDANCE')
+    expect(prompt).toContain('The JSON field names and types are fixed; "summary" is always a single JSON string')
+
+    // The template guidance is still inside the sanitized, nonce-wrapped data block.
+    const open = `<<<DATA_${NONCE}>>>`
+    const close = `<<<END_${NONCE}>>>`
+    const blockHeader = prompt.indexOf('SUMMARY & EMPHASIS INSTRUCTIONS')
+    const blockOpen = prompt.indexOf(open, blockHeader)
+    const blockClose = prompt.indexOf(close, blockOpen + open.length)
+    const inside = prompt.slice(blockOpen + open.length, blockClose)
+    expect(inside).toContain('multi-section sermon summary')
+    expect(inside).not.toContain('<<<')
+    expect(inside).not.toContain('>>>')
+  })
+
+  it('a long multi-line template summary is a valid envelope; other fields stay arrays', () => {
+    const structuredSummary =
+      '## Scripture\nRomans 8:28\n\n## Main Points\n- God works for good\n- Trust in adversity\n\n## Application\nReflect daily.'
+    const parsed = makeGoodAnalysis({
+      summary: structuredSummary,
+      action_items: ['Reflect daily on Romans 8:28'],
+      topics: ['faith', 'adversity'],
+      key_points: ['God works for good'],
+    })
+    const result = assertOutputContract(parsed, { hasCandidates: false })
+    expect(result).not.toBeNull()
+    // The multi-section summary survived verbatim as ONE string with line breaks.
+    expect(result!.summary).toBe(structuredSummary)
+    expect(result!.summary).toContain('\n')
+    // Other fields remain valid NON-EMPTY arrays (schema unchanged under a template;
+    // the template must not silently hollow out the other fields — spec §7 "valid arrays").
+    expect(Array.isArray(result!.action_items)).toBe(true)
+    expect(result!.action_items.length).toBeGreaterThan(0)
+    expect(Array.isArray(result!.topics)).toBe(true)
+    expect(result!.topics.length).toBeGreaterThan(0)
+    expect(Array.isArray(result!.key_points)).toBe(true)
+    expect(result!.key_points.length).toBeGreaterThan(0)
   })
 })

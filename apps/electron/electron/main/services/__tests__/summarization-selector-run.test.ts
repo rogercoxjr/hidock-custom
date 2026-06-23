@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { selectTemplateForTranscript, prefilter, buildSelectorPrompt } from '../summarization-selector'
 import type { LlmProvider } from '../llm/llm-provider'
+import { sermonTemplate, salesTemplate } from './fixtures/templates'
 
 const tpls = [
   { id: 'sales', name: 'Sales', description: 'sales calls', instructions: 'i', exampleTriggers: ['demo'], isDefault: false, isBuiltin: false, enabled: true, createdAt: '', updatedAt: '' },
@@ -40,6 +41,28 @@ describe('selectTemplateForTranscript', () => {
       llm
     )
     expect(r).toMatchObject({ kind: 'selected', templateId: 'sales' })
+    expect(generate).not.toHaveBeenCalled()
+  })
+  it('Step-1 prefilter content-routes on a trigger only in fullText (preview == worker)', async () => {
+    // AC4: previewSelection calls this function directly. With a generic
+    // title/filename but the trigger word ('sermon') ONLY in the transcript
+    // body, the Step-1 prefilter must resolve via the excerpt — identically to
+    // the live worker — WITHOUT invoking the LLM.
+    const generate = vi.fn(async () => '{}')
+    const llm: LlmProvider = { generate }
+    const r = await selectTemplateForTranscript(
+      {
+        fullText: 'Welcome to todays sermon on the book of Romans. '.repeat(5),
+        meetingSubjects: [],
+        recordingTitle: 'external-2026-06-22-19-00-18',
+        filename: 'external-2026-06-22-19-00-18.m4a',
+        templates: [sermonTemplate, salesTemplate],
+        userDefaultId: null,
+      },
+      llm
+    )
+    expect(r).toMatchObject({ kind: 'selected', templateId: 'tpl-sermon' })
+    expect(r.reason).toContain('prefilter')
     expect(generate).not.toHaveBeenCalled()
   })
   it('returns promptly on success without waiting for the timeout (timer cleared)', async () => {
@@ -102,6 +125,67 @@ describe('selectTemplateForTranscript', () => {
   })
 })
 
+describe('prefilter searches the transcript excerpt', () => {
+  it('matches a trigger found only in the excerpt (not the filename)', () => {
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'external-2026-06-22-19-00-18',
+      filename: 'external-2026-06-22-19-00-18.m4a',
+      meetingSubjects: [],
+      excerpt: 'Welcome to todays sermon on the book of Romans.',
+    })
+    expect(id).toBe('tpl-sermon')
+  })
+
+  it('trigger in title/filename still matches without excerpt (existing behavior preserved)', () => {
+    // REGRESSION GUARD: the new `excerpt ?? ''` must be APPENDED to the haystack,
+    // not REPLACE it. A trigger present only in the title (no excerpt) must still
+    // match, proving the prior title/filename/subjects matching is intact.
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'Sunday sermon notes',
+      filename: 'x.m4a',
+      meetingSubjects: [],
+      excerpt: '',
+    })
+    expect(id).toBe('tpl-sermon')
+  })
+
+  it('returns null when two templates trigger in the excerpt (ambiguous)', () => {
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'meeting',
+      filename: 'meeting.m4a',
+      meetingSubjects: [],
+      excerpt: 'First the sermon, then we discussed pricing.',
+    })
+    expect(id).toBeNull()
+  })
+
+  it('returns null when no trigger appears anywhere', () => {
+    const id = prefilter({
+      templates: [sermonTemplate, salesTemplate],
+      title: 'standup',
+      filename: 'standup.m4a',
+      meetingSubjects: ['daily standup'],
+      excerpt: 'We synced on the sprint backlog.',
+    })
+    expect(id).toBeNull()
+  })
+
+  it('still ignores empty-string triggers (no match-everything)', () => {
+    const emptyTrig = { ...salesTemplate, id: 'tpl-empty', exampleTriggers: [''] }
+    const id = prefilter({
+      templates: [emptyTrig],
+      title: 'x',
+      filename: 'x.m4a',
+      meetingSubjects: [],
+      excerpt: 'literally anything',
+    })
+    expect(id).toBeNull()
+  })
+})
+
 describe('buildSelectorPrompt', () => {
   it('never includes template instructions, wraps metadata in nonce blocks', () => {
     // MINOR: use a distinctive multi-word sentinel as the instructions VALUE so
@@ -113,5 +197,9 @@ describe('buildSelectorPrompt', () => {
     expect(p).not.toContain(SENTINEL)         // template instructions must NEVER appear in the selector prompt
     expect(p).toContain('<<<DATA_N>>>')
     expect(p).toContain('Sales')              // name IS sent
+  })
+  it('includes the prefer-a-fitting-template guidance line', () => {
+    const p = buildSelectorPrompt({ excerpt: 'hi', meetingSubjects: [], templates: tpls, nonce: 'N' })
+    expect(p).toContain('Prefer a candidate template when the transcript clearly fits')
   })
 })

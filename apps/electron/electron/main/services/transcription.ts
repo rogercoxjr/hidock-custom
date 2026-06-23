@@ -42,7 +42,7 @@ import { getAsrProvider } from './asr/asr-provider'
 import { getLlmProvider, type LlmProvider } from './llm/llm-provider'
 import { buildAnalysisPrompt, validateAnalysis } from './summarization-prompt'
 import { userTemplates, getTemplateById } from './summarization-templates'
-import { selectTemplateForTranscript, prefilter, hashText } from './summarization-selector'
+import { selectTemplateForTranscript, prefilter, buildExcerpt, hashText } from './summarization-selector'
 import { ProviderRateLimitError } from './provider-errors'
 import { BrowserWindow } from 'electron'
 import { getVectorStore } from './vector-store'
@@ -54,6 +54,14 @@ let lastSkipLogAt = 0 // Throttle "skipping" spam to once per 60s
 
 export function setMainWindowForTranscription(win: BrowserWindow): void {
   mainWindow = win
+}
+
+/**
+ * Truthful queue-pickup label: a Stage-2-only resume short-circuits ASR, so it is a
+ * re-summarize, not a re-transcribe. Stage-1 (fresh / re-transcribe) keeps "Transcribing:".
+ */
+export function getQueuePickupLabel(filename: string, stage2Only: boolean): string {
+  return stage2Only ? `Re-summarizing: ${filename}` : `Transcribing: ${filename}`
 }
 
 export function startTranscriptionProcessor(): void {
@@ -448,7 +456,6 @@ async function transcribeRecording(
     return
   }
 
-  console.log(`Transcribing: ${recording.filename}`)
   // AI-13: Use standard enum values matching Recording.transcription_status
   updateRecordingTranscriptionStatus(recordingId, 'processing')
 
@@ -458,6 +465,7 @@ async function transcribeRecording(
 
   // Resume rule (spec §5.3): full_text set + marker NULL -> run Stage 2 only.
   const stage2Only = Boolean(existing?.full_text && !existing.summarization_provider)
+  console.log(getQueuePickupLabel(recording.filename, stage2Only))
   let fullText: string
 
   if (stage2Only) {
@@ -663,7 +671,13 @@ Meeting ${i + 1}: "${m.subject}"
       selectionReason = 'cache: ' + (prior.selectionReason ?? '')
     } else {
       // Deterministic prefilter first.
-      const pre = prefilter({ templates: candidates, title: recording.filename, filename: recording.filename, meetingSubjects })
+      const pre = prefilter({
+        templates: candidates,
+        title: recording.filename,
+        filename: recording.filename,
+        meetingSubjects,
+        excerpt: buildExcerpt(fullText),
+      })
       if (pre) {
         const preTemplate = resolveById(pre)
         if (preTemplate) {
