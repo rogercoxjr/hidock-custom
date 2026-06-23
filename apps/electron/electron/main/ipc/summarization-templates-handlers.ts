@@ -30,7 +30,6 @@ import {
   getTranscriptByRecordingId,
   setTranscriptTemplateOverride,
   clearTranscriptStage2Marker,
-  hasInFlightQueueItem,
   addToQueue
 } from '../services/database'
 import { hashText, selectTemplateForTranscript, type TemplateSelectionResult } from '../services/summarization-selector'
@@ -276,11 +275,11 @@ export function registerSummarizationTemplatesHandlers(): void {
         return error('VALIDATION_ERROR', 'recordingId must be a non-empty string', null)
       }
       try {
-        // §8.3 concurrency guard — check in-flight FIRST, before creating the template,
-        // so a rejected (in-flight) request never orphans a freshly-created template row
-        // in the user's list. Mirrors the guard-before-write order of resummarizeWithTemplate.
-        if (hasInFlightQueueItem(recordingId)) {
-          return error('VALIDATION_ERROR', 'transcription in progress', null)
+        // §8.3 transcript-existence guard — block only when no transcript exists yet.
+        // Re-summarize is Stage-2-only; a parked Stage-1 queue item must not block it.
+        const existingForGuard = getTranscriptByRecordingId(recordingId)
+        if (!existingForGuard || !existingForGuard.full_text || !existingForGuard.full_text.trim()) {
+          return error('VALIDATION_ERROR', 'No transcript to summarize yet — transcribe this recording first.', null)
         }
 
         // Read the suggested template from the latest selector run

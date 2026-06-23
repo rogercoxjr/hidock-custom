@@ -71,7 +71,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   // Restore default mocks.
   db.getLatestTemplateRun.mockReturnValue(null)
-  db.getTranscriptByRecordingId.mockReturnValue(null)
+  db.getTranscriptByRecordingId.mockReturnValue({ full_text: 'Transcript text here.', summarization_template_name: null, summarization_template_hash: null, summarization_template_id: null })
   db.hasInFlightQueueItem.mockReturnValue(false)
   db.setTranscriptTemplateOverride.mockReset()
   db.clearTranscriptStage2Marker.mockReset()
@@ -379,11 +379,11 @@ describe('summarizationTemplates:acceptSuggestedTemplate IPC (Phase 4 / Task 14)
     )
   })
 
-  it('rejects with VALIDATION_ERROR when a transcription is in-flight (and does NOT orphan a template)', async () => {
-    db.hasInFlightQueueItem.mockReturnValue(true)
+  it('rejects with VALIDATION_ERROR when no transcript exists (and does NOT orphan a template)', async () => {
+    db.getTranscriptByRecordingId.mockReturnValue(null)
     const res = await handlers.get('summarizationTemplates:acceptSuggestedTemplate')!({}, 'rec-1') as any
     expect(res).toMatchObject({ success: false })
-    expect(res.error.message).toMatch(/transcription in progress/)
+    expect(res.error.message).toMatch(/No transcript/i)
     // No template row may be created when the guard rejects — guard-before-write
     // ordering must keep the user's template list free of ghost entries.
     expect(svc.createTemplate).not.toHaveBeenCalled()
@@ -391,6 +391,16 @@ describe('summarizationTemplates:acceptSuggestedTemplate IPC (Phase 4 / Task 14)
     expect(db.setTranscriptTemplateOverride).not.toHaveBeenCalled()
     expect(db.clearTranscriptStage2Marker).not.toHaveBeenCalled()
     expect(db.addToQueue).not.toHaveBeenCalled()
+  })
+
+  it('allows resummarize when a transcript exists even with an in-flight queue row', async () => {
+    db.getTranscriptByRecordingId.mockReturnValue({
+      full_text: 'Transcript text.', summarization_template_name: null,
+      summarization_template_hash: null, summarization_template_id: null
+    })
+    const res = await handlers.get('summarizationTemplates:acceptSuggestedTemplate')!({}, 'rec-1') as any
+    expect(res).toMatchObject({ success: true })
+    expect(svc.createTemplate).toHaveBeenCalled()
   })
 
   it('returns NOT_FOUND when no suggested template exists', async () => {

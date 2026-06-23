@@ -403,18 +403,18 @@ describe('concurrency guard — write-side contract (DB layer)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 6. FIX 6 — REAL-handler guard-before-write integration test.
+// 6. FIX 6 — REAL-handler transcript-existence guard integration test.
 //
-// The DB-layer tests above re-implement the guard (they check hasInFlightQueueItem
-// then conditionally call setTranscriptTemplateOverride themselves). The IPC-layer
-// unit tests mock the DB. Neither proves the REAL transcription:resummarize handler
-// checks the §8.3 in-flight guard BEFORE the override write. This test wires the
-// REAL handler via registerRecordingHandlers against a REAL sql.js DB with a real
-// `processing` queue row and asserts the handler rejects AND the override column is
-// untouched. It fails if someone reorders the override write before the guard.
+// The DB-layer tests above re-implement the old concurrency guard (they check
+// hasInFlightQueueItem then conditionally call setTranscriptTemplateOverride).
+// The new guard blocks ONLY on missing transcript — a parked Stage-1 queue row
+// must NOT block a Stage-2 re-summarize. This test wires the REAL handler via
+// registerRecordingHandlers against a REAL sql.js DB and asserts:
+//   - parked/processing queue row + real transcript → handler PROCEEDS (override written)
+//   - no transcript row at all → handler rejects with the new message
 // ---------------------------------------------------------------------------
 
-describe('FIX 6 — real resummarize handler: guard runs BEFORE the override write', () => {
+describe('FIX 6 — real resummarize handler: transcript-existence guard', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let handlers: Record<string, (...args: any[]) => any> = {}
 
@@ -429,38 +429,56 @@ describe('FIX 6 — real resummarize handler: guard runs BEFORE the override wri
     registerRecordingHandlers()
   })
 
-  it('processing queue row in-flight → handler returns "transcription in progress" AND override NOT written', async () => {
+  it('processing queue row in-flight WITH transcript → handler PROCEEDS and writes override', async () => {
     seedRecording()
-    seedTranscript()                       // override column starts NULL
-    seedQueueRow(REC_ID, 'processing')     // a REAL in-flight queue row
+    seedTranscript()                       // real transcript row with full_text
+    seedQueueRow(REC_ID, 'processing')     // a REAL in-flight queue row (should no longer block)
 
-    // Invoke the REAL handler with a templateId — if the guard were reordered
-    // after the write, the override column would be clobbered to TPL_ID.
     const result = await handlers['transcription:resummarize'](
       null,
       { recordingId: REC_ID, templateId: TPL_ID }
     )
 
-    expect(result).toEqual({ success: false, error: 'transcription in progress' })
+    // With the new guard the handler must SUCCEED — a parked Stage-1 row must not block Stage-2.
+    expect(result).toEqual({ success: true })
 
-    // The override column must be UNCHANGED (still NULL) — the guard ran first.
+    // The override column MUST be written to TPL_ID.
     const row = queryOne<{ summarization_template_id: string | null }>(
       'SELECT summarization_template_id FROM transcripts WHERE recording_id = ?',
       [REC_ID]
     )
-    expect(row?.summarization_template_id).toBeNull()
+    expect(row?.summarization_template_id).toBe(TPL_ID)
 
-    // And no new queue row was enqueued (still exactly one — the seeded processing row).
+    // addToQueue dedupes — a processing row already exists so no new pending row is inserted.
+    // The total row count must be exactly 1 (the seeded processing row, now also the effective queue entry).
+    const allRows = queryOne<{ c: number }>(
+      'SELECT COUNT(*) AS c FROM transcription_queue WHERE recording_id = ?',
+      [REC_ID]
+    )
+    expect(allRows?.c).toBe(1)
+  })
+
+  it('no transcript row → handler returns "No transcript to summarize yet" AND no writes', async () => {
+    seedRecording()
+    // No seedTranscript() — no transcript row exists.
+
+    const result = await handlers['transcription:resummarize'](
+      null,
+      { recordingId: REC_ID, templateId: TPL_ID }
+    )
+
+    expect(result).toEqual({ success: false, error: 'No transcript to summarize yet — transcribe this recording first.' })
+
+    // No queue row was enqueued.
     const queueRows = queryOne<{ c: number }>(
       'SELECT COUNT(*) AS c FROM transcription_queue WHERE recording_id = ?',
       [REC_ID]
     )
-    expect(queueRows?.c).toBe(1)
+    expect(queueRows?.c).toBe(0)
   })
 
   it('idle (no in-flight row) → REAL handler writes the override, clears marker, enqueues', async () => {
-    // Positive control: with no in-flight row the same handler DOES write the override,
-    // proving the rejection above is the guard — not a broken handler.
+    // Positive control: with a transcript and no in-flight row the handler writes the override.
     seedRecording()
     seedTranscript()
 
