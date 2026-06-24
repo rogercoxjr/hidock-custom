@@ -17,6 +17,7 @@ vi.mock('electron', () => ({
 // Mock database
 vi.mock('../../services/database', () => ({
   run: vi.fn(),
+  runNoSave: vi.fn(),
   runInTransaction: vi.fn((fn: () => void) => fn()),
   queryOne: vi.fn()
 }))
