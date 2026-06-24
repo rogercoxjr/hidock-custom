@@ -31,6 +31,7 @@ vi.mock('electron', () => ({
 }))
 
 const mockRun = vi.fn()
+const mockRunNoSave = vi.fn()
 const mockIsFileSynced = vi.fn((_filename: string): boolean => false)
 
 // Mock database functions
@@ -43,6 +44,7 @@ vi.mock('../database', () => ({
   queryOne: vi.fn(() => null),
   queryAll: vi.fn(() => []),
   run: (...args: any[]) => mockRun(...args),
+  runNoSave: (...args: any[]) => mockRunNoSave(...args),
   runInTransaction: vi.fn((fn: () => void) => fn()), // Execute callback immediately
   getDatabase: vi.fn(() => ({
     exec: vi.fn(() => []),
@@ -133,22 +135,29 @@ describe('DownloadService B-007 Fixes', () => {
   })
 
   describe('B-DWN-005: cancelAll persists state', () => {
-    it('should call persistQueueItem for each cancelled item', () => {
+    it('should persist each cancelled item via the transaction-safe runNoSave', () => {
       service.queueDownloads([
         { filename: 'test1.wav', size: 1024 },
         { filename: 'test2.wav', size: 2048 }
       ])
 
-      // Reset mock to only track cancelAll calls
+      // Reset mocks to only track cancelAll calls
       mockRun.mockClear()
+      mockRunNoSave.mockClear()
 
       service.cancelAll()
 
-      // Should have persisted each cancelled item (INSERT OR REPLACE calls)
-      const persistCalls = mockRun.mock.calls.filter(
+      // cancelAll persists inside runInTransaction, so it must use runNoSave — NOT the
+      // auto-saving run(), whose per-statement db.export() would terminate the open
+      // transaction (the "cannot rollback - no transaction is active" bug).
+      const persistCalls = mockRunNoSave.mock.calls.filter(
         (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT OR REPLACE INTO download_queue')
       )
       expect(persistCalls.length).toBe(2)
+      const autoSavePersist = mockRun.mock.calls.filter(
+        (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT OR REPLACE INTO download_queue')
+      )
+      expect(autoSavePersist.length).toBe(0)
     })
   })
 

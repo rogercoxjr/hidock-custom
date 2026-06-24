@@ -639,12 +639,18 @@ export function Chat() {
 
     } catch (error) {
       console.error('Chat error:', error)
+      // Surface the real cause (e.g. "Gemini API key not configured") instead of a
+      // hardcoded "Ollama is running" message — the failure is usually a chat-provider/config issue.
+      const detail = (error instanceof Error ? error.message : String(error))
+        .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+        .replace(/^Error:\s*/i, '')
+        .trim()
       // Use activeConversation since currentConv may be out of scope
       if (activeConversation) {
         const errorMsg = await window.electronAPI.assistant.addMessage(
           activeConversation.id,
           'assistant',
-          'Sorry, I encountered an error processing your request. Please make sure Ollama is running and try again.'
+          `Sorry, I couldn't process that request${detail ? `: ${detail}` : '.'} — check your chat provider in Settings (it may be set to a provider without a configured API key).`
         )
         setMessages((prev) => [...prev, errorMsg])
         setFailedMessageIds(prev => new Set(prev).add(errorMsg.id))

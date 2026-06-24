@@ -47,6 +47,7 @@ vi.mock('../database', () => ({
   queryOne: vi.fn(() => null),
   queryAll: vi.fn(() => []),
   run: vi.fn(),
+  runNoSave: vi.fn(),
   runInTransaction: vi.fn((fn: () => void) => fn()), // Execute callback immediately
   getDatabase: vi.fn(() => ({
     exec: vi.fn(() => []),

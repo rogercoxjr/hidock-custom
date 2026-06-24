@@ -24,6 +24,7 @@ import {
   queryOne,
   queryAll,
   run,
+  runNoSave,
   runMany,
   runInTransaction
 } from './database'
@@ -194,9 +195,13 @@ class DownloadService {
   /**
    * Persist a queue item to database (spec-007: persistence)
    */
-  private persistQueueItem(item: DownloadQueueItem): void {
+  private persistQueueItem(item: DownloadQueueItem, autoSave = true): void {
     try {
-      run(`
+      // Inside runInTransaction() the auto-saving run() (db.export() per statement) would
+      // terminate the open transaction, making COMMIT/ROLLBACK throw; transaction callers
+      // pass autoSave=false so the transaction saves once on success.
+      const exec = autoSave ? run : runNoSave
+      exec(`
         INSERT OR REPLACE INTO download_queue
         (id, filename, file_size, progress, status, error, started_at, completed_at, recording_date, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM download_queue WHERE id = ?), datetime('now')))
@@ -949,7 +954,7 @@ class DownloadService {
       if (itemsToCancel.length > 0) {
         runInTransaction(() => {
           for (const item of itemsToCancel) {
-            this.persistQueueItem(item)
+            this.persistQueueItem(item, false)
           }
         })
         emitActivityLog('info', 'All downloads cancelled', `${itemsToCancel.length} items`)
