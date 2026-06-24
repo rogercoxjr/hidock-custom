@@ -238,6 +238,7 @@ export interface ElectronAPI {
     unassign: (request: { recordingId: string; fileLabel: string }) => Promise<Result<void>>
     getForRecording: (recordingId: string) => Promise<Result<Record<string, { contactId: string; contactName: string }>>>
     getSuggestions: (recordingId: string) => Promise<Result<SuggestionView[]>>
+    reassignTurns: (request: { recordingId: string; sourceLabel: string; anchorIndex: number; anchorStartMs: number; scope: 'one' | 'before' | 'after'; target: { kind: 'existingLabel'; label: string } | { kind: 'contact'; contactId: string } | { kind: 'newSpeaker' } }) => Promise<Result<{ recordingId: string; targetLabel: string; rewrittenCount: number }>>
     dismissSuggestion: (id: string) => Promise<Result<{ id: string }>>
     acceptSuggestion: (id: string) => Promise<Result<{ id: string }>>
     setSelf: (request: { recordingId: string; fileLabel: string }) => Promise<Result<{ selfAssigned: boolean; needsSelfContact?: boolean; contactId?: string }>>
@@ -752,6 +753,7 @@ const electronAPI: ElectronAPI = {
     unassign: (request) => callIPC('speakers:unassign', request),
     getForRecording: (recordingId) => callIPC('speakers:getForRecording', recordingId),
     getSuggestions: (recordingId) => callIPC('speakers:getSuggestions', recordingId),
+    reassignTurns: (request) => callIPC('speakers:reassignTurns', request),
     dismissSuggestion: (id) => callIPC('speakers:dismissSuggestion', id),
     acceptSuggestion: (id) => callIPC('speakers:acceptSuggestion', id),
     setSelf: (request) => callIPC('speakers:setSelf', request)

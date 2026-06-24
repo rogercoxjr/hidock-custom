@@ -15,7 +15,6 @@ const mockMerge = vi.fn().mockResolvedValue({ success: true })
 const mockDismissSuggestion = vi.fn().mockResolvedValue({ success: true })
 const mockAcceptSuggestion = vi.fn().mockResolvedValue({ success: true })
 const mockSetSelf = vi.fn().mockResolvedValue({ success: true, data: { selfAssigned: true, contactId: 'c-self' } })
-const mockUpdateTurns = vi.fn().mockResolvedValue({ success: true })
 const mockCreate = vi.fn()
 const mockGetForMeeting = vi.fn()
 const mockGetAll = vi.fn()
@@ -53,7 +52,6 @@ beforeEach(() => {
         acceptSuggestion: mockAcceptSuggestion,
         setSelf: mockSetSelf,
       },
-      transcripts: { updateTurns: mockUpdateTurns },
       voiceprints: { findBySource: mockFindBySource, delete: mockDelete },
       onVoiceprintCaptured: mockOnVoiceprintCaptured,
     },
@@ -127,51 +125,18 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
-  it('reassign a single turn persists the updated turns array, leaving other turns unchanged (AC3)', async () => {
-    const onChanged = vi.fn()
-    // Two A turns + one B turn; reassign the SECOND A turn to B.
+  it('no longer renders a Turns pane or any per-turn reassign control (moved to By-Speaker view)', async () => {
     const turns: Turn[] = [
       { speaker: 'A', startMs: 0, endMs: 1000, text: 'first' },
       { speaker: 'A', startMs: 1000, endMs: 2000, text: 'second' },
       { speaker: 'B', startMs: 2000, endMs: 3000, text: 'third' },
     ]
-    render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={onChanged} />)
-
-    // The per-turn list is collapsed by default — expand it first.
-    fireEvent.click(await screen.findByRole('button', { name: /turns \(3\)/i }))
-    // Open the per-turn reassign control for the turn whose text is "second".
-    fireEvent.click(await screen.findByRole('button', { name: /reassign turn: second/i }))
-    // Pick target label B.
-    fireEvent.click(await screen.findByRole('button', { name: /reassign to b/i }))
-
-    await waitFor(() =>
-      expect(mockUpdateTurns).toHaveBeenCalledWith({
-        recordingId: 'rec-1',
-        turns: [
-          { speaker: 'A', startMs: 0, endMs: 1000, text: 'first' },
-          { speaker: 'B', startMs: 1000, endMs: 2000, text: 'second' },
-          { speaker: 'B', startMs: 2000, endMs: 3000, text: 'third' },
-        ],
-      })
-    )
-    expect(onChanged).toHaveBeenCalled()
-  })
-
-  it('collapses the per-turn list by default and expands on toggle (AC3 collapse)', async () => {
-    const turns: Turn[] = [
-      { speaker: 'A', startMs: 0, endMs: 1000, text: 'first' },
-      { speaker: 'B', startMs: 1000, endMs: 2000, text: 'second' },
-    ]
     render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
-
-    const toggle = await screen.findByRole('button', { name: /turns \(2\)/i })
-    // Collapsed by default: reassign controls are not rendered.
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('button', { name: /reassign turn: first/i })).not.toBeInTheDocument()
-
-    fireEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(await screen.findByRole('button', { name: /reassign turn: first/i })).toBeInTheDocument()
+    // The roster still renders (assign control present) ...
+    expect(await screen.findByRole('button', { name: /assign contact to a/i })).toBeInTheDocument()
+    // ... but the Turns pane toggle and per-turn reassign controls are gone.
+    expect(screen.queryByRole('button', { name: /turns \(\d+\)/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reassign turn/i })).not.toBeInTheDocument()
   })
 
   it('talk-time merges overlapping intervals (no double-count) (AC3)', async () => {
@@ -195,13 +160,6 @@ describe('SpeakersPanel (AC2/AC3)', () => {
     render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
     expect(await screen.findByText('A')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /merge speaker/i })).not.toBeInTheDocument()
-  })
-
-  it('single-speaker recording also hides per-turn reassign (read-only)', async () => {
-    const turns: Turn[] = [{ speaker: 'A', startMs: 0, endMs: 1000, text: 'solo' }]
-    render(<SpeakersPanel recordingId="rec-1" meetingId="meet-1" turns={turns} onChanged={vi.fn()} />)
-    expect(await screen.findByText('A')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /reassign turn/i })).not.toBeInTheDocument()
   })
 
   describe('jump to first turn (speaker-name click)', () => {

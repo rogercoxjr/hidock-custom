@@ -129,9 +129,6 @@ export function SpeakersPanel({
   const [allContacts, setAllContacts] = useState<PickContact[]>([])
   const [openPickerLabel, setOpenPickerLabel] = useState<string | null>(null)
   const [openMergeLabel, setOpenMergeLabel] = useState<string | null>(null)
-  const [openReassignTurn, setOpenReassignTurn] = useState<number | null>(null)
-  // The per-turn reassign list can be long; collapsed by default.
-  const [turnsExpanded, setTurnsExpanded] = useState(false)
   // Panel-level collapse: default expanded so all speaker rows are visible.
   const [panelExpanded, setPanelExpanded] = useState(true)
   const [search, setSearch] = useState('')
@@ -374,26 +371,6 @@ export function SpeakersPanel({
         toast.error('Could not merge speakers', res?.error?.message)
       }
       return res
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  /** Reassign a single turn (by index) to a different existing label, then persist. */
-  async function reassignTurn(turnIndex: number, toLabel: string) {
-    setBusy(true)
-    try {
-      const updated = turns.map((t, i) => (i === turnIndex ? { ...t, speaker: toLabel } : t))
-      const res = await (window as any).electronAPI.transcripts.updateTurns({
-        recordingId,
-        turns: updated,
-      })
-      if (res?.success) {
-        setOpenReassignTurn(null)
-        onChanged()
-      } else {
-        toast.error('Could not reassign turn', res?.error?.message)
-      }
     } finally {
       setBusy(false)
     }
@@ -832,75 +809,6 @@ export function SpeakersPanel({
         )
       })}
 
-      {/* Per-turn reassign (AC3): change one turn's speaker to another existing label.
-          Collapsible — the list is long on real recordings. */}
-      {!readOnly && turns.length > 0 && (
-        <div className="space-y-1.5">
-          <button
-            type="button"
-            onClick={() => setTurnsExpanded((v) => !v)}
-            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-sunken p-3 transition-colors hover:bg-surface-hover"
-            aria-expanded={turnsExpanded}
-          >
-            <Eyebrow tone="muted">Turns ({turns.length})</Eyebrow>
-            {turnsExpanded ? (
-              <ChevronDown className="h-4 w-4 text-ink-muted" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-ink-muted" />
-            )}
-          </button>
-          {turnsExpanded && (
-          <div className="space-y-1.5">
-          {turns.map((t, i) => (
-            <div
-              key={`${t.startMs}-${t.speaker}`}
-              className="relative flex items-start gap-2.5 rounded-lg border border-border bg-surface-sunken/60 p-2.5"
-            >
-              <span className="flex w-auto shrink-0 items-center gap-1 text-xs font-semibold text-ink">
-                {resolveName(t.speaker) ? (
-                  <>
-                    <span>{resolveName(t.speaker)}</span>
-                    <span data-testid="speaker-letter-tag" className="font-mono text-ink-muted">{t.speaker}</span>
-                  </>
-                ) : (
-                  <span className="w-6 font-mono">{t.speaker}</span>
-                )}
-              </span>
-              <span className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">{t.text}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`Reassign turn: ${t.text}`}
-                onClick={() => setOpenReassignTurn(openReassignTurn === i ? null : i)}
-                disabled={busy}
-              >
-                Reassign
-              </Button>
-              {openReassignTurn === i && (
-                <div className="absolute right-2 top-10 z-10 rounded-lg border border-border bg-surface p-2 shadow-md">
-                  {labels
-                    .filter((l) => l.label !== t.speaker)
-                    .map((target) => (
-                      <button
-                        key={target.label}
-                        className="block w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-hover disabled:opacity-50"
-                        aria-label={`Reassign to ${target.label}`}
-                        onClick={() => reassignTurn(i, target.label)}
-                        disabled={busy}
-                      >
-                        {resolveName(target.label)
-                          ? `Reassign to ${resolveName(target.label)} (${target.label})`
-                          : `Reassign to ${target.label}`}
-                      </button>
-                    ))}
-                </div>
-              )}
-            </div>
-          ))}
-          </div>
-          )}
-        </div>
-      )}
       </>
       )}
 

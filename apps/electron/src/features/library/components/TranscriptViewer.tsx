@@ -14,6 +14,9 @@ import { PersonAvatar, avatarColor } from '@/components/harbor/PersonAvatar'
 import { SegmentedToggle } from '@/components/ui/segmented-toggle'
 import { formatTimestamp } from '../utils/formatTimestamp'
 import type { Turn } from '../types/turns'
+import { SpeakerTargetPicker, type PickedTarget } from './SpeakerTargetPicker'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Button } from '@/components/ui/button'
 
 interface TranscriptViewerProps {
   transcript: string
@@ -23,6 +26,15 @@ interface TranscriptViewerProps {
   onSeek: (startMs: number, endMs?: number) => void
   showActionItems?: boolean
   actionItems?: string[]
+  meetingId?: string
+  onReassign?: (request: {
+    sourceLabel: string
+    anchorIndex: number
+    anchorStartMs: number
+    scope: 'one' | 'before' | 'after'
+    target: PickedTarget
+  }) => void
+  canMintNewSpeaker?: boolean
 }
 
 interface TranscriptSegment {
@@ -30,6 +42,7 @@ interface TranscriptSegment {
   endMs?: number
   text: string
   speaker?: string
+  anchorIndex?: number
 }
 
 type ViewMode = 'timeline' | 'by-speaker'
@@ -133,6 +146,98 @@ function parseTranscriptSegments(transcript: string): TranscriptSegment[] {
 
 const RETURN_TO_TOP_THRESHOLD = 300
 
+interface ReassignControlProps {
+  sourceLabel: string
+  anchorIndex: number
+  anchorStartMs: number
+  speakers: Array<{ label: string; name: string | null }>
+  meetingId?: string
+  canMintNew: boolean
+  onReassign: (request: {
+    sourceLabel: string
+    anchorIndex: number
+    anchorStartMs: number
+    scope: 'one' | 'before' | 'after'
+    target: PickedTarget
+  }) => void
+}
+
+function ReassignControl({
+  sourceLabel,
+  anchorIndex,
+  anchorStartMs,
+  speakers,
+  meetingId,
+  canMintNew,
+  onReassign,
+}: ReassignControlProps) {
+  const [open, setOpen] = useState(false)
+  const [scope, setScope] = useState<'one' | 'before' | 'after' | null>(null)
+
+  function choose(target: PickedTarget) {
+    if (!scope) return
+    onReassign({ sourceLabel, anchorIndex, anchorStartMs, scope, target })
+    setScope(null)
+    setOpen(false)
+  }
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o)
+        if (!o) setScope(null)
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 shrink-0 px-2 text-xs"
+          aria-label={`Reassign turn at ${anchorStartMs}`}
+        >
+          Reassign
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="p-0">
+        {scope === null ? (
+          <div className="space-y-0.5 p-2">
+            <button
+              className="block w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-hover"
+              aria-label="Reassign"
+              onClick={() => setScope('one')}
+            >
+              Reassign
+            </button>
+            <button
+              className="block w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-hover"
+              aria-label="Reassign all before"
+              onClick={() => setScope('before')}
+            >
+              Reassign All Before
+            </button>
+            <button
+              className="block w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-hover"
+              aria-label="Reassign all after"
+              onClick={() => setScope('after')}
+            >
+              Reassign All After
+            </button>
+          </div>
+        ) : (
+          <SpeakerTargetPicker
+            sourceLabel={sourceLabel}
+            speakers={speakers}
+            meetingId={meetingId}
+            canMintNew={canMintNew}
+            onPick={choose}
+          />
+        )}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function TranscriptViewer({
   transcript,
   turns,
@@ -140,7 +245,10 @@ export function TranscriptViewer({
   currentTimeMs,
   onSeek,
   showActionItems = true,
-  actionItems
+  actionItems,
+  meetingId,
+  onReassign,
+  canMintNewSpeaker = true,
 }: TranscriptViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const activeSegmentRef = useRef<HTMLDivElement>(null)
@@ -156,14 +264,15 @@ export function TranscriptViewer({
   // Parse transcript into segments (structured turns take precedence)
   const segments = useMemo(() => {
     if (hasStructuredTurns) {
-      return turns!.map((t) => ({
+      return turns!.map((t, i) => ({
         startMs: t.startMs,
         endMs: t.endMs,
         text: t.text,
-        speaker: t.speaker
+        speaker: t.speaker,
+        anchorIndex: i
       }))
     }
-    return parseTranscriptSegments(transcript)
+    return parseTranscriptSegments(transcript).map((s, i) => ({ ...s, anchorIndex: i }))
   }, [hasStructuredTurns, turns, transcript])
 
   // Find current segment index based on currentTimeMs
@@ -213,6 +322,12 @@ export function TranscriptViewer({
 
     return { groups, totalDurationMs }
   }, [segments, speakerNames])
+
+  // Existing speakers for the reassign target picker: label -> display name (null if unnamed).
+  const speakerOptions = useMemo(
+    () => speakerGroups.groups.map((g) => ({ label: g.key, name: speakerNames?.[g.key] ?? null })),
+    [speakerGroups, speakerNames]
+  )
 
   const toggleSpeaker = (key: string) => {
     setCollapsedSpeakers((prev) => {
@@ -447,7 +562,11 @@ export function TranscriptViewer({
                               </div>
                               <div className="flex flex-col gap-2">
                                 {g.segments.map((seg, j) => (
-                                  <div key={j} className="flex gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover">
+                                  <div
+                                    key={j}
+                                    data-testid="by-speaker-turn"
+                                    className="flex items-start gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover"
+                                  >
                                     <TimeAnchor
                                       startMs={seg.startMs}
                                       endMs={seg.endMs}
@@ -457,6 +576,17 @@ export function TranscriptViewer({
                                       {null}
                                     </TimeAnchor>
                                     <div className="min-w-0 flex-1 text-[13.5px] leading-relaxed text-foreground">{seg.text}</div>
+                                    {onReassign && seg.speaker && seg.anchorIndex !== undefined && (
+                                      <ReassignControl
+                                        sourceLabel={seg.speaker}
+                                        anchorIndex={seg.anchorIndex}
+                                        anchorStartMs={seg.startMs}
+                                        speakers={speakerOptions}
+                                        meetingId={meetingId}
+                                        canMintNew={canMintNewSpeaker}
+                                        onReassign={onReassign}
+                                      />
+                                    )}
                                   </div>
                                 ))}
                               </div>

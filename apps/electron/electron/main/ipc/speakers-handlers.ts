@@ -122,6 +122,24 @@ const UnassignSpeakerSchema = z.object({
   fileLabel: z.string().min(1)
 })
 
+const ReassignTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('existingLabel'), label: z.string().min(1) }),
+  z.object({ kind: z.literal('contact'), contactId: z.string().min(1) }),
+  z.object({ kind: z.literal('newSpeaker') })
+])
+
+const ReassignTurnsSchema = z.object({
+  recordingId: z.string().min(1),
+  sourceLabel: z.string().min(1),
+  anchorIndex: z.number().int().min(0),
+  anchorStartMs: z.number(),
+  scope: z.enum(['one', 'before', 'after']),
+  target: ReassignTargetSchema
+})
+
+export type ReassignTarget = z.infer<typeof ReassignTargetSchema>
+export type ReassignTurnsRequest = z.infer<typeof ReassignTurnsSchema>
+
 /** Parse the JSON turns column into a typed array (tolerant of NULL/garbage). */
 function parseTurns(raw: string | null | undefined): Turn[] {
   if (!raw) return []
@@ -131,6 +149,28 @@ function parseTurns(raw: string | null | undefined): Turn[] {
   } catch {
     return []
   }
+}
+
+/**
+ * Next unused single uppercase letter for a recording's speaker labels: take the
+ * HIGHEST letter A–Z currently used and return the next one (gaps are tolerated).
+ * Returns 'A' when nothing is used, and null when 'Z' is already in use (≥26 speakers),
+ * so the caller can disable "New speaker" rather than mint an invalid label.
+ */
+export function nextUnusedLetter(usedLabels: string[]): string | null {
+  const A = 'A'.charCodeAt(0)
+  const Z = 'Z'.charCodeAt(0)
+  let highest = -1
+  for (const raw of usedLabels) {
+    const label = (raw ?? '').trim().toUpperCase()
+    if (label.length !== 1) continue
+    const code = label.charCodeAt(0)
+    if (code < A || code > Z) continue
+    if (code > highest) highest = code
+  }
+  if (highest === -1) return 'A'
+  if (highest >= Z) return null
+  return String.fromCharCode(highest + 1)
 }
 
 /** Flat suggestion row returned to the renderer. */
@@ -319,6 +359,108 @@ export function registerSpeakersHandlers(): void {
       } catch (err) {
         console.error('speakers:merge error:', err)
         return error('DATABASE_ERROR', 'Failed to merge speakers', err)
+      }
+    }
+  )
+
+  /**
+   * Reassign a scoped set of one speaker's turns to a target letter (existing label,
+   * contact, or a freshly-minted new speaker). Atomic — mirrors speakers:merge:
+   *   1. Load turns; reject a stale anchor (no write).
+   *   2. Resolve the target letter (existingLabel as-is; contact -> existing mapped
+   *      letter else mint+map via the SAME assign path that banks a voiceprint;
+   *      newSpeaker -> mint, no mapping).
+   *   3. Rewrite the source-scoped turns (scope: one/before/after, anchor inclusive).
+   *   4. Persist via updateTranscriptTurns; invalidate embeddings + expire suggestions.
+   *   5. Delete the source recording_speakers row if the source label is now empty.
+   */
+  ipcMain.handle(
+    'speakers:reassignTurns',
+    async (
+      _,
+      request: unknown
+    ): Promise<Result<{ recordingId: string; targetLabel: string; rewrittenCount: number }>> => {
+      try {
+        const parsed = ReassignTurnsSchema.safeParse(request)
+        if (!parsed.success) {
+          return error('VALIDATION_ERROR', 'Invalid reassign request', parsed.error.format())
+        }
+
+        const { recordingId, sourceLabel, anchorIndex, anchorStartMs, scope, target } = parsed.data
+
+        const transcript = getTranscriptByRecordingId(recordingId)
+        const turns = parseTurns(transcript?.turns)
+        if (turns.length === 0) {
+          return error('NOT_FOUND', `No diarized turns found for recording ${recordingId}`)
+        }
+
+        // 1. Stale-anchor guard: the anchor must still be the source label at the same
+        //    start time. If the turns changed underneath, reject with NO write.
+        const anchor = turns[anchorIndex]
+        if (!anchor || anchor.startMs !== anchorStartMs || anchor.speaker !== sourceLabel) {
+          return error('VALIDATION_ERROR', 'stale turns; refresh and retry')
+        }
+
+        // 2. Resolve the target letter.
+        const rows = getRecordingSpeakers(recordingId)
+        const usedLabels = [...new Set([...turns.map((t) => t.speaker), ...rows.map((r) => r.file_label)])]
+        let targetLabel: string
+        if (target.kind === 'existingLabel') {
+          targetLabel = target.label
+        } else if (target.kind === 'contact') {
+          const contact = getContactById(target.contactId)
+          if (!contact) return error('NOT_FOUND', `Contact with ID ${target.contactId} not found`)
+          const existing = rows.find((r) => r.contact_id === target.contactId)
+          if (existing) {
+            targetLabel = existing.file_label
+          } else {
+            const minted = nextUnusedLetter(usedLabels)
+            if (!minted) return error('VALIDATION_ERROR', 'No unused speaker letters remain (Z in use)')
+            targetLabel = minted
+            // Reuse the assign path: upsert the mapping AND schedule the voiceprint capture,
+            // identical to roster Assign (no bare upsert).
+            upsertRecordingSpeaker({
+              recording_id: recordingId,
+              file_label: targetLabel,
+              contact_id: target.contactId,
+              source: 'user'
+            })
+            scheduleCaptureAndNotify(recordingId, targetLabel, target.contactId, 'manual')
+          }
+        } else {
+          const minted = nextUnusedLetter(usedLabels)
+          if (!minted) return error('VALIDATION_ERROR', 'No unused speaker letters remain (Z in use)')
+          targetLabel = minted
+        }
+
+        // 3. Rewrite the source-scoped turns (anchor inclusive for before/after).
+        let rewrittenCount = 0
+        const rewritten = turns.map((t, i) => {
+          if (t.speaker !== sourceLabel) return t
+          const inScope =
+            scope === 'one' ? i === anchorIndex : scope === 'before' ? i <= anchorIndex : i >= anchorIndex
+          if (!inScope) return t
+          rewrittenCount += 1
+          return { ...t, speaker: targetLabel }
+        })
+
+        // 4. Persist + invalidate (same set merge uses).
+        updateTranscriptTurns(recordingId, rewritten)
+        deleteLabelEmbeddingsForRecording(recordingId)
+        deleteWindowEmbeddingsForRecording(recordingId)
+        clearSuggestionsInFlight(recordingId)
+        expireSuggestionsForRecording(recordingId)
+
+        // 5. Orphan cleanup: drop the source mapping if it has no turns left.
+        const sourceStillUsed = rewritten.some((t) => t.speaker === sourceLabel)
+        if (!sourceStillUsed) {
+          deleteRecordingSpeaker(recordingId, sourceLabel)
+        }
+
+        return success({ recordingId, targetLabel, rewrittenCount })
+      } catch (err) {
+        console.error('speakers:reassignTurns error:', err)
+        return error('DATABASE_ERROR', 'Failed to reassign turns', err)
       }
     }
   )

@@ -303,6 +303,41 @@ export function SourceReader({
     }
   }, [recordingId])
 
+  // Compute whether a new speaker letter can still be minted (Z not in use). Mirrors the
+  // handler's nextUnusedLetter Z-guard so the picker disables "New speaker" when full.
+  //
+  // INTENTIONAL ASYMMETRY — do NOT "unify" this with nextUnusedLetter. The renderer only needs
+  // "is Z already in use?" (spec §4.6: if Z is in use, New speaker is disabled). The handler runs
+  // the full nextUnusedLetter over the union of turn labels + recording_speakers rows and may
+  // return null for the same condition. A recording whose ONLY label is 'Z' correctly disables
+  // New speaker in BOTH paths (renderer: Z present → false; handler: highest === Z → null).
+  // nextUnusedLetter is a node-main export; importing it into this renderer would cross the
+  // web/node program boundary and break typecheck — keep this simple local check.
+  const canMintNewSpeaker = !turns.some((t) => (t.speaker ?? '').trim().toUpperCase() === 'Z')
+
+  const handleReassign = useCallback(
+    async (request: {
+      sourceLabel: string
+      anchorIndex: number
+      anchorStartMs: number
+      scope: 'one' | 'before' | 'after'
+      target: { kind: 'existingLabel'; label: string } | { kind: 'contact'; contactId: string } | { kind: 'newSpeaker' }
+    }) => {
+      if (!recordingId) return
+      try {
+        const res = await window.electronAPI.speakers.reassignTurns({ recordingId, ...request })
+        if (res?.success) {
+          refreshSpeakers().catch(() => {})
+        } else {
+          toast.error('Could not reassign turn', res?.error?.message)
+        }
+      } catch (err) {
+        toast.error('Could not reassign turn', err instanceof Error ? err.message : String(err))
+      }
+    },
+    [recordingId, refreshSpeakers]
+  )
+
   // Seed turns from the prop transcript immediately (so the panel renders before the
   // async fetch resolves), then fetch fresh turns + assignment names + suggestions.
   const transcriptTurns = transcript?.turns
@@ -996,6 +1031,9 @@ export function SourceReader({
               transcript={transcript.full_text}
               turns={hasStructuredTurns ? turns : undefined}
               speakerNames={speakerNames}
+              meetingId={meeting?.id}
+              onReassign={handleReassign}
+              canMintNewSpeaker={canMintNewSpeaker}
               currentTimeMs={currentTimeMs}
               onSeek={onSeek || (() => {})}
               showActionItems={true}
