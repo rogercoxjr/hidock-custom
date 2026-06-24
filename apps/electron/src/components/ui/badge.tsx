@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 
 // Harbor pill/badge. Soft tonal variants for status, labels, insights, etc.
 const badgeVariants = cva(
-  'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border font-medium leading-none transition-colors',
+  'inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full border font-medium leading-none transition-colors',
   {
     variants: {
       variant: {
@@ -17,8 +17,8 @@ const badgeVariants = cva(
         danger: 'border-transparent bg-danger-soft text-danger'
       },
       size: {
-        sm: 'px-2 py-1 text-[10px]',
-        md: 'px-2.5 py-1 text-xs'
+        sm: 'px-2 text-xs',
+        md: 'px-2.5 text-xs'
       }
     },
     defaultVariants: { variant: 'default', size: 'sm' }

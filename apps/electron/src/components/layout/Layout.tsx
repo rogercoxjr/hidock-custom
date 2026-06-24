@@ -433,7 +433,6 @@ export function Layout({ children }: LayoutProps) {
                 <Switch
                   checked={qaLogsEnabled}
                   onCheckedChange={setQaLogsEnabled}
-                  className="scale-75"
                 />
               </div>
             )}
