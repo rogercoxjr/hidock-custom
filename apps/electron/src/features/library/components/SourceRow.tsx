@@ -196,12 +196,16 @@ export const SourceRow = memo(function SourceRow({
 
         {/* Insight count badge (accent-2-soft) */}
         {insights > 0 && (
-          <span
-            className="shrink-0 rounded-full bg-accent-2-soft px-[7px] py-0.5 font-mono text-[10px] font-semibold text-accent-2"
-            title={`${insights} insight${insights === 1 ? '' : 's'}`}
-          >
-            {insights}
-          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                className="shrink-0 rounded-full bg-accent-2-soft px-[7px] py-0.5 font-mono text-[10px] font-semibold text-accent-2"
+              >
+                {insights}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{`${insights} insight${insights === 1 ? '' : 's'}`}</TooltipContent>
+          </Tooltip>
         )}
       </div>
 
@@ -312,30 +316,46 @@ export const SourceRow = memo(function SourceRow({
 
         {/* Play / Stop — always visible */}
         {isPlaying ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onStop() }}
-            title="Stop playback"
-          >
-            <Square className="h-3.5 w-3.5" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => { e.stopPropagation(); onStop() }}
+                aria-label="Stop playback"
+              >
+                <Square className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Stop playback</TooltipContent>
+          </Tooltip>
         ) : (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onPlay() }}
-            disabled={!canPlay || error?.type === 'audio_not_found'}
-            title={
-              error?.type === 'audio_not_found'
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => { e.stopPropagation(); onPlay() }}
+                disabled={!canPlay || error?.type === 'audio_not_found'}
+                aria-label={
+                  error?.type === 'audio_not_found'
+                    ? 'File missing'
+                    : canPlay
+                      ? 'Play capture'
+                      : 'Download to play'
+                }
+              >
+                <Play className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {error?.type === 'audio_not_found'
                 ? 'File missing'
                 : canPlay
                   ? 'Play capture'
-                  : 'Download to play'
-            }
-          >
-            <Play className="h-3.5 w-3.5" />
-          </Button>
+                  : 'Download to play'}
+            </TooltipContent>
+          </Tooltip>
         )}
       </div>
     </div>

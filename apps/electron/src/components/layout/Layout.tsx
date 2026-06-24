@@ -31,6 +31,7 @@ import { useConfigStore } from '@/store/domain/useConfigStore'
 
 type LucideIcon = typeof BookOpen
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from '@/components/ui/toaster'
 import { OperationController } from '@/components/OperationController'
 import { OperationsPanel } from '@/components/layout/OperationsPanel'
@@ -244,9 +245,11 @@ export function Layout({ children }: LayoutProps) {
 
         {/* Device status pill */}
         <div className={cn('shrink-0 px-3 pb-3', !sidebarOpen && 'px-2')}>
+          <Tooltip>
+          <TooltipTrigger asChild>
           <Link
             to="/sync"
-            title={`${isConnected ? deviceModel : isConnecting ? 'Connecting…' : 'Disconnected'}`}
+            aria-label={`${isConnected ? deviceModel : isConnecting ? 'Connecting…' : 'Disconnected'}`}
             className={cn(
               'flex w-full items-center gap-2.5 rounded-lg border border-border bg-surface-sunken px-3 py-2.5 text-left transition-colors hover:border-border-strong',
               !sidebarOpen && 'justify-center px-0'
@@ -278,6 +281,11 @@ export function Layout({ children }: LayoutProps) {
               </span>
             )}
           </Link>
+          </TooltipTrigger>
+          <TooltipContent>
+            {isConnected ? deviceModel : isConnecting ? 'Connecting…' : 'Disconnected'}
+          </TooltipContent>
+          </Tooltip>
         </div>
 
         {/* Navigation */}

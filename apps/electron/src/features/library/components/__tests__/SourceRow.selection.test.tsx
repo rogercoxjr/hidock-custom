@@ -16,6 +16,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { SourceRow } from '../SourceRow'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { UnifiedRecording } from '@/types/unified-recording'
 
 // SourceRow reads recordingErrors from the library store — provide an empty map.
@@ -45,14 +46,16 @@ const renderRow = (props: Partial<React.ComponentProps<typeof SourceRow>> = {}) 
   const onPlay = vi.fn()
   const onStop = vi.fn()
   render(
-    <SourceRow
-      recording={baseRecording}
-      isPlaying={false}
-      onClick={onClick}
-      onPlay={onPlay}
-      onStop={onStop}
-      {...props}
-    />
+    <TooltipProvider>
+      <SourceRow
+        recording={baseRecording}
+        isPlaying={false}
+        onClick={onClick}
+        onPlay={onPlay}
+        onStop={onStop}
+        {...props}
+      />
+    </TooltipProvider>
   )
   return { onClick, onPlay, onStop }
 }
@@ -104,7 +107,7 @@ describe('SourceRow modifier-click selection', () => {
   it('does NOT route to onClick when an action button is clicked', () => {
     const { onClick, onPlay } = renderRow()
     // Play is always rendered for a local recording.
-    fireEvent.click(screen.getByTitle(/play capture/i))
+    fireEvent.click(screen.getByRole('button', { name: /play capture/i }))
     expect(onPlay).toHaveBeenCalledTimes(1)
     expect(onClick).not.toHaveBeenCalled()
   })
