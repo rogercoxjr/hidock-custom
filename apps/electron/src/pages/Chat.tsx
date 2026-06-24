@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
+import { Markdown } from '@/components/ui/markdown'
 import {
   Send,
   Plus,
@@ -1164,7 +1164,7 @@ export function Chat() {
                     <div className={cn('flex max-w-[80%] min-w-0 flex-col gap-2', isUser && 'items-end')}>
                       <div
                         className={cn(
-                          'whitespace-pre-wrap rounded-lg px-3.5 py-[11px] text-[13.5px] leading-relaxed',
+                          'rounded-lg px-3.5 py-[11px] text-[13.5px] leading-relaxed',
                           isUser
                             ? 'rounded-br-[4px] bg-primary text-primary-foreground'
                             : 'rounded-bl-[4px] border border-border bg-surface text-ink',
@@ -1172,11 +1172,9 @@ export function Chat() {
                         )}
                       >
                         {message.role === 'assistant' ? (
-                          <div className="prose prose-sm max-w-none leading-relaxed text-[13.5px]">
-                            <ReactMarkdown>{message.content}</ReactMarkdown>
-                          </div>
+                          <Markdown className="text-[13.5px]">{message.content}</Markdown>
                         ) : (
-                          <p className="leading-relaxed">{message.content}</p>
+                          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
                         )}
                         <p
                           className={cn(

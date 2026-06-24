@@ -33,6 +33,7 @@ import type { LabelDefinition } from '@/types'
 import { formatDateTime, formatDuration, formatBytes } from '@/lib/utils'
 import { TemplateChip, SuggestNewBanner } from './TemplateChip'
 import { Eyebrow } from '@/components/harbor/Eyebrow'
+import { Markdown } from '@/components/ui/markdown'
 
 // Stable empty reference so the labels selector never yields a fresh [] per render
 // (keeps useCallback deps that reference labelItems stable).
@@ -995,7 +996,7 @@ export function SourceReader({
                 </button>
                 {summaryExpanded && (
                   <div className="mt-2 rounded-lg border border-border bg-surface p-3 shadow-xs">
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{transcript.summary}</p>
+                    <Markdown>{transcript.summary}</Markdown>
                   </div>
                 )}
               </div>

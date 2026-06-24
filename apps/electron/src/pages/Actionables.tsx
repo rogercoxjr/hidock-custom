@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
+import { Markdown } from '@/components/ui/markdown'
 import {
   RefreshCw,
   FileText,
@@ -679,8 +679,8 @@ export function Actionables() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="prose prose-sm max-w-none dark:prose-invert bg-surface-sunken p-[var(--space-4)] rounded-md border border-border">
-            <ReactMarkdown>{generatedOutput?.content || ''}</ReactMarkdown>
+          <div className="bg-surface-sunken p-[var(--space-4)] rounded-md border border-border">
+            <Markdown>{generatedOutput?.content || ''}</Markdown>
           </div>
           <DialogFooter className="gap-2">
             {generatedOutput?.sourceId && (
