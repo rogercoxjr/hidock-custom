@@ -5,6 +5,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { SecurityWarningBanner } from '@/components/SecurityWarningBanner'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { ToastProvider } from '@/components/ui/toaster'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { getHiDockDeviceService } from '@/services/hidock-device'
 import { NavigationLogger, initInteractionLogger, initErrorLogger, cleanupQAMonitor } from '@/services/qa-monitor'
 import { lazyWithRetry } from '@/lib/lazyWithRetry'
@@ -76,6 +77,7 @@ function App(): React.ReactElement {
   }, [])
 
   return (
+    <TooltipProvider delayDuration={300}>
     <ToastProvider>
       <SecurityWarningBanner />
       <Layout>
@@ -205,6 +207,7 @@ function App(): React.ReactElement {
         </Routes>
       </Layout>
     </ToastProvider>
+    </TooltipProvider>
   )
 }
 

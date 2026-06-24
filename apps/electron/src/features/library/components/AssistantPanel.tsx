@@ -190,7 +190,7 @@ export function AssistantPanel({ recording, transcript, onAskAssistant, onGenera
             <p>Rate limit reached. Wait {Math.ceil((rateLimitReset! - Date.now()) / 1000)}s before submitting more queries.</p>
           </div>
         )}
-        <div className="flex items-end gap-2 bg-surface border-[1.5px] border-border rounded-lg pl-3 pr-2 py-2">
+        <div className="flex items-end gap-2 bg-surface border-[1.5px] border-border rounded-lg pl-3 pr-2 py-2 focus-within:ring-[3px] focus-within:ring-ring/40 focus-within:border-border-brand">
           <Textarea
             placeholder={
               recording

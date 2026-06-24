@@ -2,6 +2,7 @@ import { Filter, Cloud, HardDrive, Check, Search, ArrowUpDown, ChevronUp, Chevro
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { SegmentedToggle } from '@/components/ui/segmented-toggle'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import {
   FilterMode,
   SemanticLocationFilter,
@@ -42,15 +43,11 @@ interface LibraryFiltersProps {
   onSortOrderChange?: (order: SortOrder) => void
 }
 
-// Harbor pill-chip (matches prototype `hd-chip`). Active = solid primary, inactive = surface + border.
+// Harbor pill-chip. Active = soft accent tint + brand border (NOT a solid fill); inactive = surface + border.
 const chipBase =
   'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border inline-flex items-center gap-1.5'
-const chipActive = 'border-transparent bg-primary text-primary-foreground'
+const chipActive = 'border-border-brand bg-accent-strong-soft text-accent-strong'
 const chipInactive = 'border-border bg-surface text-foreground hover:border-border-strong hover:text-ink'
-
-// Harbor select control
-const selectClass =
-  'h-8 rounded-md border border-border bg-surface px-3 py-1 text-xs text-ink'
 
 export function LibraryFilters({
   stats,
@@ -245,17 +242,17 @@ export function LibraryFilters({
           <div className="flex items-center gap-2">
             <ArrowUpDown className="h-4 w-4 text-ink-muted" />
             <span className="text-xs font-medium text-ink-muted">Sort:</span>
-            <select
-              value={sortBy ?? 'date'}
-              onChange={(e) => onSortByChange(e.target.value as SortBy)}
-              className={selectClass}
-              aria-label="Sort by"
-            >
-              <option value="date">Date</option>
-              <option value="name">Name</option>
-              <option value="duration">Duration</option>
-              <option value="quality">Quality</option>
-            </select>
+            <Select value={sortBy ?? 'date'} onValueChange={(v) => onSortByChange(v as SortBy)}>
+              <SelectTrigger aria-label="Sort by" className="h-8 w-[140px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="duration">Duration</SelectItem>
+                <SelectItem value="quality">Quality</SelectItem>
+              </SelectContent>
+            </Select>
             <button
               onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
               className="h-8 px-2 rounded-md border border-border bg-surface text-xs font-medium text-ink hover:bg-surface-hover transition-colors inline-flex items-center gap-1"
@@ -280,34 +277,34 @@ export function LibraryFilters({
         {/* Quality Filter */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-ink-muted">Quality:</span>
-          <select
-            value={qualityFilter}
-            onChange={(e) => onQualityFilterChange(e.target.value)}
-            className={selectClass}
-            aria-label="Filter by quality rating"
-          >
-            <option value="all">All Ratings</option>
-            <option value="valuable">Valuable</option>
-            <option value="archived">Archived</option>
-            <option value="low-value">Low-Value</option>
-            <option value="unrated">Unrated</option>
-          </select>
+          <Select value={qualityFilter} onValueChange={onQualityFilterChange}>
+            <SelectTrigger aria-label="Filter by quality rating" className="h-8 w-[150px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Ratings</SelectItem>
+              <SelectItem value="valuable">Valuable</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+              <SelectItem value="low-value">Low-Value</SelectItem>
+              <SelectItem value="unrated">Unrated</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Status Filter */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-ink-muted">Status:</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => onStatusFilterChange(e.target.value)}
-            className={selectClass}
-            aria-label="Filter by processing status"
-          >
-            <option value="all">All Statuses</option>
-            <option value="processing">Processing</option>
-            <option value="ready">Ready</option>
-            <option value="enriched">Enriched</option>
-          </select>
+          <Select value={statusFilter} onValueChange={onStatusFilterChange}>
+            <SelectTrigger aria-label="Filter by processing status" className="h-8 w-[150px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="processing">Processing</SelectItem>
+              <SelectItem value="ready">Ready</SelectItem>
+              <SelectItem value="enriched">Enriched</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </div>
