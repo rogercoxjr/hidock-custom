@@ -42,10 +42,10 @@ interface LibraryFiltersProps {
   onSortOrderChange?: (order: SortOrder) => void
 }
 
-// Harbor pill-chip (matches prototype `hd-chip`). Active = solid primary, inactive = surface + border.
+// Harbor pill-chip. Active = soft accent tint + brand border (NOT a solid fill); inactive = surface + border.
 const chipBase =
   'rounded-full px-3 py-1.5 text-xs font-semibold transition-colors border inline-flex items-center gap-1.5'
-const chipActive = 'border-transparent bg-primary text-primary-foreground'
+const chipActive = 'border-border-brand bg-accent-strong-soft text-accent-strong'
 const chipInactive = 'border-border bg-surface text-foreground hover:border-border-strong hover:text-ink'
 
 // Harbor select control

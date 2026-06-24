@@ -143,14 +143,13 @@ export const SourceRow = memo(function SourceRow({
   return (
     <div
       className={[
-        // Two coexisting visual states, applied via a left accent bar + tint:
-        //  • BULK-selected (isSelected) → teal selection tint + teal left bar
-        //  • OPEN/active source (isActiveSource) → blue accent-soft tint + blue left bar
-        // A row can be both; the open (blue) bar takes the left-edge so the
-        // currently-open row stays identifiable inside a multi-selection.
-        'group @container flex items-center justify-between py-2 px-3 cursor-pointer transition-colors border-l-2',
-        isSelected ? 'bg-accent-2-soft border-l-accent-2' : 'border-l-transparent hover:bg-surface-hover',
-        isActiveSource ? 'bg-accent-strong-soft border-l-primary' : '',
+        // Visual state by BACKGROUND TINT only (Harbor forbids colored left-border cards):
+        //  • OPEN/active source (isActiveSource) → blue accent-soft tint (wins when also selected,
+        //    so the open row stays identifiable inside a multi-selection)
+        //  • BULK-selected (isSelected) → teal selection tint
+        //  • neither → hover tint
+        'group @container flex items-center justify-between py-2 px-3 cursor-pointer transition-colors',
+        isActiveSource ? 'bg-accent-strong-soft' : isSelected ? 'bg-accent-2-soft' : 'hover:bg-surface-hover',
       ].filter(Boolean).join(' ')}
       role="option"
       onClick={handleRowClick}
