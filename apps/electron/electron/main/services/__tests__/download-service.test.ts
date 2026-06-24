@@ -44,6 +44,7 @@ vi.mock('../database', () => ({
   queryOne: vi.fn(() => null), // No existing entries by default
   queryAll: vi.fn(() => []),   // Empty queue by default
   run: vi.fn(),                // No-op by default
+  runNoSave: vi.fn(),          // No-op by default (transaction-safe variant)
   runInTransaction: vi.fn((fn: () => void) => fn()), // Execute callback immediately
   getDatabase: vi.fn(() => ({  // Mock database instance
     exec: vi.fn(() => []),
