@@ -102,4 +102,18 @@ describe('SourceReader — summary at top (QOL #5)', () => {
     await screen.findByTestId('transcript-viewer')
     expect(screen.queryByText('Summary')).not.toBeInTheDocument()
   })
+
+  it('renders the summary as formatted markdown (headings/lists), not literal markup', async () => {
+    render(
+      <SourceReader
+        recording={baseRecording}
+        transcript={makeTranscript({ summary: '## Decisions\n\n- ship it\n- follow up' })}
+      />
+    )
+    const heading = await screen.findByText('Decisions')
+    expect(heading.tagName).toBe('H2')
+    expect(screen.getByText('ship it').closest('li')).toBeTruthy()
+    // not rendered as literal markdown text
+    expect(screen.queryByText('## Decisions')).not.toBeInTheDocument()
+  })
 })
