@@ -49,14 +49,19 @@ interface PersonAvatarProps {
  * readers can discover it.
  */
 export function PersonAvatar({ name, color, size = 30, className, voiceBadge = false }: PersonAvatarProps) {
-  const bg = color ?? avatarColor(name)
+  const base = color ?? avatarColor(name)
+  // Tonal Harbor avatar: a pale tint of the person's hue with dark same-hue initials.
+  // Keeps per-person hue (and harmonizes with the saturated speaker dots that reuse avatarColor),
+  // but reads calm/on-brand instead of a saturated fill with white text.
+  const bg = `color-mix(in srgb, ${base} 22%, white)`
+  const fg = `color-mix(in srgb, ${base} 72%, black)`
   const pipSize = Math.max(10, Math.round(size * 0.38))
 
   return (
     <span className={cn('relative inline-flex shrink-0 overflow-visible', className)}>
       <span
-        className="inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
-        style={{ width: size, height: size, background: bg, fontSize: Math.max(9, Math.round(size * 0.38)) }}
+        className="inline-flex shrink-0 items-center justify-center rounded-full font-semibold"
+        style={{ width: size, height: size, background: bg, color: fg, fontSize: Math.max(9, Math.round(size * 0.38)) }}
         aria-hidden
       >
         {initialsOf(name)}
