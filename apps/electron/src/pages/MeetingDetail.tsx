@@ -23,6 +23,7 @@ import { MeetingActionables } from '@/components/MeetingActionables'
 import { useAudioControls } from '@/components/OperationController'
 import { useUIStore } from '@/store/useUIStore'
 import { toast } from '@/components/ui/toaster'
+import { Markdown } from '@/components/ui/markdown'
 import type { MeetingDetails } from '@/types'
 
 const ATTENDEES_COLLAPSED_LIMIT = 8
@@ -603,7 +604,7 @@ export function MeetingDetail() {
                           {recording.transcript.summary && (
                             <div className="mb-3 rounded-lg border border-border bg-surface p-3">
                               <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-muted">Summary</p>
-                              <p className="text-sm text-foreground">{recording.transcript.summary}</p>
+                              <Markdown>{recording.transcript.summary}</Markdown>
                             </div>
                           )}
 

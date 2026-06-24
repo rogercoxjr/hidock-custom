@@ -25,6 +25,7 @@ import { useLibraryStore } from '@/store/useLibraryStore'
 import { CapturePeoplePills } from './CapturePeoplePills'
 import { CaptureLabelChips } from './CaptureLabelChips'
 import type { CapturePerson, CaptureLabel } from '../types/captureMeta'
+import { Markdown } from '@/components/ui/markdown'
 
 // Harbor Badge variant per quality rating.
 const QUALITY_VARIANT: Record<string, 'accent' | 'default'> = {
@@ -299,7 +300,7 @@ export const SourceCard = memo(function SourceCard({
                 {transcript.summary && (
                   <div className="p-3 bg-surface-sunken rounded-lg">
                     <p className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-muted mb-1">Summary</p>
-                    <p className="text-sm text-foreground">{transcript.summary}</p>
+                    <Markdown>{transcript.summary}</Markdown>
                   </div>
                 )}
 
