@@ -2212,8 +2212,11 @@ export function run(sql: string, params: any[] = []): void {
   saveDatabase()
 }
 
-// Internal run that doesn't auto-save (for use within transactions)
-function runNoSave(sql: string, params: any[] = []): void {
+// Run that doesn't auto-save — MUST be used for writes inside runInTransaction().
+// (The auto-saving run() calls saveDatabase()/db.export() per statement, which
+// terminates the open transaction so the helper's COMMIT/ROLLBACK then fail with
+// "cannot ... - no transaction is active". runInTransaction saves once on success.)
+export function runNoSave(sql: string, params: any[] = []): void {
   getDatabase().run(sql, params)
 }
 

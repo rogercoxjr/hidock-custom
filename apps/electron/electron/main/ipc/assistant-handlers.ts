@@ -1,6 +1,6 @@
 
 import { ipcMain } from 'electron'
-import { queryAll, queryOne, run, runInTransaction } from '../services/database'
+import { queryAll, queryOne, run, runNoSave, runInTransaction } from '../services/database'
 import { getRAGService } from '../services/rag'
 import type { Conversation, Message } from '@/types/knowledge'
 import { randomUUID } from 'crypto'
@@ -86,11 +86,11 @@ export function registerAssistantHandlers(): void {
       const now = new Date().toISOString()
 
       runInTransaction(() => {
-        run('INSERT INTO chat_messages (id, conversation_id, role, content, sources, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        runNoSave('INSERT INTO chat_messages (id, conversation_id, role, content, sources, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           [id, conversationId, role, content, sources || null, now])
 
         // Update conversation's updated_at timestamp
-        run('UPDATE conversations SET updated_at = ? WHERE id = ?', [now, conversationId])
+        runNoSave('UPDATE conversations SET updated_at = ? WHERE id = ?', [now, conversationId])
       })
 
       const newMessage = queryOne<any>(`SELECT ${MESSAGE_COLUMNS} FROM chat_messages WHERE id = ?`, [id])
