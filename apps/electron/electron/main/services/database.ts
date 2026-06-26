@@ -1918,7 +1918,7 @@ export async function initializeDatabase(): Promise<void> {
   try {
     db = new Database(dbPath)            // opens existing file or creates a new one
     db.pragma('journal_mode = WAL')      // concurrent readers + one safe writer
-    db.pragma('foreign_keys = ON')
+    db.pragma('foreign_keys = OFF')      // match prior sql.js behavior; rebuild-style migrations (e.g. v31 DROP+rename) assume FK enforcement is off.
 
     const database = getDatabase()
     const statements = SCHEMA.split(';').map(s => s.trim()).filter(s => s.length > 0)
