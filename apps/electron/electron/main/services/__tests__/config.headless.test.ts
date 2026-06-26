@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, rmSync, existsSync } from 'fs'
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
@@ -15,6 +15,7 @@ describe('config (headless)', () => {
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true })
     delete process.env.HIDOCK_DATA_ROOT
+    delete process.env.HIDOCK_CONFIG_PATH
     delete process.env.HIDOCK_SECRET_KEY
   })
 
@@ -30,7 +31,7 @@ describe('config (headless)', () => {
     const cfg = await import('../config')
     await cfg.initializeConfig()
     await cfg.updateConfig('transcription', { assemblyaiApiKey: 'secret-abc' })
-    const raw = require('fs').readFileSync(join(dir, 'config.json'), 'utf-8')
+    const raw = readFileSync(join(dir, 'config.json'), 'utf-8')
     expect(raw).not.toContain('secret-abc')        // encrypted on disk
     expect(cfg.getConfig().transcription.assemblyaiApiKey).toBe('secret-abc') // decrypted in memory
   })
