@@ -34,4 +34,13 @@ describe('REST error envelope', () => {
     expect(JSON.stringify(res.json())).not.toContain('secret detail')
     await app.close()
   })
+  it('does NOT leak the message of a non-HttpError that carries a statusCode', async () => {
+    const app = appWithRoutes()
+    app.get('/statusy', async () => { const e: any = new Error('postgres://user:secret@host/db'); e.statusCode = 503; throw e })
+    const res = await app.inject({ url: '/statusy' })
+    expect(res.statusCode).toBe(500)
+    expect(res.json()).toEqual({ error: 'internal' })
+    expect(JSON.stringify(res.json())).not.toContain('secret')
+    await app.close()
+  })
 })
