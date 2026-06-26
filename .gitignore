@@ -210,3 +210,11 @@ apps/electron/scripts/aai-diarization-tune.mjs
 
 # SDD scratch (briefs/reports/ledgers) — never commit, at any depth
 .superpowers/
+
+# Runtime/scratch artifacts (accidentally committed during the hosted-hub branch; untracked 2026-06-26)
+.omc/
+**/.hidock-data/
+*.pid
+graphify-out/
+design files/
+.superpowers/
