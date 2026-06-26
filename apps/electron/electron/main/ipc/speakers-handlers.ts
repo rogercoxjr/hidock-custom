@@ -5,7 +5,8 @@
  * capture hook is wired in D4 (see TODO below) — D3 does NOT import voiceprint-service.
  */
 
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
+import { getBroadcaster } from '../services/broadcaster'
 import {
   upsertRecordingSpeaker,
   deleteRecordingSpeaker,
@@ -30,10 +31,6 @@ import type { Turn } from '../services/asr/asr-provider'
 import { success, error, Result } from '../types/api'
 import { z } from 'zod'
 
-let mainWindow: BrowserWindow | null = null
-export function setMainWindowForSpeakers(win: BrowserWindow): void {
-  mainWindow = win
-}
 
 /**
  * Per-recording single-flight for the expensive getSuggestions compute (spec §5). getSuggestions
@@ -224,9 +221,7 @@ function scheduleCaptureAndNotify(
           purgedCount: purgedCount && purgedCount > 0 ? purgedCount : undefined
         }
         try {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('voiceprint:captured', payload)
-          }
+          getBroadcaster().broadcast('voiceprint:captured', payload)
         } catch (e) {
           console.warn(`[Voiceprint] send failed (${recordingId}/${fileLabel}): ${(e as Error).message}`)
         }

@@ -2,99 +2,57 @@
  * Schema v31 tests — Smart Labels: drop the CHECK constraint on
  * knowledge_captures.category.
  *
- * Uses the REAL sql.js in-memory database (only external boundaries mocked).
- * Covers BOTH paths:
+ * Backed by the REAL better-sqlite3 database (canonical harness — see
+ * database.boot.test.ts): each test gets a fresh HIDOCK_DATA_ROOT temp dir +
+ * vi.resetModules(), then initializeFileStorage() + initializeDatabase() build
+ * the real schema on disk. Covers BOTH paths:
  *  - Fresh boot: the relaxed (no-CHECK) column accepts user-defined categories,
- *    schema_version is 31, and the category index exists.
+ *    schema_version is at head (33), and the category index exists.
  *  - Genuine upgrade: a v30-shaped table WITH the old CHECK is rebuilt by the
  *    real MIGRATIONS[31]. Asserts all rows + categories preserved, the category
  *    index recreated, and CASCADE children (action_items, which carry the
  *    knowledge_capture_id FK with ON DELETE CASCADE) still resolve to parents.
- *
- * Mirrors the database-v30 / database-v25 harness.
  */
 // @vitest-environment node
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { vi } from 'vitest'
-import os from 'os'
-import path from 'path'
-import fs from 'fs'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
-const shared = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _os = require('os') as typeof import('os')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _fs = require('fs') as typeof import('fs')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _path = require('path') as typeof import('path')
+let dir: string
 
-  const tmpDir = _fs.mkdtempSync(_path.join(_os.tmpdir(), 'hidock-v31-'))
-  const dataDir = _path.join(tmpDir, 'data')
-  _fs.mkdirSync(dataDir, { recursive: true })
-
-  return { tmpDir, dataDir, dbPath: _path.join(dataDir, 'hidock.db') }
+beforeEach(() => {
+  vi.resetModules()
+  dir = mkdtempSync(join(tmpdir(), 'hidock-v31-'))
+  process.env.HIDOCK_DATA_ROOT = dir
 })
 
-vi.mock('electron', () => ({
-  app: {
-    getPath: vi.fn(() => os.tmpdir()),
-    getName: vi.fn(() => 'test')
-  },
-  BrowserWindow: { getAllWindows: vi.fn(() => []) },
-  ipcMain: { handle: vi.fn() },
-  Notification: { isSupported: vi.fn(() => false) }
-}))
-
-vi.mock('../config', () => ({
-  getConfig: vi.fn(() => ({
-    storage: { dataPath: shared.tmpDir, maxRecordingsGB: 50 },
-    transcription: {
-      provider: 'assemblyai',
-      assemblyaiApiKey: 'test-key',
-      assemblyaiModels: ['universal-3-pro', 'universal-2'],
-      autoTranscribe: false
-    }
-  })),
-  updateConfig: vi.fn(async () => {}),
-  getDataPath: vi.fn(() => shared.tmpDir)
-}))
-
-vi.mock('../file-storage', () => ({
-  getDatabasePath: vi.fn(() => shared.dbPath),
-  getRecordingsPath: vi.fn(() => shared.tmpDir),
-  getCachePath: vi.fn(() => os.tmpdir()),
-  saveRecording: vi.fn(async (filename: string, _data: Buffer) => {
-    return path.join(shared.tmpDir, filename)
-  })
-}))
-
-vi.mock('../vector-store', () => ({
-  getVectorStore: vi.fn(() => null)
-}))
-
-import {
-  initializeDatabase,
-  closeDatabase,
-  run,
-  queryOne,
-  queryAll
-} from '../database'
-
-beforeEach(async () => {
-  fs.mkdirSync(shared.dataDir, { recursive: true })
-  if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
-  await initializeDatabase()
+afterEach(async () => {
+  const { closeDatabase } = await import('../database')
+  try { closeDatabase() } catch { /* ignore */ }
+  rmSync(dir, { recursive: true, force: true })
+  delete process.env.HIDOCK_DATA_ROOT
 })
-afterEach(() => { try { closeDatabase() } catch { /* ignore */ } })
+
+/** Boot the real file storage + database for the current temp root. */
+async function boot() {
+  const { initializeFileStorage } = await import('../file-storage')
+  const db = await import('../database')
+  await initializeFileStorage()
+  await db.initializeDatabase()
+  return db
+}
 
 describe('v31 — fresh boot (relaxed category column)', () => {
-  it('schema_version is 31 (now advances to 33 as current head)', () => {
+  it('schema_version is 31 (now advances to 34 as current head)', async () => {
+    const { queryOne } = await boot()
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    expect(ver?.version).toBe(34)
   })
 
-  it('knowledge_captures.category has NO CHECK (a user-defined label is storable)', () => {
+  it('knowledge_captures.category has NO CHECK (a user-defined label is storable)', async () => {
+    const { run, queryOne } = await boot()
     const createSql = queryOne<{ sql: string }>(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_captures'"
     )?.sql ?? ''
@@ -109,7 +67,8 @@ describe('v31 — fresh boot (relaxed category column)', () => {
     expect(row?.category).toBe('sales-call')
   })
 
-  it('the category index exists', () => {
+  it('the category index exists', async () => {
+    const { queryOne } = await boot()
     const idx = queryOne(
       "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_knowledge_captures_category'"
     )
@@ -119,6 +78,8 @@ describe('v31 — fresh boot (relaxed category column)', () => {
 
 describe('v31 — genuine upgrade path (CHECK-drop rebuild)', () => {
   it('preserves all rows + categories, recreates the index, keeps CASCADE children resolvable', async () => {
+    const { run, closeDatabase } = await boot()
+
     // 1. Reconstruct a v30-shaped knowledge_captures WITH the old CHECK, so the real
     //    MIGRATIONS[31] rebuild branch actually fires (a fresh DB is already relaxed).
     run('DROP TABLE knowledge_captures')
@@ -168,20 +129,21 @@ describe('v31 — genuine upgrade path (CHECK-drop rebuild)', () => {
     run('DELETE FROM schema_version')
     run('INSERT INTO schema_version (version) VALUES (30)')
     closeDatabase()
-    await initializeDatabase()
+    const db2 = await import('../database')
+    await db2.initializeDatabase()
 
-    // --- Assert: version bumped (to current head, which is now 33) ---
-    const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    // --- Assert: version bumped (to current head, which is now 34) ---
+    const ver = db2.queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
+    expect(ver?.version).toBe(34)
 
     // --- Assert: CHECK is gone ---
-    const createSql = queryOne<{ sql: string }>(
+    const createSql = db2.queryOne<{ sql: string }>(
       "SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_captures'"
     )?.sql ?? ''
     expect(createSql).not.toMatch(/category[^,]*CHECK/i)
 
     // --- Assert: every row + its category preserved verbatim ---
-    const rows = queryAll<{ id: string; title: string; category: string }>(
+    const rows = db2.queryAll<{ id: string; title: string; category: string }>(
       'SELECT id, title, category FROM knowledge_captures ORDER BY id'
     )
     expect(rows).toEqual([
@@ -191,13 +153,13 @@ describe('v31 — genuine upgrade path (CHECK-drop rebuild)', () => {
     ])
 
     // --- Assert: category index recreated ---
-    const idx = queryOne(
+    const idx = db2.queryOne(
       "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_knowledge_captures_category'"
     )
     expect(idx).toBeTruthy()
 
     // --- Assert: CASCADE children still resolve to their (preserved) parents ---
-    const joined = queryAll<{ tid: string; kc_id: string; cat: string }>(
+    const joined = db2.queryAll<{ tid: string; kc_id: string; cat: string }>(
       `SELECT t.id AS tid, kc.id AS kc_id, kc.category AS cat
        FROM action_items t JOIN knowledge_captures kc ON kc.id = t.knowledge_capture_id
        ORDER BY t.id`
@@ -207,7 +169,7 @@ describe('v31 — genuine upgrade path (CHECK-drop rebuild)', () => {
       { tid: 't2', kc_id: 'kc2', cat: 'interview' }
     ])
     // No orphaned children.
-    const orphans = queryAll(
+    const orphans = db2.queryAll(
       `SELECT t.id FROM action_items t
        LEFT JOIN knowledge_captures kc ON kc.id = t.knowledge_capture_id
        WHERE t.knowledge_capture_id IS NOT NULL AND kc.id IS NULL`
@@ -215,9 +177,9 @@ describe('v31 — genuine upgrade path (CHECK-drop rebuild)', () => {
     expect(orphans).toHaveLength(0)
 
     // --- Assert: a user-defined category is now storable post-migration ---
-    run(`UPDATE knowledge_captures SET category='sales-call' WHERE id='kc3'`)
+    db2.run(`UPDATE knowledge_captures SET category='sales-call' WHERE id='kc3'`)
     expect(
-      queryOne<{ category: string }>("SELECT category FROM knowledge_captures WHERE id='kc3'")?.category
+      db2.queryOne<{ category: string }>("SELECT category FROM knowledge_captures WHERE id='kc3'")?.category
     ).toBe('sales-call')
   })
 })

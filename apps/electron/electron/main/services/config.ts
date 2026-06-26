@@ -1,28 +1,11 @@
-import { app, safeStorage } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { DEFAULT_SPEAKER_OPTIONS_POLICY } from './asr/speaker-options-policy'
 import type { MatchThresholds } from './voiceprint/identity-matcher'
+import { getConfigPath as resolveConfigPath, getDataRoot } from '../runtime/env'
+import { encryptSensitive, decryptSensitive } from '../runtime/secrets'
 
-// CS-007: Encrypt sensitive config values (ICS URL, openaiApiKey) at rest using Electron safeStorage
-export function encryptSensitive(value: string): string {
-  try {
-    if (value.startsWith('__enc__')) return value // already encrypted — never double-wrap (spec §5.4)
-    if (safeStorage.isEncryptionAvailable() && value) {
-      return '__enc__' + safeStorage.encryptString(value).toString('base64')
-    }
-  } catch { /* fall through to plaintext */ }
-  return value
-}
-
-function decryptSensitive(value: string): string {
-  try {
-    if (value.startsWith('__enc__') && safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(value.slice(7), 'base64'))
-    }
-  } catch { /* fall through to return as-is */ }
-  return value
-}
+export { encryptSensitive } // preserve the existing public export
 
 export interface AppConfig {
   version: string
@@ -130,7 +113,7 @@ export interface VoiceMatchingConfig extends MatchThresholds {
 const DEFAULT_CONFIG: AppConfig = {
   version: '1.0.0',
   storage: {
-    dataPath: join(app.getPath('home'), 'HiDock'),
+    dataPath: getDataRoot(),
     maxRecordingsGB: 50
   },
   calendar: {
@@ -207,7 +190,7 @@ const DEFAULT_CONFIG: AppConfig = {
 let config: AppConfig = { ...DEFAULT_CONFIG }
 
 export function getConfigPath(): string {
-  return join(app.getPath('userData'), 'config.json')
+  return resolveConfigPath()
 }
 
 export function getDataPath(): string {

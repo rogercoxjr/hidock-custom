@@ -90,9 +90,9 @@ beforeEach(async () => {
 afterEach(() => { try { closeDatabase() } catch { /* ignore */ } })
 
 describe('v33 — fresh boot (summarization templates)', () => {
-  it('schema_version is 33', () => {
+  it('schema_version is 33 (now 34 as current head)', () => {
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    expect(ver?.version).toBe(34)
   })
 
   it('summarization_templates table + index exist', () => {
@@ -148,7 +148,7 @@ describe('v33 — genuine upgrade path (column-add is migration-only)', () => {
     closeDatabase()
     await initializeDatabase()
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    expect(ver?.version).toBe(34)
     expect(queryOne("SELECT id FROM summarization_templates WHERE id='builtin-default'")).toBeTruthy()
     const t = queryOne<{ full_text: string }>("SELECT full_text FROM transcripts WHERE id='tr1'")
     expect(t?.full_text).toBe('hello world')

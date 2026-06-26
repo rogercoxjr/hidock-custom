@@ -17,10 +17,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { BrowserWindow } from 'electron'
 import { emitActivityLog } from '../activity-log'
+import { setBroadcaster } from '../broadcaster'
 
-// Mock Electron BrowserWindow
 vi.mock('electron', () => ({
   BrowserWindow: {
     getAllWindows: vi.fn(() => [])
@@ -28,24 +27,19 @@ vi.mock('electron', () => ({
 }))
 
 describe('Activity Log Integration - Spec Compliance', () => {
-  let mockWindow: any
   let sentMessages: Array<{ channel: string; entry: any }>
 
   beforeEach(() => {
     sentMessages = []
-    mockWindow = {
-      isDestroyed: vi.fn(() => false),
-      webContents: {
-        isDestroyed: vi.fn(() => false),
-        send: vi.fn((channel: string, entry: any) => {
-          sentMessages.push({ channel, entry })
-        })
+    setBroadcaster({
+      broadcast: (channel: string, entry: any) => {
+        sentMessages.push({ channel, entry })
       }
-    }
-    vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([mockWindow])
+    })
   })
 
   afterEach(() => {
+    setBroadcaster(null)
     vi.clearAllMocks()
   })
 
@@ -319,50 +313,23 @@ describe('Activity Log Integration - Spec Compliance', () => {
     })
   })
 
-  describe('Activity Log Bridge - IPC Channel', () => {
+  describe('Activity Log Bridge - broadcaster channel', () => {
     it('SHOULD send all entries to activity-log:entry channel', () => {
       emitActivityLog('info', 'Test', 'Details')
 
-      expect(mockWindow.webContents.send).toHaveBeenCalledWith(
-        'activity-log:entry',
-        expect.objectContaining({
-          type: 'info',
-          message: 'Test',
-          details: 'Details'
-        })
-      )
+      expect(sentMessages).toHaveLength(1)
+      expect(sentMessages[0].channel).toBe('activity-log:entry')
+      expect(sentMessages[0].entry).toMatchObject({
+        type: 'info',
+        message: 'Test',
+        details: 'Details'
+      })
     })
 
-    it('SHOULD handle multiple windows', () => {
-      const mockWindow2 = {
-        isDestroyed: vi.fn(() => false),
-        webContents: {
-          isDestroyed: vi.fn(() => false),
-          send: vi.fn()
-        }
-      }
-      vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([mockWindow, mockWindow2])
-
-      emitActivityLog('info', 'Test', 'Details')
-
-      expect(mockWindow.webContents.send).toHaveBeenCalled()
-      expect(mockWindow2.webContents.send).toHaveBeenCalled()
-    })
-
-    it('SHOULD skip destroyed windows', () => {
-      mockWindow.isDestroyed.mockReturnValue(true)
-
-      emitActivityLog('info', 'Test', 'Details')
-
-      expect(mockWindow.webContents.send).not.toHaveBeenCalled()
-    })
-
-    it('SHOULD skip windows with destroyed webContents', () => {
-      mockWindow.webContents.isDestroyed.mockReturnValue(true)
-
-      emitActivityLog('info', 'Test', 'Details')
-
-      expect(mockWindow.webContents.send).not.toHaveBeenCalled()
+    it('SHOULD fire-and-forget — no crash when broadcaster is null (NOOP)', () => {
+      setBroadcaster(null) // NOOP broadcaster
+      // Should not throw
+      expect(() => emitActivityLog('info', 'Test', 'Details')).not.toThrow()
     })
   })
 })

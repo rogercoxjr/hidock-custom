@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="display: flex; flex-direction: column; gap: 11px;">
+  <div style="display: flex; align-items: center; justify-content: space-between;">
+    <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted);">Assign speaker</span>
+    <button onClick="{{ panel.onClose }}" style="border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: 17px; line-height: 1; padding: 0 2px;">×</button>
+  </div>
+
+  <!-- ASSIGNED: who, how (auto-match vs manual), voiceprint status -->
+  <sc-if value="{{ panel.isAssigned }}" hint-placeholder-val="">
+    <div style="display: flex; flex-direction: column; gap: 9px; padding: 11px; background: var(--surface-sunken); border-radius: var(--radius-md);">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="{{ panel.assignedAvatar }}">{{ panel.assignedInitials }}</div>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-size: 13.5px; font-weight: 600; color: var(--text-strong);">{{ panel.assignedName }}</div>
+          <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">{{ panel.reachText }}</div>
+        </div>
+        <button onClick="{{ panel.onUnassign }}" style="border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); padding: 5px 9px; font-family: var(--font-sans); font-size: 11px; font-weight: 600; color: var(--text); cursor: pointer;">Unassign</button>
+      </div>
+      <!-- source of the match -->
+      <sc-if value="{{ panel.srcAuto }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; align-items: center; gap: 7px; padding: 7px 9px; background: var(--accent-2-soft); border: 1px solid color-mix(in oklch, var(--accent-2) 22%, transparent); border-radius: var(--radius-sm);">
+          <span class="hd-ico" style="width: 14px; height: 14px; color: var(--accent-2); flex: none;">{{ matchWaveIcon }}</span>
+          <span style="font-size: 11.5px; font-weight: 600; color: var(--accent-2);">{{ panel.srcText }}</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ panel.srcManual }}" hint-placeholder-val="">
+        <div style="display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">{{ panel.srcText }}</div>
+      </sc-if>
+      <!-- voiceprint hygiene -->
+      <div style="display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding-top: 9px;">
+        <span class="hd-ico" style="width: 13px; height: 13px; color: {{ printColor }}; flex: none;">{{ matchWaveIcon }}</span>
+        <span style="font-size: 11.5px; color: var(--text); flex: 1;">{{ panel.printText }}</span>
+        <sc-if value="{{ panel.showForget }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ panel.onForget }}" style="border: none; background: none; cursor: pointer; font-family: var(--font-sans); font-size: 11px; font-weight: 600; color: var(--coral-600); padding: 0;">Forget voice</button>
+        </sc-if>
+      </div>
+      <sc-if value="{{ panel.hasPrint }}" hint-placeholder-val="{{ true }}">
+        <button onClick="{{ panel.onManageVoice }}" style="align-self: flex-start; border: none; background: none; cursor: pointer; font-family: var(--font-sans); font-size: 11px; font-weight: 600; color: var(--accent); padding: 0;">Manage voices →</button>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- matcher suggestion (accept / dismiss) -->
+  <sc-if value="{{ panel.hasSuggestion }}" hint-placeholder-val="">
+    <div style="padding: 10px; background: var(--accent-2-soft); border: 1px solid color-mix(in oklch, var(--accent-2) 26%, transparent); border-radius: var(--radius-md);">
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+        <span class="hd-ico" style="width: 13px; height: 13px; color: var(--accent-2);">{{ matchWaveIcon }}</span>
+        <span style="font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-2); font-weight: 600;">Voice suggestion</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="{{ panel.suggAvatar }}">{{ panel.suggInitials }}</div>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-size: 13px; font-weight: 600; color: var(--text-strong);">Looks like {{ panel.suggName }}</div>
+          <div style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-2);">voice match · {{ panel.suggConf }}</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 7px; margin-top: 9px;">
+        <button onClick="{{ panel.onAcceptSugg }}" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; background: var(--accent-2); border: none; border-radius: var(--radius-sm); color: #fff; font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer;">Confirm</button>
+        <button onClick="{{ panel.onDismissSugg }}" style="flex: none; padding: 0 13px; height: 32px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer;">Dismiss</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- privacy gate notice -->
+  <sc-if value="{{ showPrivacyNote }}" hint-placeholder-val="">
+    <div style="display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; background: var(--warning-soft); border: 1px solid color-mix(in oklch, var(--amber-600) 28%, transparent); border-radius: var(--radius-sm);">
+      <span class="hd-ico" style="width: 14px; height: 14px; color: var(--amber-600); flex: none; margin-top: 1px;">{{ shieldIcon }}</span>
+      <span style="font-size: 11.5px; line-height: 1.45; color: var(--text);">Voice matching is off. Assigning a name won't enroll a voiceprint — turn it on in Settings → Privacy.</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ panel.hasAttendees }}" hint-placeholder-val="">
+    <div>
+      <div style="font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">From this meeting</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <sc-for list="{{ panel.attendees }}" as="a" hint-placeholder-count="2">
+          <button onClick="{{ a.onClick }}" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-family: var(--font-sans); font-size: 11.5px; color: var(--text);">
+            <span style="width: 18px; height: 18px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface-sunken); color: var(--text-muted); font-family: var(--font-mono); font-size: 8.5px; font-weight: 600;">{{ a.initials }}</span>{{ a.name }}
+          </button>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- speakers:merge — fold this voice into another speaker already on the recording -->
+  <sc-if value="{{ panel.canMerge }}" hint-placeholder-val="">
+    <div>
+      <div style="font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">Merge this voice into</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <sc-for list="{{ panel.mergeTargets }}" as="mt" hint-placeholder-count="2">
+          <button onClick="{{ mt.onClick }}" title="Same person as this speaker" style="display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px 4px 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-family: var(--font-sans); font-size: 11.5px; color: var(--text);">
+            <span style="{{ mt.avatarStyle }}">{{ mt.initials }}</span>{{ mt.name }}
+          </button>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="border-top: 1px solid var(--border); padding-top: 11px;">
+    <input value="{{ panel.query }}" onInput="{{ panel.onQuery }}" placeholder="Search or add a contact…" style="width: 100%; box-sizing: border-box; padding: 8px 11px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text-strong); font-family: var(--font-sans); font-size: 12.5px; outline: none;" />
+    <sc-if value="{{ panel.hasMatches }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 2px; margin-top: 7px; max-height: 176px; overflow-y: auto;">
+        <sc-for list="{{ panel.matches }}" as="m" hint-placeholder-count="3">
+          <button onClick="{{ m.onClick }}" class="hd-navitem" style="display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 8px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; text-align: left;">
+            <div style="{{ m.avatarStyle }}">{{ m.initials }}</div>
+            <div style="min-width: 0; flex: 1;">
+              <div style="font-size: 12.5px; font-weight: 600; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ m.name }}</div>
+              <div style="font-size: 10.5px; color: var(--text-muted);">{{ m.role }}</div>
+            </div>
+            <sc-if value="{{ m.hasPrint }}" hint-placeholder-val="">
+              <span class="hd-ico" style="width: 13px; height: 13px; color: var(--accent-2); flex: none;" title="Has a voiceprint">{{ matchWaveIcon }}</span>
+            </sc-if>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <sc-if value="{{ panel.canCreate }}" hint-placeholder-val="">
+      <button onClick="{{ panel.onCreate }}" style="display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 7px; padding: 8px 9px; border: 1px dashed var(--border-strong); background: var(--surface); border-radius: var(--radius-md); cursor: pointer; text-align: left;">
+        <span style="width: 24px; height: 24px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); font-size: 16px; line-height: 1;">+</span>
+        <span style="font-size: 12.5px; font-weight: 600; color: var(--text-strong);">{{ panel.createLabel }}</span>
+      </button>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:308,&quot;height&quot;:420},&quot;panel&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;any&quot;}}">
+class Component extends DCLogic {
+  icon(name) {
+    const D = {
+      waveform: [['path','M3 11v2'],['path','M7 7v10'],['path','M11 3v18'],['path','M15 6v12'],['path','M19 9v6'],['path','M22 11v2']],
+      shield: [['path','M12 3l8 3v5.5c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6z']],
+    };
+    const kids = (D[name]||[]).map((d,i)=>React.createElement('path',{key:i,d:d[1]}));
+    return React.createElement('svg',{viewBox:'0 0 24 24',width:'100%',height:'100%',fill:'none',stroke:'currentColor',strokeWidth:1.9,strokeLinecap:'round',strokeLinejoin:'round','aria-hidden':true,style:{display:'block'}},kids);
+  }
+  renderVals() {
+    const p = this.props.panel || {};
+    return {
+      matchWaveIcon: this.icon('waveform'),
+      shieldIcon: this.icon('shield'),
+      printColor: p.hasPrint ? 'var(--accent-2)' : 'var(--text-muted)',
+      showPrivacyNote: !p.captureOn && !p.isAssigned,
+    };
+  }
+}
+</script>
+</body>
+</html>

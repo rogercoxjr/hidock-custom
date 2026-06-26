@@ -193,7 +193,7 @@ describe('schema v26 (speaker diarization)', () => {
       queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='voiceprints'")
     ).toBeTruthy()
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33) // re-init migrates v25 forward to the current head (v33)
+    expect(ver?.version).toBe(34) // re-init migrates v25 forward to the current head (v34)
   })
 })
 

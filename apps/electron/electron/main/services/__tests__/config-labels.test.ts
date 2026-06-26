@@ -8,34 +8,26 @@
  *
  * @vitest-environment node
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mkdtempSync, writeFileSync } from 'fs'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
 let currentTmpDir: string
 
-function mockElectron(): void {
-  vi.mock('electron', () => ({
-    app: {
-      getPath: (name: string) => {
-        if (name === 'userData') return currentTmpDir
-        if (name === 'home') return currentTmpDir
-        return currentTmpDir
-      }
-    },
-    safeStorage: {
-      isEncryptionAvailable: () => true,
-      encryptString: (s: string) => Buffer.from('ENC:' + s),
-      decryptString: (b: Buffer) => b.toString().replace(/^ENC:/, '')
-    }
-  }))
-}
-
 beforeEach(() => {
   currentTmpDir = mkdtempSync(join(tmpdir(), 'hidock-cfg-labels-'))
   vi.resetModules()
-  mockElectron()
+  process.env.HIDOCK_DATA_ROOT = currentTmpDir
+  delete process.env.HIDOCK_CONFIG_PATH
+  process.env.HIDOCK_SECRET_KEY = 'test-key'
+})
+
+afterEach(() => {
+  rmSync(currentTmpDir, { recursive: true, force: true })
+  delete process.env.HIDOCK_DATA_ROOT
+  delete process.env.HIDOCK_CONFIG_PATH
+  delete process.env.HIDOCK_SECRET_KEY
 })
 
 describe('config — Smart Labels defaults', () => {

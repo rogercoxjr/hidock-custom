@@ -11,18 +11,13 @@ import {
   updateRecordingLifecycle,
   Recording
 } from './database'
-import { BrowserWindow } from 'electron'
+import { getBroadcaster } from './broadcaster'
 import { getConfig } from './config'
 
 const AUDIO_EXTENSIONS = ['.wav', '.mp3', '.m4a', '.ogg', '.webm', '.hda']
 
 let watcher: ReturnType<typeof watch> | null = null
-let mainWindow: BrowserWindow | null = null
 let isWatching = false
-
-export function setMainWindow(win: BrowserWindow): void {
-  mainWindow = win
-}
 
 export function startRecordingWatcher(): void {
   if (isWatching) {
@@ -288,9 +283,7 @@ function correlateWithMeeting(recordingId: string, recordingDate: Date): void {
 }
 
 function notifyRenderer(channel: string, data: unknown): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(channel, data)
-  }
+  getBroadcaster().broadcast(channel, data)
 }
 
 export function getWatcherStatus(): { isWatching: boolean; path: string } {

@@ -1,110 +1,52 @@
 /**
  * Schema v30 tests — Voice Library Phase 2C diarization-run instrumentation.
  *
- * Uses the REAL sql.js in-memory database; only external boundaries are mocked.
+ * Backed by the REAL better-sqlite3 database (canonical harness — see
+ * database.boot.test.ts / database.functions.test.ts): each test gets a fresh
+ * HIDOCK_DATA_ROOT temp dir + vi.resetModules(), then initializeFileStorage()
+ * and initializeDatabase() build the real schema on disk. No mocks — the schema,
+ * migrations, and query helpers all run their real implementations.
  */
 // @vitest-environment node
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { vi } from 'vitest'
-import os from 'os'
-import path from 'path'
-import fs from 'fs'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
-// ---------------------------------------------------------------------------
-// Hoisted shared state
-// ---------------------------------------------------------------------------
-const shared = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _os = require('os') as typeof import('os')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _fs = require('fs') as typeof import('fs')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _path = require('path') as typeof import('path')
+let dir: string
 
-  const tmpDir = _fs.mkdtempSync(_path.join(_os.tmpdir(), 'hidock-v30-'))
-  const dataDir = _path.join(tmpDir, 'data')
-  _fs.mkdirSync(dataDir, { recursive: true })
-
-  return {
-    tmpDir,
-    dataDir,
-    dbPath: _path.join(dataDir, 'hidock.db')
-  }
+beforeEach(() => {
+  vi.resetModules()
+  dir = mkdtempSync(join(tmpdir(), 'hidock-v30-'))
+  process.env.HIDOCK_DATA_ROOT = dir
 })
 
-// ---------------------------------------------------------------------------
-// External-boundary mocks
-// ---------------------------------------------------------------------------
-
-vi.mock('electron', () => ({
-  app: {
-    getPath: vi.fn(() => os.tmpdir()),
-    getName: vi.fn(() => 'test')
-  },
-  BrowserWindow: { getAllWindows: vi.fn(() => []) },
-  ipcMain: { handle: vi.fn() },
-  Notification: { isSupported: vi.fn(() => false) }
-}))
-
-vi.mock('../config', () => ({
-  getConfig: vi.fn(() => ({
-    storage: { dataPath: shared.tmpDir, maxRecordingsGB: 50 },
-    transcription: {
-      provider: 'assemblyai',
-      assemblyaiApiKey: 'test-key',
-      assemblyaiModels: ['universal-3-pro', 'universal-2'],
-      autoTranscribe: false
-    }
-  })),
-  updateConfig: vi.fn(async () => {}),
-  getDataPath: vi.fn(() => shared.tmpDir)
-}))
-
-vi.mock('../file-storage', () => ({
-  getDatabasePath: vi.fn(() => shared.dbPath),
-  getRecordingsPath: vi.fn(() => shared.tmpDir),
-  getCachePath: vi.fn(() => os.tmpdir()),
-  saveRecording: vi.fn(async (filename: string, _data: Buffer) => {
-    return path.join(shared.tmpDir, filename)
-  })
-}))
-
-vi.mock('../vector-store', () => ({
-  getVectorStore: vi.fn(() => null)
-}))
-
-// ---------------------------------------------------------------------------
-// Real service imports
-// ---------------------------------------------------------------------------
-import {
-  initializeDatabase,
-  closeDatabase,
-  run,
-  queryOne,
-  queryAll,
-  insertDiarizationRun,
-  getLatestDiarizationRun,
-  getDiarizationRunsForRecording,
-  ensureDiarizationSchema,
-  upsertTranscriptStage1,
-  getTranscriptByRecordingId
-} from '../database'
-
-beforeEach(async () => {
-  fs.mkdirSync(shared.dataDir, { recursive: true })
-  if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
-  await initializeDatabase()
+afterEach(async () => {
+  const { closeDatabase } = await import('../database')
+  try { closeDatabase() } catch { /* ignore */ }
+  rmSync(dir, { recursive: true, force: true })
+  delete process.env.HIDOCK_DATA_ROOT
 })
-afterEach(() => { try { closeDatabase() } catch { /* ignore */ } })
+
+/** Boot the real file storage + database for the current temp root. */
+async function boot() {
+  const { initializeFileStorage } = await import('../file-storage')
+  const db = await import('../database')
+  await initializeFileStorage()
+  await db.initializeDatabase()
+  return db
+}
 
 describe('v30 voice-library phase-2C schema', () => {
-  it('schema_version is at current head (33)', () => {
+  it('schema_version is at current head (34)', async () => {
+    const { queryOne } = await boot()
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    expect(ver?.version).toBe(34)
   })
 
-  it('diarization_runs table exists with the expected columns', () => {
+  it('diarization_runs table exists with the expected columns', async () => {
+    const { queryAll } = await boot()
     const cols = queryAll<{ name: string }>("PRAGMA table_info(diarization_runs)").map((c) => c.name)
     expect(cols).toEqual(
       expect.arrayContaining([
@@ -127,19 +69,22 @@ describe('v30 voice-library phase-2C schema', () => {
     )
   })
 
-  it('transcripts table has diarization_run_id column', () => {
+  it('transcripts table has diarization_run_id column', async () => {
+    const { queryAll } = await boot()
     const cols = queryAll<{ name: string }>("PRAGMA table_info(transcripts)").map((c) => c.name)
     expect(cols).toContain('diarization_run_id')
   })
 
-  it('diarization_runs index exists', () => {
+  it('diarization_runs index exists', async () => {
+    const { queryOne } = await boot()
     const idx = queryOne(
       "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_diar_runs_recording'"
     )
     expect(idx).toBeTruthy()
   })
 
-  it('insertDiarizationRun + getters round-trip', () => {
+  it('insertDiarizationRun + getters round-trip', async () => {
+    const { insertDiarizationRun, getLatestDiarizationRun, getDiarizationRunsForRecording } = await boot()
     const id = 'diar_test_roundtrip'
     insertDiarizationRun({
       id,
@@ -173,11 +118,13 @@ describe('v30 voice-library phase-2C schema', () => {
     expect(all[0].id).toBe(id)
   })
 
-  it('getLatestDiarizationRun returns null when no runs exist', () => {
+  it('getLatestDiarizationRun returns null when no runs exist', async () => {
+    const { getLatestDiarizationRun } = await boot()
     expect(getLatestDiarizationRun('no-such-rec')).toBeNull()
   })
 
-  it('getDiarizationRunsForRecording orders newest first', () => {
+  it('getDiarizationRunsForRecording orders newest first', async () => {
+    const { insertDiarizationRun, getLatestDiarizationRun, getDiarizationRunsForRecording } = await boot()
     insertDiarizationRun({
       id: 'diar_old',
       recording_id: 'rec-3',
@@ -204,7 +151,17 @@ describe('v30 voice-library phase-2C schema', () => {
     expect(all.map((r) => r.id)).toEqual(['diar_new', 'diar_old'])
   })
 
-  it('upsertTranscriptStage1 persists and overwrites diarization_run_id', () => {
+  it('upsertTranscriptStage1 persists and overwrites diarization_run_id', async () => {
+    const { run, insertDiarizationRun, upsertTranscriptStage1, getTranscriptByRecordingId } = await boot()
+
+    // Insert a parent recordings row. Harmless defensive setup — the real boot now runs with
+    // foreign_keys=OFF (faithful to prior sql.js), so this isn't strictly required, but it keeps
+    // the fixture realistic and safe in case FK enforcement is enabled in the future.
+    run(
+      `INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`,
+      ['rec-2', 'rec2.wav', '2026-06-19T11:00:00.000Z']
+    )
+
     insertDiarizationRun({
       id: 'diar_run_old',
       recording_id: 'rec-2',
@@ -235,7 +192,8 @@ describe('v30 voice-library phase-2C schema', () => {
     expect(t?.diarization_run_id).toBeNull()
   })
 
-  it('ensureDiarizationSchema self-heals a dropped column and table', () => {
+  it('ensureDiarizationSchema self-heals a dropped column and table', async () => {
+    const { run, ensureDiarizationSchema, queryAll, queryOne } = await boot()
     // Simulate a partially-corrupted restored backup by removing the column and index.
     run('ALTER TABLE transcripts DROP COLUMN diarization_run_id')
     run('DROP INDEX idx_diar_runs_recording')

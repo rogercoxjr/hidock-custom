@@ -1,101 +1,35 @@
 /**
  * First-sync baseline tests — auto-pipeline P5 (spec 2026-06-11 §5.5, AC2, AC3).
  *
- * Uses the REAL sql.js in-memory database (same boundary-mock pattern as
- * database-v25.test.ts / two-stage-worker.test.ts) so ensureBaseline and the
- * updated getFilesToSync run against the real schema including sync_baseline_files.
- * Only external boundaries are mocked: electron, config, file-storage, vector-store.
+ * Backed by the REAL better-sqlite3 database (canonical harness — see
+ * database.boot.test.ts): each test gets a fresh HIDOCK_DATA_ROOT temp dir +
+ * vi.resetModules(), then initializeFileStorage() + initializeDatabase() build
+ * the real schema on disk (including sync_baseline_files). ensureBaseline and the
+ * baseline-aware getFilesToSync therefore run against the real schema and real
+ * query helpers. The ONLY mock is `electron` — a genuine external boundary that
+ * download-service imports at module load and that cannot resolve in the node
+ * test environment. (A fresh per-test data root also means the on-disk
+ * isFileAlreadySynced checks naturally miss, so no fs.existsSync mock is needed.)
  */
 // @vitest-environment node
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import os from 'os'
-import path from 'path'
-import fs from 'fs'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 // ---------------------------------------------------------------------------
-// Hoisted shared state — real temp dir resolves before vi.mock factories.
+// External-boundary mock: download-service imports `electron` at module top.
 // ---------------------------------------------------------------------------
-const shared = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _os = require('os') as typeof import('os')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _fs = require('fs') as typeof import('fs')
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _path = require('path') as typeof import('path')
-
-  const tmpDir = _fs.mkdtempSync(_path.join(_os.tmpdir(), 'hidock-baseline-'))
-  const dataDir = _path.join(tmpDir, 'data')
-  _fs.mkdirSync(dataDir, { recursive: true })
-
-  return {
-    tmpDir,
-    dataDir,
-    dbPath: _path.join(dataDir, 'hidock.db')
-  }
-})
-
-// ---------------------------------------------------------------------------
-// External-boundary mocks (must be hoisted before real imports).
-// ---------------------------------------------------------------------------
-
 vi.mock('electron', () => ({
   app: {
-    getPath: vi.fn(() => os.tmpdir()),
+    getPath: vi.fn(() => tmpdir()),
     getName: vi.fn(() => 'test')
   },
   BrowserWindow: { getAllWindows: vi.fn(() => []) },
   ipcMain: { handle: vi.fn() },
   Notification: { isSupported: vi.fn(() => false) }
 }))
-
-vi.mock('../config', () => ({
-  getConfig: vi.fn(() => ({
-    storage: { dataPath: shared.tmpDir, maxRecordingsGB: 50 },
-    transcription: {
-      provider: 'gemini',
-      geminiApiKey: 'test-key',
-      geminiModel: 'gemini-2.0-flash',
-      autoTranscribe: false
-    },
-    summarization: { provider: 'gemini' }
-  })),
-  updateConfig: vi.fn(async () => {}),
-  getDataPath: vi.fn(() => shared.tmpDir)
-}))
-
-vi.mock('../file-storage', () => ({
-  getDatabasePath: vi.fn(() => shared.dbPath),
-  getRecordingsPath: vi.fn(() => shared.tmpDir),
-  getCachePath: vi.fn(() => os.tmpdir()),
-  saveRecording: vi.fn(async (filename: string) => path.join(shared.tmpDir, filename))
-}))
-
-vi.mock('../vector-store', () => ({
-  getVectorStore: vi.fn(() => null)
-}))
-
-// fs: need existsSync to return false (no real audio files on disk)
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>()
-  return {
-    ...actual,
-    default: { ...actual, existsSync: vi.fn(() => false) },
-    existsSync: vi.fn(() => false)
-  }
-})
-
-// ---------------------------------------------------------------------------
-// Real service imports (resolved AFTER the mocks above).
-// ---------------------------------------------------------------------------
-import {
-  initializeDatabase,
-  closeDatabase,
-  queryOne,
-  addSyncedFile
-} from '../database'
-import * as database from '../database'
-import { getDownloadService } from '../download-service'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -106,56 +40,79 @@ function makeFile(filename: string) {
   return { filename, size: 1024, duration: 60, dateCreated: new Date('2024-01-01') }
 }
 
-/** Count baseline rows for a serial */
-function baselineCount(serial: string): number {
-  return (
-    queryOne<{ n: number }>(
-      'SELECT COUNT(*) AS n FROM sync_baseline_files WHERE device_serial = ?',
-      [serial]
-    )?.n ?? 0
-  )
-}
-
-/** Check whether a specific baseline row exists */
-function hasBaselineRow(serial: string, filename: string): boolean {
-  return !!queryOne(
-    'SELECT 1 FROM sync_baseline_files WHERE device_serial = ? AND filename = ?',
-    [serial, filename]
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', () => {
-  let service: ReturnType<typeof getDownloadService>
+  let dir: string
 
-  beforeEach(async () => {
-    fs.mkdirSync(shared.dataDir, { recursive: true })
-    if (fs.existsSync(shared.dbPath)) fs.rmSync(shared.dbPath)
-    await initializeDatabase()
-    service = getDownloadService()
+  beforeEach(() => {
+    vi.resetModules()
+    dir = mkdtempSync(join(tmpdir(), 'hidock-baseline-'))
+    process.env.HIDOCK_DATA_ROOT = dir
   })
 
-  afterEach(() => {
+  afterEach(async () => {
+    const { closeDatabase } = await import('../database')
     try {
       closeDatabase()
     } catch {
       /* ignore */
     }
+    rmSync(dir, { recursive: true, force: true })
+    delete process.env.HIDOCK_DATA_ROOT
   })
+
+  /**
+   * Boot the real file storage + database for the current temp root, then return
+   * the freshly-reset database namespace and a download service backed by it.
+   * Both modules come from the SAME post-resetModules graph so vi.spyOn on the
+   * database namespace is observed by download-service's named imports.
+   */
+  async function setup() {
+    const { initializeFileStorage } = await import('../file-storage')
+    const database = await import('../database')
+    const { getDownloadService } = await import('../download-service')
+    await initializeFileStorage()
+    await database.initializeDatabase()
+    const service = getDownloadService()
+    return { database, service }
+  }
+
+  /** Count baseline rows for a serial */
+  function baselineCount(database: typeof import('../database'), serial: string): number {
+    return (
+      database.queryOne<{ n: number }>(
+        'SELECT COUNT(*) AS n FROM sync_baseline_files WHERE device_serial = ?',
+        [serial]
+      )?.n ?? 0
+    )
+  }
+
+  /** Check whether a specific baseline row exists */
+  function hasBaselineRow(
+    database: typeof import('../database'),
+    serial: string,
+    filename: string
+  ): boolean {
+    return !!database.queryOne(
+      'SELECT 1 FROM sync_baseline_files WHERE device_serial = ? AND filename = ?',
+      [serial, filename]
+    )
+  }
 
   // -------------------------------------------------------------------------
   // Test 1: Fresh device — no baseline rows, no prior sync history
   // -------------------------------------------------------------------------
-  it('fresh device: ensureBaseline inserts rows and returns { created: true }', () => {
+  it('fresh device: ensureBaseline inserts rows and returns { created: true }', async () => {
+    const { database, service } = await setup()
     const result = service.ensureBaseline('SN1', ['a.hda', 'b.hda'])
 
     expect(result).toEqual({ created: true })
-    expect(baselineCount('SN1')).toBe(2)
-    expect(hasBaselineRow('SN1', 'a.hda')).toBe(true)
-    expect(hasBaselineRow('SN1', 'b.hda')).toBe(true)
+    expect(baselineCount(database, 'SN1')).toBe(2)
+    expect(hasBaselineRow(database, 'SN1', 'a.hda')).toBe(true)
+    expect(hasBaselineRow(database, 'SN1', 'b.hda')).toBe(true)
   })
 
   // -------------------------------------------------------------------------
@@ -165,7 +122,8 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   // (N serializations). runMany binds every row to one prepared statement and
   // serializes exactly once — so the batched path is taken and run() is not.
   // -------------------------------------------------------------------------
-  it('fresh device: bulk insert uses one runMany call, not a per-file run() loop', () => {
+  it('fresh device: bulk insert uses one runMany call, not a per-file run() loop', async () => {
+    const { database, service } = await setup()
     const runManySpy = vi.spyOn(database, 'runMany')
     const runSpy = vi.spyOn(database, 'run')
     const filenames = Array.from({ length: 50 }, (_, i) => `f${i}.hda`)
@@ -173,7 +131,7 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
     const result = service.ensureBaseline('SN_BULK', filenames)
 
     expect(result).toEqual({ created: true })
-    expect(baselineCount('SN_BULK')).toBe(50)
+    expect(baselineCount(database, 'SN_BULK')).toBe(50)
     // One batched write — not 50 per-row run() calls.
     expect(runManySpy).toHaveBeenCalledTimes(1)
     expect(runManySpy.mock.calls[0][1]).toHaveLength(50) // 50 row tuples in one call
@@ -190,7 +148,8 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   // a partial baseline — the un-snapshotted remainder would otherwise auto-queue
   // through metered ASR.
   // -------------------------------------------------------------------------
-  it('fresh device: the insert is one batched call and a failure persists zero rows', () => {
+  it('fresh device: the insert is one batched call and a failure persists zero rows', async () => {
+    const { database, service } = await setup()
     const runManySpy = vi.spyOn(database, 'runMany').mockImplementation(() => {
       // Explode before persisting anything, simulating a crash during the write.
       throw new Error('simulated write failure')
@@ -201,7 +160,7 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
     )
     // Exactly one batched call (not a per-file run() loop), and nothing persisted.
     expect(runManySpy).toHaveBeenCalledTimes(1)
-    expect(baselineCount('SN_ATOMIC')).toBe(0)
+    expect(baselineCount(database, 'SN_ATOMIC')).toBe(0)
 
     runManySpy.mockRestore()
   })
@@ -225,32 +184,34 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   // outside this code-quality fix's scope. Reported per the spec-authoritative
   // invariant. If the spec gains a serial-level marker, this test should flip.
   // -------------------------------------------------------------------------
-  it('empty-fresh-device edge: ensureBaseline(serial, []) inserts zero rows but reports created=true (spec gap, characterized)', () => {
+  it('empty-fresh-device edge: ensureBaseline(serial, []) inserts zero rows but reports created=true (spec gap, characterized)', async () => {
+    const { database, service } = await setup()
     const result = service.ensureBaseline('SN_EMPTY', [])
 
     // Current spec-faithful behavior: created=true with no row written.
     expect(result).toEqual({ created: true })
-    expect(baselineCount('SN_EMPTY')).toBe(0)
+    expect(baselineCount(database, 'SN_EMPTY')).toBe(0)
 
     // The gap: a subsequent connect cannot tell SN_EMPTY was ever baselined, so
     // newly recorded files get snapshotted (created=true again) rather than synced.
     const second = service.ensureBaseline('SN_EMPTY', ['recorded1.hda', 'recorded2.hda'])
     expect(second).toEqual({ created: true })
-    expect(hasBaselineRow('SN_EMPTY', 'recorded1.hda')).toBe(true)
-    expect(hasBaselineRow('SN_EMPTY', 'recorded2.hda')).toBe(true)
+    expect(hasBaselineRow(database, 'SN_EMPTY', 'recorded1.hda')).toBe(true)
+    expect(hasBaselineRow(database, 'SN_EMPTY', 'recorded2.hda')).toBe(true)
   })
 
   // -------------------------------------------------------------------------
   // Test 2: Already baselined — second call returns { created: false }, no new rows
   // -------------------------------------------------------------------------
-  it('already baselined: second call returns { created: false } without changing row count', () => {
+  it('already baselined: second call returns { created: false } without changing row count', async () => {
+    const { database, service } = await setup()
     service.ensureBaseline('SN1', ['a.hda', 'b.hda'])
-    const countAfterFirst = baselineCount('SN1')
+    const countAfterFirst = baselineCount(database, 'SN1')
 
     const result = service.ensureBaseline('SN1', ['a.hda', 'b.hda', 'c.hda'])
 
     expect(result).toEqual({ created: false })
-    expect(baselineCount('SN1')).toBe(countAfterFirst) // row count unchanged
+    expect(baselineCount(database, 'SN1')).toBe(countAfterFirst) // row count unchanged
   })
 
   // -------------------------------------------------------------------------
@@ -258,25 +219,27 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   // No baseline rows for 'SN2', but one of its filenames is already synced
   // → returns { created: false }, NO rows inserted
   // -------------------------------------------------------------------------
-  it('prior-sync grandfather: device with sync history gets no baseline', () => {
+  it('prior-sync grandfather: device with sync history gets no baseline', async () => {
+    const { database, service } = await setup()
     // Seed a synced record so isFileAlreadySynced('a.hda') returns synced=true
-    addSyncedFile('a.hda', 'a.mp3', path.join(shared.tmpDir, 'a.mp3'))
+    database.addSyncedFile('a.hda', 'a.mp3', join(dir, 'a.mp3'))
 
     const result = service.ensureBaseline('SN2', ['a.hda', 'b.hda'])
 
     expect(result).toEqual({ created: false })
-    expect(baselineCount('SN2')).toBe(0) // NO rows inserted
+    expect(baselineCount(database, 'SN2')).toBe(0) // NO rows inserted
   })
 
   // -------------------------------------------------------------------------
   // Test 4: Auto mode skips baseline files; existing 4-layer synced reasons win
   // -------------------------------------------------------------------------
-  it('auto mode: baseline files get skipReason=baseline, synced files keep their reason first', () => {
+  it('auto mode: baseline files get skipReason=baseline, synced files keep their reason first', async () => {
+    const { database, service } = await setup()
     // Establish baseline for SN1: a.hda is in baseline
     service.ensureBaseline('SN1', ['a.hda'])
 
     // Also seed a.hda as already synced (4-layer should win over baseline)
-    addSyncedFile('a.hda', 'a.mp3', path.join(shared.tmpDir, 'a.mp3'))
+    database.addSyncedFile('a.hda', 'a.mp3', join(dir, 'a.mp3'))
 
     const files = [makeFile('a.hda'), makeFile('c.hda')]
     const results = service.getFilesToSync(files, { auto: true, deviceSerial: 'SN1' })
@@ -293,7 +256,8 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
     expect(cResult?.skipReason).toBeUndefined()
   })
 
-  it('auto mode: file in baseline but NOT synced gets skipReason=baseline', () => {
+  it('auto mode: file in baseline but NOT synced gets skipReason=baseline', async () => {
+    const { service } = await setup()
     // Baseline contains a.hda, c.hda is NOT in baseline
     service.ensureBaseline('SN1', ['a.hda'])
 
@@ -312,7 +276,8 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   // -------------------------------------------------------------------------
   // Test 5: Manual semantics untouched (AC3)
   // -------------------------------------------------------------------------
-  it('manual mode (no opts): no baseline skips even when baseline rows exist', () => {
+  it('manual mode (no opts): no baseline skips even when baseline rows exist', async () => {
+    const { service } = await setup()
     service.ensureBaseline('SN1', ['a.hda', 'b.hda'])
 
     const files = [makeFile('a.hda'), makeFile('b.hda'), makeFile('c.hda')]
@@ -333,7 +298,8 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   // -------------------------------------------------------------------------
   // Test 6: Auto without serial = manual semantics (defensive)
   // -------------------------------------------------------------------------
-  it('auto with no deviceSerial: no baseline filtering', () => {
+  it('auto with no deviceSerial: no baseline filtering', async () => {
+    const { service } = await setup()
     service.ensureBaseline('SN1', ['a.hda'])
 
     const files = [makeFile('a.hda'), makeFile('b.hda')]
@@ -348,7 +314,8 @@ describe('ensureBaseline + baseline-aware getFilesToSync (auto-pipeline P5)', ()
   // -------------------------------------------------------------------------
   // Test 7: 100-file cap in auto mode; manual mode: all 120 queued
   // -------------------------------------------------------------------------
-  it('100-file auto cap: 100 queued, 20 get skipReason=auto-cap; manual queues all 120', () => {
+  it('100-file auto cap: 100 queued, 20 get skipReason=auto-cap; manual queues all 120', async () => {
+    const { service } = await setup()
     // 120 unsynced, non-baseline files
     const files = Array.from({ length: 120 }, (_, i) => makeFile(`file${i}.hda`))
 

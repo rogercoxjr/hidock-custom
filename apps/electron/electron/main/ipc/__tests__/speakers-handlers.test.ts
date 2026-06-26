@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { registerSpeakersHandlers, setMainWindowForSpeakers } from '../speakers-handlers'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { registerSpeakersHandlers } from '../speakers-handlers'
+import { setBroadcaster } from '../../services/broadcaster'
 import { ipcMain } from 'electron'
 
 vi.mock('electron', () => ({
@@ -323,7 +324,11 @@ describe('speakers:getForRecording (panel display + live refresh)', () => {
 describe('Phase 2A reassign auto-purge, unassign, and voiceprint:captured event', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    setMainWindowForSpeakers(null as any)
+    setBroadcaster(null)
+  })
+
+  afterEach(() => {
+    setBroadcaster(null)
   })
 
   function getAssignHandler() {
@@ -344,11 +349,8 @@ describe('Phase 2A reassign auto-purge, unassign, and voiceprint:captured event'
       voiceprintId: 'vp-2'
     } as any)
 
-    const send = vi.fn()
-    setMainWindowForSpeakers({
-      isDestroyed: () => false,
-      webContents: { send }
-    } as any)
+    const broadcast = vi.fn()
+    setBroadcaster({ broadcast })
 
     const handler = getAssignHandler()
     const result = await handler?.({} as any, { recordingId: 'rec-1', fileLabel: 'A', contactId: 'cB' }) as any
@@ -360,7 +362,7 @@ describe('Phase 2A reassign auto-purge, unassign, and voiceprint:captured event'
 
     await new Promise((resolve) => setImmediate(resolve))
 
-    expect(send).toHaveBeenCalledWith(
+    expect(broadcast).toHaveBeenCalledWith(
       'voiceprint:captured',
       expect.objectContaining({
         recordingId: 'rec-1',
@@ -415,7 +417,7 @@ describe('Phase 2A reassign auto-purge, unassign, and voiceprint:captured event'
     expect(db.deleteRecordingSpeaker).toHaveBeenCalledWith('rec-1', 'A')
   })
 
-  it('voiceprint:captured event is sent with correct payload when mainWindow is set and not destroyed', async () => {
+  it('voiceprint:captured event is sent with correct payload via broadcaster', async () => {
     const db = await import('../../services/database')
     const voiceprint = await import('../../services/voiceprint-service')
     vi.mocked(db.getContactById).mockReturnValue({ id: 'c-1', name: 'Alice' } as any)
@@ -427,18 +429,15 @@ describe('Phase 2A reassign auto-purge, unassign, and voiceprint:captured event'
       voiceprintId: 'vp-new'
     } as any)
 
-    const send = vi.fn()
-    setMainWindowForSpeakers({
-      isDestroyed: () => false,
-      webContents: { send }
-    } as any)
+    const broadcast = vi.fn()
+    setBroadcaster({ broadcast })
 
     const handler = getAssignHandler()
     await handler?.({} as any, { recordingId: 'rec-1', fileLabel: 'A', contactId: 'c-1' })
 
     await new Promise((resolve) => setImmediate(resolve))
 
-    expect(send).toHaveBeenCalledWith(
+    expect(broadcast).toHaveBeenCalledWith(
       'voiceprint:captured',
       expect.objectContaining({
         recordingId: 'rec-1',
@@ -452,25 +451,17 @@ describe('Phase 2A reassign auto-purge, unassign, and voiceprint:captured event'
     )
   })
 
-  it('does not reject the assign IPC when mainWindow is destroyed', async () => {
+  it('does not reject the assign IPC when no broadcaster is set (null broadcaster)', async () => {
     const db = await import('../../services/database')
     vi.mocked(db.getContactById).mockReturnValue({ id: 'c-1', name: 'Alice' } as any)
     vi.mocked(db.getRecordingSpeaker).mockReturnValue(undefined)
-
-    const send = vi.fn()
-    setMainWindowForSpeakers({
-      isDestroyed: () => true,
-      webContents: { send }
-    } as any)
+    // broadcaster is null (set in beforeEach) — NOOP broadcaster means no crash
+    setBroadcaster(null)
 
     const handler = getAssignHandler()
     const result = await handler?.({} as any, { recordingId: 'rec-1', fileLabel: 'A', contactId: 'c-1' }) as any
 
     expect(result.success).toBe(true)
-
-    await new Promise((resolve) => setImmediate(resolve))
-
-    expect(send).not.toHaveBeenCalled()
   })
 })
 

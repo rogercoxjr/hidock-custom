@@ -1,0 +1,154 @@
+/* Harbor — Color tokens
+   Built from a coastal blue palette:
+     #16425B navy · #2F6690 ocean · #3A7CA5 steel · #81C3D7 sky · #D9DCD6 mist
+   Base ramps below; semantic aliases at the bottom (light + dark). */
+
+:root {
+  /* ---- Logo anchors (sampled from the primary mark) ----------
+     The family/home/community logo: a deep-navy crescent embracing a
+     family under a roof, with a teal swoosh. These are the exact
+     brand colors — use --brand-navy for the mark's lockups and
+     --brand-teal as the secondary accent. */
+  --brand-navy:      #103d65;
+  --brand-teal:      #139d88; /* logo swoosh */
+  --brand-teal-600:  #0f8472;
+  --brand-teal-700:  #0c6b5d;
+  --brand-teal-300:  #5cc4b2;
+  --brand-teal-soft: #d8f0eb;
+
+  /* ---- Brand: Blue (the harbor) ------------------------------- */
+  --blue-50:  #eef5f9;
+  --blue-100: #d7e8f1;
+  --blue-200: #b4d6e5;
+  --blue-300: #81c3d7; /* palette · sky */
+  --blue-400: #57a3c1;
+  --blue-500: #3a7ca5; /* palette · steel */
+  --blue-600: #2f6690; /* palette · ocean */
+  --blue-700: #28577c;
+  --blue-800: #1e4a68;
+  --blue-900: #16425b; /* palette · navy */
+  --blue-950: #0e2c3d;
+
+  /* ---- Neutral: Mist (cool sage-grey) ------------------------- */
+  --neutral-0:   #ffffff;
+  --neutral-50:  #f7f8f6;
+  --neutral-100: #eef0ec;
+  --neutral-200: #d9dcd6; /* palette · mist */
+  --neutral-300: #c3c7bf;
+  --neutral-400: #a4a99e;
+  --neutral-500: #838a7d;
+  --neutral-600: #656c5f;
+  --neutral-700: #4c5249;
+  --neutral-800: #343832;
+  --neutral-900: #1f221d;
+  --neutral-950: #131512;
+
+  /* ---- Semantic accents (harmonised to the cool palette) ------ */
+  --green-100: #d9efe4;
+  --green-500: #2f8f6b;
+  --green-600: #257558;
+
+  --amber-100: #f6e7c8;
+  --amber-500: #c9892f;
+  --amber-600: #a86f23;
+
+  --coral-100: #f6dcd7;
+  --coral-500: #c2483d;
+  --coral-600: #a23a31;
+
+  /* =================================================================
+     SEMANTIC ALIASES — Light theme (default)
+     Use THESE in components, never the raw ramps above.
+     ================================================================= */
+  --bg:              var(--neutral-50);
+  --bg-sunken:       var(--neutral-100);
+  --surface:         var(--neutral-0);
+  --surface-raised:  var(--neutral-0);
+  --surface-hover:   var(--neutral-50);
+  --surface-sunken:  var(--neutral-100);
+  --overlay:         color-mix(in oklab, var(--blue-950) 45%, transparent);
+
+  --text-strong:     var(--neutral-900);
+  --text:            var(--neutral-700);
+  --text-muted:      var(--neutral-500);
+  --text-inverse:    var(--neutral-0);
+  --text-brand:      var(--blue-600);
+  --text-link:       var(--blue-600);
+
+  --border:          var(--neutral-200);
+  --border-strong:   var(--neutral-300);
+  --border-brand:    var(--blue-500);
+
+  --accent:          var(--blue-600);
+  --accent-hover:    var(--blue-700);
+  --accent-active:   var(--blue-800);
+  --accent-soft:     var(--blue-50);
+  --accent-soft-text:var(--blue-700);
+  --on-accent:       var(--neutral-0);
+
+  /* Secondary accent — the logo teal. Use sparingly: small rules,
+     active underlines, the odd highlight. Never as a second button. */
+  --accent-2:        var(--brand-teal);
+  --accent-2-hover:  var(--brand-teal-600);
+  --accent-2-soft:   var(--brand-teal-soft);
+  --on-accent-2:     var(--neutral-0);
+
+  --ring:            var(--blue-400);
+
+  --success:         var(--green-500);
+  --success-soft:    var(--green-100);
+  --warning:         var(--amber-500);
+  --warning-soft:    var(--amber-100);
+  --danger:          var(--coral-500);
+  --danger-soft:     var(--coral-100);
+
+  color-scheme: light;
+}
+
+/* =================================================================
+   SEMANTIC ALIASES — Dark theme
+   Apply with <html data-theme="dark"> or any [data-theme="dark"] scope.
+   ================================================================= */
+[data-theme="dark"] {
+  --bg:              var(--neutral-950);
+  --bg-sunken:       #0c0e0b;
+  --surface:         var(--neutral-900);
+  --surface-raised:  #262a24;
+  --surface-hover:   #262a24;
+  --surface-sunken:  #0c0e0b;
+  --overlay:         color-mix(in oklab, #000 60%, transparent);
+
+  --text-strong:     var(--neutral-50);
+  --text:            var(--neutral-300);
+  --text-muted:      var(--neutral-400);
+  --text-inverse:    var(--neutral-900);
+  --text-brand:      var(--blue-300);
+  --text-link:       var(--blue-300);
+
+  --border:          #2c302a;
+  --border-strong:   var(--neutral-700);
+  --border-brand:    var(--blue-500);
+
+  --accent-2:        var(--brand-teal-300);
+  --accent-2-hover:  #7fd2c2;
+  --accent-2-soft:   color-mix(in oklab, var(--brand-teal-300) 16%, transparent);
+  --on-accent-2:     var(--blue-950);
+
+  --accent:          var(--blue-300);
+  --accent-hover:    var(--blue-200);
+  --accent-active:   var(--blue-100);
+  --accent-soft:     color-mix(in oklab, var(--blue-300) 16%, transparent);
+  --accent-soft-text:var(--blue-200);
+  --on-accent:       var(--blue-950);
+
+  --ring:            var(--blue-300);
+
+  --success:         #4fb389;
+  --success-soft:    color-mix(in oklab, #4fb389 18%, transparent);
+  --warning:         #e0a64a;
+  --warning-soft:    color-mix(in oklab, #e0a64a 18%, transparent);
+  --danger:          #de6a5e;
+  --danger-soft:     color-mix(in oklab, #de6a5e 18%, transparent);
+
+  color-scheme: dark;
+}

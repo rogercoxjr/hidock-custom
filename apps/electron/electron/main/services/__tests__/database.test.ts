@@ -1,305 +1,104 @@
 /**
- * Database Service Tests
+ * Database Service Tests (real better-sqlite3 harness)
  *
- * Tests for the critical backend database service (sql.js / SQLite in-memory).
- * Covers: initialization, recording queries, transcription queue management,
- * transcript insertion, status transitions, and schema migrations.
+ * Rewritten from the obsolete sql.js mock harness to a real on-disk
+ * better-sqlite3 database, mirroring database.boot.test.ts /
+ * database.functions.test.ts. Each test boots a fresh DB under a temp
+ * HIDOCK_DATA_ROOT, exercises a real exported helper, and asserts the
+ * resulting row/column state — no SQL-string sniffing, no mocks.
+ *
+ * Tests that asserted removed sql.js internals (export()/writeFileSync/close,
+ * new Database(buffer), migration INSERT-counting) were dropped — see
+ * task-5b report. Stage-1/Stage-2 column behavior, queue transitions, status
+ * updates, schema migrations, and the voiceprint_count aggregate are all now
+ * asserted against real query results.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
-// ---------------------------------------------------------------------------
-// Mock helpers: sql.js Database object
-// ---------------------------------------------------------------------------
-
-let mockStmtRows: Record<string, unknown>[] = []
-let mockStmtRowIndex = 0
-
-const mockStmt = {
-  bind: vi.fn(),
-  step: vi.fn(() => {
-    if (mockStmtRowIndex < mockStmtRows.length) {
-      mockStmtRowIndex++
-      return true
-    }
-    return false
-  }),
-  getAsObject: vi.fn(() => {
-    return mockStmtRows[mockStmtRowIndex - 1] ?? {}
-  }),
-  free: vi.fn(),
-  reset: vi.fn()
+/**
+ * Boot a fresh real DB under the temp data root and return the database module.
+ * Mirrors the pattern in database.boot.test.ts.
+ */
+async function bootDatabase() {
+  const { initializeFileStorage } = await import('../file-storage')
+  const db = await import('../database')
+  await initializeFileStorage()
+  await db.initializeDatabase()
+  return db
 }
 
-let mockRowsModified = 0
+describe('Database Service (better-sqlite3)', () => {
+  let dir: string
 
-const mockDatabase = {
-  run: vi.fn(),
-  exec: vi.fn(() => [] as any[]),
-  prepare: vi.fn(() => mockStmt),
-  getRowsModified: vi.fn(() => mockRowsModified),
-  export: vi.fn(() => new Uint8Array([1, 2, 3])),
-  close: vi.fn()
-}
-
-// sql.js constructor — `new SQL.Database(buffer?)` returns mockDatabase
-// Use a real class that vi.fn() wraps, so it passes vitest's constructor check
-// AND supports mockImplementation in tests
-const RealMockSQLDatabase = vi.fn()
-RealMockSQLDatabase.prototype = mockDatabase
-
-vi.mock('sql.js', () => ({
-  default: vi.fn(async () => ({
-    Database: RealMockSQLDatabase
-  }))
-}))
-
-// Alias for test code that references MockSQLDatabase
-const MockSQLDatabase = RealMockSQLDatabase
-
-vi.mock('fs', () => {
-  const fsMock = {
-    existsSync: vi.fn(() => false),
-    readFileSync: vi.fn(() => Buffer.from('fake')),
-    writeFileSync: vi.fn()
-  }
-  return {
-    ...fsMock,
-    default: fsMock
-  }
-})
-
-vi.mock('../file-storage', () => ({
-  getDatabasePath: vi.fn(() => '/tmp/test-hidock.db')
-}))
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Set up mockStmt to return rows for queryAll/queryOne calls. */
-function setQueryResults(rows: Record<string, unknown>[]) {
-  mockStmtRows = rows
-  mockStmtRowIndex = 0
-  // Reset the step mock to iterate properly each time
-  mockStmt.step.mockImplementation(() => {
-    if (mockStmtRowIndex < mockStmtRows.length) {
-      mockStmtRowIndex++
-      return true
-    }
-    return false
-  })
-  mockStmt.getAsObject.mockImplementation(() => {
-    return mockStmtRows[mockStmtRowIndex - 1] ?? {}
-  })
-}
-
-// Common PRAGMA table_info return value with all expected columns
-const FULL_COLUMNS_PRAGMA = [{ values: [
-  [0, 'id', 'TEXT', 0, null, 1],
-  [1, 'migrated_to_capture_id', 'TEXT', 0, null, 0],
-  [2, 'migration_status', 'TEXT', 0, null, 0],
-  [3, 'migrated_at', 'TEXT', 0, null, 0],
-  [4, 'category', 'TEXT', 0, null, 0],
-  [5, 'status', 'TEXT', 0, null, 0],
-  [6, 'quality_rating', 'TEXT', 0, null, 0],
-  [7, 'quality_confidence', 'REAL', 0, null, 0],
-  [8, 'quality_assessed_at', 'TEXT', 0, null, 0],
-  [9, 'storage_tier', 'TEXT', 0, null, 0],
-  [10, 'retention_days', 'INTEGER', 0, null, 0],
-  [11, 'expires_at', 'TEXT', 0, null, 0],
-  [12, 'meeting_id', 'TEXT', 0, null, 0],
-  [13, 'correlation_confidence', 'REAL', 0, null, 0],
-  [14, 'correlation_method', 'TEXT', 0, null, 0],
-  [15, 'source_recording_id', 'TEXT', 0, null, 0],
-  [16, 'edited_at', 'TEXT', 0, null, 0],
-  [17, 'original_content', 'TEXT', 0, null, 0],
-  [18, 'created_output_id', 'TEXT', 0, null, 0],
-  [19, 'saved_as_insight_id', 'TEXT', 0, null, 0],
-] }]
-
-/** Standard exec mock: all columns present, at schema version 18. */
-function setupStandardExecMock(schemaVersion = 18) {
-  ;(mockDatabase.exec as any).mockImplementation((sql: string) => {
-    if (sql.includes('PRAGMA table_info')) {
-      return FULL_COLUMNS_PRAGMA
-    }
-    if (sql.includes('schema_version')) {
-      return schemaVersion > 0 ? [{ values: [[schemaVersion]] }] : []
-    }
-    return []
-  })
-}
-
-/** Initialize the database module with standard mocks. */
-async function initTestDatabase(schemaVersion = 18) {
-  const fs = await import('fs')
-  ;(fs.existsSync as any).mockReturnValue(false)
-  setupStandardExecMock(schemaVersion)
-  const dbModule = await import('../database')
-  await dbModule.initializeDatabase()
-  return dbModule
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('Database Service', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mockStmtRows = []
-    mockStmtRowIndex = 0
-    mockRowsModified = 0
+    vi.resetModules()
+    dir = mkdtempSync(join(tmpdir(), 'hidock-db-svc-'))
+    process.env.HIDOCK_DATA_ROOT = dir
+  })
 
-    // Re-establish default implementations after clearAllMocks
-    mockDatabase.prepare.mockImplementation(() => mockStmt)
-    mockDatabase.exec.mockImplementation(() => [] as any[])
-    mockDatabase.getRowsModified.mockImplementation(() => mockRowsModified)
-    mockDatabase.export.mockImplementation(() => new Uint8Array([1, 2, 3]))
-    mockStmt.step.mockImplementation(() => {
-      if (mockStmtRowIndex < mockStmtRows.length) {
-        mockStmtRowIndex++
-        return true
-      }
-      return false
-    })
-    mockStmt.getAsObject.mockImplementation(() => {
-      return mockStmtRows[mockStmtRowIndex - 1] ?? {}
-    })
+  afterEach(async () => {
+    const { closeDatabase } = await import('../database')
+    try { closeDatabase() } catch { /* ignore */ }
+    rmSync(dir, { recursive: true, force: true })
+    delete process.env.HIDOCK_DATA_ROOT
   })
 
   // =========================================================================
-  // 1. initializeDatabase
-  // =========================================================================
-  describe('initializeDatabase()', () => {
-    it('should create a new database when no file exists on disk', async () => {
-      await initTestDatabase()
-
-      // Should call new Database() (fresh db, no buffer arg)
-      expect(MockSQLDatabase).toHaveBeenCalled()
-
-      // Should have run multiple SQL statements (CREATE TABLE, indexes, etc.)
-      expect(mockDatabase.run).toHaveBeenCalled()
-
-      // Should save the database after initialization
-      const fsModule = await import('fs')
-      expect(fsModule.writeFileSync).toHaveBeenCalled()
-    })
-
-    it('should load existing database from disk when file exists', async () => {
-      const fs = await import('fs')
-      ;(fs.existsSync as any).mockReturnValue(true)
-      ;(fs.readFileSync as any).mockReturnValue(Buffer.from([0, 1, 2]))
-      setupStandardExecMock(18)
-
-      const dbModule = await import('../database')
-      await dbModule.initializeDatabase()
-
-      // Should call new Database(buffer)
-      expect(MockSQLDatabase).toHaveBeenCalledWith(expect.anything())
-      expect(fs.readFileSync).toHaveBeenCalled()
-    })
-
-    it('should run migrations when current version < SCHEMA_VERSION', async () => {
-      await initTestDatabase(17)
-
-      // The migration runner inserts version records via run()
-      const runCalls = mockDatabase.run.mock.calls.map((c: any[]) => c[0] as string)
-      const migrationInserts = runCalls.filter(
-        (sql: string) => typeof sql === 'string' && sql.includes('INSERT OR REPLACE INTO schema_version')
-      )
-      expect(migrationInserts.length).toBeGreaterThanOrEqual(1)
-    })
-
-    it('should throw on fatal initialization error', async () => {
-      const initSqlJs = (await import('sql.js')).default
-      ;(initSqlJs as any).mockRejectedValueOnce(new Error('WASM load failed'))
-
-      const dbModule = await import('../database')
-      await expect(dbModule.initializeDatabase()).rejects.toThrow('WASM load failed')
-    })
-  })
-
-  // =========================================================================
-  // 2. getDatabase / getRecordingById
+  // getDatabase / getRecordingById
   // =========================================================================
   describe('getDatabase()', () => {
     it('should throw if database is not initialized', async () => {
-      // Reset module to get a fresh state where db = null
-      vi.resetModules()
-
-      vi.doMock('sql.js', () => ({
-        default: vi.fn(async () => ({
-          Database: MockSQLDatabase
-        }))
-      }))
-      vi.doMock('fs', () => ({
-        existsSync: vi.fn(() => false),
-        readFileSync: vi.fn(() => Buffer.from('fake')),
-        writeFileSync: vi.fn()
-      }))
-      vi.doMock('../file-storage', () => ({
-        getDatabasePath: vi.fn(() => '/tmp/test-hidock.db')
-      }))
-
+      // No initializeDatabase() call this time — db is still null.
       const dbModule = await import('../database')
       expect(() => dbModule.getDatabase()).toThrow('Database not initialized')
     })
   })
 
   describe('getRecordingById()', () => {
-    it('should return a recording when it exists', async () => {
-      const dbModule = await initTestDatabase()
+    it('returns a recording with correct fields when it exists', async () => {
+      const db = await bootDatabase()
 
-      const mockRecording = {
-        id: 'rec-123',
-        filename: 'test.hda',
-        file_path: '/recordings/test.hda',
-        status: 'complete',
-        location: 'local-only',
-        transcription_status: 'none',
-        on_device: 0,
-        on_local: 1,
-        date_recorded: '2026-01-01',
-        source: 'hidock',
-        is_imported: 0,
-        created_at: '2026-01-01T00:00:00Z'
-      }
-      setQueryResults([mockRecording])
+      db.run(
+        `INSERT INTO recordings (id, filename, file_path, date_recorded, status, location, transcription_status, on_device, on_local, source, is_imported)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['rec-123', 'test.hda', '/recordings/test.hda', '2026-01-01T10:00:00', 'complete', 'local-only', 'none', 0, 1, 'hidock', 0]
+      )
 
-      const result = dbModule.getRecordingById('rec-123')
+      const result = db.getRecordingById('rec-123')
 
-      expect(result).toEqual(mockRecording)
-      expect(mockStmt.bind).toHaveBeenCalledWith(['rec-123'])
-      expect(mockStmt.free).toHaveBeenCalled()
+      expect(result).toBeDefined()
+      expect(result?.id).toBe('rec-123')
+      expect(result?.filename).toBe('test.hda')
+      expect(result?.file_path).toBe('/recordings/test.hda')
+      expect(result?.status).toBe('complete')
+      expect(result?.location).toBe('local-only')
+      expect(result?.transcription_status).toBe('none')
+      expect(result?.on_device).toBe(0)
+      expect(result?.on_local).toBe(1)
     })
 
-    it('should return undefined when recording does not exist', async () => {
-      const dbModule = await initTestDatabase()
-
-      setQueryResults([])
-
-      const result = dbModule.getRecordingById('nonexistent-id')
-      expect(result).toBeUndefined()
+    it('returns undefined when recording does not exist', async () => {
+      const db = await bootDatabase()
+      expect(db.getRecordingById('nonexistent-id')).toBeUndefined()
     })
   })
 
   // =========================================================================
-  // 3. Sanctioned transcript writers (the stage pair)
-  // -------------------------------------------------------------------------
-  // Realigned per auto-pipeline P3 (spec §5.3 single-writer rule / P1 carry-note
-  // #4): the former `insertTranscript` (INSERT OR REPLACE — would clobber the
-  // Stage-2 stage marker) was removed. The only sanctioned writers are now the
-  // stage pair: upsertTranscriptStage1 (Stage 1, never touches Stage-2 columns)
-  // and updateTranscriptStage2 (Stage 2, writes the marker atomically).
+  // Sanctioned transcript writers (the stage pair)
   // =========================================================================
   describe('upsertTranscriptStage1()', () => {
-    it('should INSERT ... ON CONFLICT and never reference Stage-2 columns', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
+    it('INSERTs the transcript and leaves all Stage-2 columns NULL', async () => {
+      const db = await bootDatabase()
+      db.run(
+        `INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`,
+        ['rec-123', 'test.hda', '2026-01-01T10:00:00']
+      )
 
-      dbModule.upsertTranscriptStage1({
+      db.upsertTranscriptStage1({
         recording_id: 'rec-123',
         full_text: 'Hello world transcript text',
         language: 'en',
@@ -308,54 +107,85 @@ describe('Database Service', () => {
         transcription_model: 'gemini-2.0-flash'
       })
 
-      const runCalls = mockDatabase.run.mock.calls
-      const insertCall = runCalls.find(
-        (call: any[]) =>
-          typeof call[0] === 'string' &&
-          call[0].includes('INSERT INTO transcripts') &&
-          call[0].includes('ON CONFLICT(recording_id)')
-      )
-      expect(insertCall).toBeDefined()
-      const sql = insertCall![0] as string
-      // Stage 1 must NEVER write the Stage-2 stage marker or summary content.
-      expect(sql).not.toContain('summarization_provider')
-      expect(sql).not.toContain('summary')
+      const row = db.queryOne<{
+        id: string
+        recording_id: string
+        full_text: string
+        language: string
+        word_count: number
+        transcription_provider: string
+        transcription_model: string
+        summarization_provider: string | null
+        summarization_model: string | null
+        summary: string | null
+        action_items: string | null
+        title_suggestion: string | null
+      }>('SELECT * FROM transcripts WHERE recording_id = ?', ['rec-123'])
 
-      const params = insertCall![1] as any[]
-      expect(params[0]).toBe('trans_rec-123') // id rule preserved
-      expect(params[1]).toBe('rec-123')
-      expect(params[2]).toBe('Hello world transcript text')
+      expect(row).toBeDefined()
+      // id rule preserved: trans_<recording_id>
+      expect(row?.id).toBe('trans_rec-123')
+      expect(row?.recording_id).toBe('rec-123')
+      expect(row?.full_text).toBe('Hello world transcript text')
+      expect(row?.language).toBe('en')
+      expect(row?.word_count).toBe(4)
+      expect(row?.transcription_provider).toBe('gemini')
+      expect(row?.transcription_model).toBe('gemini-2.0-flash')
+
+      // Stage-2 columns must NEVER be touched by Stage 1.
+      expect(row?.summarization_provider).toBeNull()
+      expect(row?.summarization_model).toBeNull()
+      expect(row?.summary).toBeNull()
+      expect(row?.action_items).toBeNull()
+      expect(row?.title_suggestion).toBeNull()
     })
 
-    it('should pass null for language/word_count/model when omitted', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
+    it('stores NULL for language/word_count/model when omitted', async () => {
+      const db = await bootDatabase()
+      db.run(
+        `INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`,
+        ['rec-456', 'test2.hda', '2026-01-02T10:00:00']
+      )
 
-      dbModule.upsertTranscriptStage1({
+      db.upsertTranscriptStage1({
         recording_id: 'rec-456',
         full_text: 'Some text',
         transcription_provider: 'openai-whisper'
       })
 
-      const insertCall = mockDatabase.run.mock.calls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('INSERT INTO transcripts')
-      )
-      expect(insertCall).toBeDefined()
-      const params = insertCall![1] as any[]
-      expect(params[3]).toBeNull() // language
-      expect(params[4]).toBeNull() // word_count
-      expect(params[6]).toBeNull() // transcription_model
+      const row = db.queryOne<{
+        full_text: string
+        language: string | null
+        word_count: number | null
+        transcription_model: string | null
+        transcription_provider: string
+      }>('SELECT * FROM transcripts WHERE recording_id = ?', ['rec-456'])
+
+      expect(row).toBeDefined()
+      expect(row?.full_text).toBe('Some text')
+      expect(row?.transcription_provider).toBe('openai-whisper')
+      expect(row?.language).toBeNull()
+      expect(row?.word_count).toBeNull()
+      expect(row?.transcription_model).toBeNull()
     })
   })
 
   describe('updateTranscriptStage2()', () => {
-    it('should UPDATE the marker + content atomically when a transcript row exists', async () => {
-      const dbModule = await initTestDatabase()
-      // Existence guard reads a row via queryOne -> make it return one.
-      setQueryResults([{ id: 'trans_rec-123' }])
-      mockDatabase.run.mockClear()
+    it('UPDATEs the stage marker + content atomically when a transcript row exists', async () => {
+      const db = await bootDatabase()
+      db.run(
+        `INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`,
+        ['rec-123', 'test.hda', '2026-01-01T10:00:00']
+      )
+      // Stage 1 first (language deliberately set so we can prove COALESCE keeps ASR value).
+      db.upsertTranscriptStage1({
+        recording_id: 'rec-123',
+        full_text: 'Hello world',
+        language: 'es',
+        transcription_provider: 'gemini'
+      })
 
-      dbModule.updateTranscriptStage2('rec-123', {
+      db.updateTranscriptStage2('rec-123', {
         summary: 'A greeting',
         action_items: '["say hi"]',
         title_suggestion: 'Greeting Session',
@@ -364,554 +194,313 @@ describe('Database Service', () => {
         summarization_model: 'gemini-2.0-flash'
       })
 
-      const updateCall = mockDatabase.run.mock.calls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('UPDATE transcripts SET')
-      )
-      expect(updateCall).toBeDefined()
-      const sql = updateCall![0] as string
-      expect(sql).toContain('summarization_provider = ?')
-      expect(sql).toContain('COALESCE(language, ?)') // ASR language ownership
+      const row = db.queryOne<{
+        summary: string
+        action_items: string
+        title_suggestion: string
+        summarization_provider: string
+        summarization_model: string
+        language: string
+        full_text: string
+      }>('SELECT * FROM transcripts WHERE recording_id = ?', ['rec-123'])
+
+      expect(row?.summary).toBe('A greeting')
+      expect(row?.action_items).toBe('["say hi"]')
+      expect(row?.title_suggestion).toBe('Greeting Session')
+      expect(row?.summarization_provider).toBe('gemini')
+      expect(row?.summarization_model).toBe('gemini-2.0-flash')
+      // Stage-1 content survives the Stage-2 update.
+      expect(row?.full_text).toBe('Hello world')
+      // COALESCE(language, ?) keeps the existing ASR-provided 'es', not the analysis 'en'.
+      expect(row?.language).toBe('es')
     })
 
-    it('should throw (no UPDATE) when no transcript row exists', async () => {
-      const dbModule = await initTestDatabase()
-      setQueryResults([]) // existence guard finds nothing
-      mockDatabase.run.mockClear()
+    it('throws (and writes nothing) when no transcript row exists', async () => {
+      const db = await bootDatabase()
 
       expect(() =>
-        dbModule.updateTranscriptStage2('rec-missing', {
+        db.updateTranscriptStage2('rec-missing', {
           summary: 's',
           summarization_provider: 'gemini'
         })
       ).toThrow(/no transcript row for recording rec-missing/)
 
-      const updateCall = mockDatabase.run.mock.calls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('UPDATE transcripts SET')
-      )
-      expect(updateCall).toBeUndefined() // guard fired before any UPDATE
+      // No row was created by the failed call.
+      expect(
+        db.queryOne('SELECT id FROM transcripts WHERE recording_id = ?', ['rec-missing'])
+      ).toBeUndefined()
     })
   })
 
   // =========================================================================
-  // 4. getQueueItems
+  // getQueueItems
   // =========================================================================
   describe('getQueueItems()', () => {
-    it('should return all queue items with recording filename when no status filter', async () => {
-      const dbModule = await initTestDatabase()
+    it('returns all queue items with joined recording filename when no status filter', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-1', 'file1.hda', '2026-01-01'])
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-2', 'file2.hda', '2026-01-02'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status, created_at) VALUES (?, ?, ?, ?)`, ['q-1', 'rec-1', 'pending', '2026-01-01T00:00:00'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status, created_at) VALUES (?, ?, ?, ?)`, ['q-2', 'rec-2', 'processing', '2026-01-02T00:00:00'])
 
-      const mockQueueItems = [
-        { id: 'q-1', recording_id: 'rec-1', status: 'pending', attempts: 0, filename: 'file1.hda', created_at: '2026-01-01' },
-        { id: 'q-2', recording_id: 'rec-2', status: 'processing', attempts: 1, filename: 'file2.hda', created_at: '2026-01-02' }
-      ]
-      setQueryResults(mockQueueItems)
-
-      const result = dbModule.getQueueItems()
+      const result = db.getQueueItems()
 
       expect(result).toHaveLength(2)
-      expect(result[0].id).toBe('q-1')
-      expect(result[0].filename).toBe('file1.hda')
-      expect(result[1].status).toBe('processing')
-
-      // SQL should contain the LEFT JOIN but no WHERE clause
-      const prepareCalls = mockDatabase.prepare.mock.calls as any[]
-      const lastPrepareSQL = (prepareCalls[prepareCalls.length - 1]?.[0] || '') as string
-      expect(lastPrepareSQL).toContain('LEFT JOIN recordings')
-      expect(lastPrepareSQL).not.toContain('WHERE tq.status')
+      const byId = new Map(result.map(r => [r.id, r]))
+      expect(byId.get('q-1')?.filename).toBe('file1.hda')
+      expect(byId.get('q-1')?.status).toBe('pending')
+      expect(byId.get('q-2')?.filename).toBe('file2.hda')
+      expect(byId.get('q-2')?.status).toBe('processing')
     })
 
-    it('should filter by status when provided', async () => {
-      const dbModule = await initTestDatabase()
+    it('filters by status when provided', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-1', 'file1.hda', '2026-01-01'])
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-2', 'file2.hda', '2026-01-02'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status) VALUES (?, ?, ?)`, ['q-1', 'rec-1', 'pending'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status) VALUES (?, ?, ?)`, ['q-2', 'rec-2', 'processing'])
 
-      setQueryResults([
-        { id: 'q-1', recording_id: 'rec-1', status: 'pending', attempts: 0, filename: 'file1.hda', created_at: '2026-01-01' }
-      ])
-
-      const result = dbModule.getQueueItems('pending')
+      const result = db.getQueueItems('pending')
 
       expect(result).toHaveLength(1)
-
-      // SQL should include WHERE clause with status filter
-      const prepareCalls = mockDatabase.prepare.mock.calls as any[]
-      const lastPrepareSQL = (prepareCalls[prepareCalls.length - 1]?.[0] || '') as string
-      expect(lastPrepareSQL).toContain('WHERE tq.status')
-
-      // Should bind with the status parameter
-      expect(mockStmt.bind).toHaveBeenCalledWith(['pending'])
+      expect(result[0].id).toBe('q-1')
+      expect(result[0].status).toBe('pending')
+      expect(result[0].filename).toBe('file1.hda')
     })
 
-    it('should return empty array when no queue items exist', async () => {
-      const dbModule = await initTestDatabase()
-
-      setQueryResults([])
-
-      const result = dbModule.getQueueItems()
-      expect(result).toEqual([])
+    it('returns an empty array when no queue items exist', async () => {
+      const db = await bootDatabase()
+      expect(db.getQueueItems()).toEqual([])
     })
   })
 
   // =========================================================================
-  // 5. updateQueueItem - status transitions
+  // updateQueueItem - status transitions
   // =========================================================================
   describe('updateQueueItem()', () => {
-    let dbModule: Awaited<ReturnType<typeof initTestDatabase>>
+    it('"processing" sets started_at and increments attempts', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-1', 'f.hda', '2026-01-01'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status, attempts) VALUES (?, ?, ?, ?)`, ['q-1', 'rec-1', 'pending', 0])
 
-    beforeEach(async () => {
-      dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
+      db.updateQueueItem('q-1', 'processing')
+
+      const row = db.queryOne<{ status: string; started_at: string | null; attempts: number }>(
+        'SELECT status, started_at, attempts FROM transcription_queue WHERE id = ?', ['q-1']
+      )
+      expect(row?.status).toBe('processing')
+      expect(row?.started_at).not.toBeNull()
+      expect(row?.attempts).toBe(1)
     })
 
-    it('should set started_at and increment attempts for "processing" status', () => {
-      dbModule.updateQueueItem('q-1', 'processing')
+    it('"completed" sets completed_at and clears error_message', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-2', 'f.hda', '2026-01-01'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status, error_message) VALUES (?, ?, ?, ?)`, ['q-2', 'rec-2', 'processing', 'prior error'])
 
-      const runCalls = mockDatabase.run.mock.calls
-      const updateCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('transcription_queue')
+      db.updateQueueItem('q-2', 'completed')
+
+      const row = db.queryOne<{ status: string; completed_at: string | null; error_message: string | null }>(
+        'SELECT status, completed_at, error_message FROM transcription_queue WHERE id = ?', ['q-2']
       )
-      expect(updateCall).toBeDefined()
-      const sql = updateCall![0] as string
-      expect(sql).toContain('started_at = CURRENT_TIMESTAMP')
-      expect(sql).toContain('attempts = attempts + 1')
-      expect(updateCall![1]).toEqual(['processing', 'q-1'])
+      expect(row?.status).toBe('completed')
+      expect(row?.completed_at).not.toBeNull()
+      expect(row?.error_message).toBeNull()
     })
 
-    it('should set completed_at and error_message for "completed" status', () => {
-      dbModule.updateQueueItem('q-2', 'completed')
+    it('"failed" sets completed_at and stores the error message', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-3', 'f.hda', '2026-01-01'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status) VALUES (?, ?, ?)`, ['q-3', 'rec-3', 'processing'])
 
-      const runCalls = mockDatabase.run.mock.calls
-      const updateCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('transcription_queue')
+      db.updateQueueItem('q-3', 'failed', 'API rate limit exceeded')
+
+      const row = db.queryOne<{ status: string; completed_at: string | null; error_message: string | null }>(
+        'SELECT status, completed_at, error_message FROM transcription_queue WHERE id = ?', ['q-3']
       )
-      expect(updateCall).toBeDefined()
-      const sql = updateCall![0] as string
-      expect(sql).toContain('completed_at = CURRENT_TIMESTAMP')
-      expect(sql).toContain('error_message = ?')
-      expect(updateCall![1]).toEqual(['completed', null, 'q-2'])
+      expect(row?.status).toBe('failed')
+      expect(row?.completed_at).not.toBeNull()
+      expect(row?.error_message).toBe('API rate limit exceeded')
     })
 
-    it('should set completed_at and error_message for "failed" status', () => {
-      dbModule.updateQueueItem('q-3', 'failed', 'API rate limit exceeded')
+    it('other status (e.g. "cancelled") sets only status, leaving started_at/completed_at untouched', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-4', 'f.hda', '2026-01-01'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status, attempts) VALUES (?, ?, ?, ?)`, ['q-4', 'rec-4', 'pending', 2])
 
-      const runCalls = mockDatabase.run.mock.calls
-      const updateCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('transcription_queue')
+      db.updateQueueItem('q-4', 'cancelled')
+
+      const row = db.queryOne<{ status: string; started_at: string | null; completed_at: string | null; attempts: number }>(
+        'SELECT status, started_at, completed_at, attempts FROM transcription_queue WHERE id = ?', ['q-4']
       )
-      expect(updateCall).toBeDefined()
-      const sql = updateCall![0] as string
-      expect(sql).toContain('completed_at = CURRENT_TIMESTAMP')
-      expect(sql).toContain('error_message = ?')
-      expect(updateCall![1]).toEqual(['failed', 'API rate limit exceeded', 'q-3'])
-    })
-
-    it('should only set status for other status values (e.g., "cancelled")', () => {
-      dbModule.updateQueueItem('q-4', 'cancelled')
-
-      const runCalls = mockDatabase.run.mock.calls
-      const updateCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('transcription_queue')
-      )
-      expect(updateCall).toBeDefined()
-      const sql = updateCall![0] as string
-      expect(sql).toContain('SET status = ?')
-      expect(sql).not.toContain('started_at')
-      expect(sql).not.toContain('completed_at')
-      expect(updateCall![1]).toEqual(['cancelled', 'q-4'])
+      expect(row?.status).toBe('cancelled')
+      expect(row?.started_at).toBeNull()
+      expect(row?.completed_at).toBeNull()
+      // attempts unchanged (only the 'processing' branch increments it).
+      expect(row?.attempts).toBe(2)
     })
   })
 
   // =========================================================================
-  // 6. updateRecordingTranscriptionStatus
+  // updateRecordingTranscriptionStatus
   // =========================================================================
   describe('updateRecordingTranscriptionStatus()', () => {
-    it('should update the transcription_status column for a recording', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
-
-      dbModule.updateRecordingTranscriptionStatus('rec-123', 'processing')
-
-      const runCalls = mockDatabase.run.mock.calls
-      const updateCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && call[0].includes('transcription_status')
+    it('updates the transcription_status column for a recording', async () => {
+      const db = await bootDatabase()
+      db.run(
+        `INSERT INTO recordings (id, filename, date_recorded, transcription_status) VALUES (?, ?, ?, ?)`,
+        ['rec-123', 'f.hda', '2026-01-01', 'none']
       )
-      expect(updateCall).toBeDefined()
-      expect(updateCall![0]).toContain('UPDATE recordings SET transcription_status = ?')
-      expect(updateCall![1]).toEqual(['processing', 'rec-123'])
+
+      db.updateRecordingTranscriptionStatus('rec-123', 'processing')
+
+      const row = db.queryOne<{ transcription_status: string }>(
+        'SELECT transcription_status FROM recordings WHERE id = ?', ['rec-123']
+      )
+      expect(row?.transcription_status).toBe('processing')
     })
   })
 
   // =========================================================================
-  // 7. cancelPendingTranscriptions
+  // cancelPendingTranscriptions
   // =========================================================================
   describe('cancelPendingTranscriptions()', () => {
-    it('should delete pending items, cancel processing items, and reset recording statuses', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
+    it('deletes pending items, cancels processing items, and resets recording statuses', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded, transcription_status) VALUES (?, ?, ?, ?)`, ['rec-1', 'f1.hda', '2026-01-01', 'pending'])
+      db.run(`INSERT INTO recordings (id, filename, date_recorded, transcription_status) VALUES (?, ?, ?, ?)`, ['rec-2', 'f2.hda', '2026-01-02', 'processing'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status) VALUES (?, ?, ?)`, ['q-1', 'rec-1', 'pending'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status) VALUES (?, ?, ?)`, ['q-2', 'rec-2', 'processing'])
 
-      // cancelPendingTranscriptions internally calls getQueueItems('pending')
-      // then getQueueItems('processing'), which use prepare/step/getAsObject.
-      let queryCallCount = 0
-      const pendingItems = [
-        { id: 'q-1', recording_id: 'rec-1', status: 'pending', attempts: 0, filename: 'file1.hda', created_at: '2026-01-01' }
-      ]
-      const processingItems = [
-        { id: 'q-2', recording_id: 'rec-2', status: 'processing', attempts: 1, filename: 'file2.hda', created_at: '2026-01-02' }
-      ]
+      const result = db.cancelPendingTranscriptions()
 
-      mockDatabase.prepare.mockImplementation(() => {
-        queryCallCount++
-        const items = queryCallCount === 1 ? pendingItems : processingItems
-        let idx = 0
-        return {
-          bind: vi.fn(),
-          step: vi.fn(() => {
-            if (idx < items.length) { idx++; return true }
-            return false
-          }),
-          getAsObject: vi.fn(() => items[idx - 1] ?? {}),
-          free: vi.fn(),
-          reset: vi.fn()
-        }
-      })
-
-      const result = dbModule.cancelPendingTranscriptions()
-
-      // Should return total count of pending + processing
+      // Total count of pending + processing.
       expect(result).toBe(2)
 
-      // Should DELETE pending items
-      const runCalls = mockDatabase.run.mock.calls
-      const deleteCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes("DELETE FROM transcription_queue WHERE status = 'pending'")
-      )
-      expect(deleteCall).toBeDefined()
+      // Pending item was deleted; processing item flipped to 'cancelled'.
+      expect(db.queryOne('SELECT id FROM transcription_queue WHERE id = ?', ['q-1'])).toBeUndefined()
+      const q2 = db.queryOne<{ status: string }>('SELECT status FROM transcription_queue WHERE id = ?', ['q-2'])
+      expect(q2?.status).toBe('cancelled')
 
-      // Should UPDATE processing items to cancelled
-      const cancelCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes("UPDATE transcription_queue SET status = 'cancelled'")
-      )
-      expect(cancelCall).toBeDefined()
-
-      // Should reset transcription_status to 'none' for affected recordings
-      const statusResetCalls = runCalls.filter(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes('UPDATE recordings SET transcription_status')
-      )
-      expect(statusResetCalls.length).toBe(2)
-      expect(statusResetCalls[0][1]).toEqual(['none', 'rec-1'])
-      expect(statusResetCalls[1][1]).toEqual(['none', 'rec-2'])
+      // Both linked recordings reset to 'none'.
+      const r1 = db.queryOne<{ transcription_status: string }>('SELECT transcription_status FROM recordings WHERE id = ?', ['rec-1'])
+      const r2 = db.queryOne<{ transcription_status: string }>('SELECT transcription_status FROM recordings WHERE id = ?', ['rec-2'])
+      expect(r1?.transcription_status).toBe('none')
+      expect(r2?.transcription_status).toBe('none')
     })
 
-    it('should return 0 when no pending or processing items exist', async () => {
-      const dbModule = await initTestDatabase()
-
-      mockDatabase.prepare.mockImplementation(() => ({
-        bind: vi.fn(),
-        step: vi.fn(() => false),
-        getAsObject: vi.fn(() => ({})),
-        free: vi.fn(),
-        reset: vi.fn()
-      }))
-
-      const result = dbModule.cancelPendingTranscriptions()
-      expect(result).toBe(0)
+    it('returns 0 when no pending or processing items exist', async () => {
+      const db = await bootDatabase()
+      expect(db.cancelPendingTranscriptions()).toBe(0)
     })
   })
 
   // =========================================================================
-  // 8. removeFromQueueByRecordingId
+  // removeFromQueueByRecordingId
   // =========================================================================
   describe('removeFromQueueByRecordingId()', () => {
-    it('should execute DELETE with the correct recording_id', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
+    it('deletes the queue row(s) for the given recording_id', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['rec-789', 'f.hda', '2026-01-01'])
+      db.run(`INSERT INTO transcription_queue (id, recording_id, status) VALUES (?, ?, ?)`, ['q-789', 'rec-789', 'pending'])
 
-      dbModule.removeFromQueueByRecordingId('rec-789')
+      // Sanity: row exists before the call.
+      expect(db.queryOne('SELECT id FROM transcription_queue WHERE recording_id = ?', ['rec-789'])).toBeDefined()
 
-      const deleteCall = mockDatabase.run.mock.calls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes('DELETE FROM transcription_queue WHERE recording_id')
-      )
-      expect(deleteCall).toBeDefined()
-      expect(deleteCall![1]).toEqual(['rec-789'])
+      db.removeFromQueueByRecordingId('rec-789')
+
+      expect(db.queryOne('SELECT id FROM transcription_queue WHERE recording_id = ?', ['rec-789'])).toBeUndefined()
     })
   })
 
   // =========================================================================
-  // 9. resetStuckTranscriptions
-  // =========================================================================
-  describe('resetStuckTranscriptions()', () => {
-    it('should reset stuck recordings and queue items, returning actual counts', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
-
-      // First call to getRowsModified (after recordings update) returns 3
-      // Second call (after queue update) returns 2
-      let getRowsModifiedCallCount = 0
-      mockDatabase.getRowsModified.mockImplementation(() => {
-        getRowsModifiedCallCount++
-        return getRowsModifiedCallCount === 1 ? 3 : 2
-      })
-
-      const result = dbModule.resetStuckTranscriptions()
-
-      expect(result).toEqual({ recordingsReset: 3, queueItemsReset: 2 })
-
-      // Should reset stuck recordings (transcription_status 'processing'/'pending' -> 'none')
-      const runCalls = mockDatabase.run.mock.calls
-      const recordingsUpdate = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes("UPDATE recordings SET transcription_status = 'none' WHERE transcription_status IN ('processing', 'pending')")
-      )
-      expect(recordingsUpdate).toBeDefined()
-
-      // Should update queue items with status = 'processing' to 'pending'
-      const queueUpdate = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes("UPDATE transcription_queue SET status = 'pending' WHERE status = 'processing'")
-      )
-      expect(queueUpdate).toBeDefined()
-    })
-
-    it('should return zeros when nothing is stuck', async () => {
-      const dbModule = await initTestDatabase()
-
-      mockDatabase.getRowsModified.mockReturnValue(0)
-
-      const result = dbModule.resetStuckTranscriptions()
-      expect(result).toEqual({ recordingsReset: 0, queueItemsReset: 0 })
-    })
-  })
-
-  // =========================================================================
-  // 10. Schema migrations
+  // Schema Migrations (asserted via PRAGMA table_info after a fresh boot)
   // =========================================================================
   describe('Schema Migrations', () => {
-    it('migration v17 should add confidence column to actionables if missing', async () => {
-      const fs = await import('fs')
-      ;(fs.existsSync as any).mockReturnValue(false)
-
-      ;(mockDatabase.exec as any).mockImplementation((sql: string) => {
-        if (sql.includes('PRAGMA table_info(actionables)')) {
-          // actionables WITHOUT confidence column
-          return [{ values: [
-            [0, 'id', 'TEXT', 0, null, 1],
-            [1, 'type', 'TEXT', 0, null, 0],
-            [2, 'title', 'TEXT', 0, null, 0],
-            [3, 'status', 'TEXT', 0, null, 0]
-          ] }]
-        }
-        if (sql.includes('PRAGMA table_info(chat_messages)')) {
-          return [{ values: [
-            [0, 'id', 'TEXT', 0, null, 1],
-            [1, 'content', 'TEXT', 0, null, 0],
-            [2, 'role', 'TEXT', 0, null, 0],
-            [3, 'edited_at', 'TEXT', 0, null, 0],
-            [4, 'original_content', 'TEXT', 0, null, 0],
-            [5, 'created_output_id', 'TEXT', 0, null, 0],
-            [6, 'saved_as_insight_id', 'TEXT', 0, null, 0],
-          ] }]
-        }
-        if (sql.includes('PRAGMA table_info')) {
-          return FULL_COLUMNS_PRAGMA
-        }
-        if (sql.includes('schema_version')) {
-          return [{ values: [[16]] }]
-        }
-        return []
-      })
-
-      const dbModule = await import('../database')
-      await dbModule.initializeDatabase()
-
-      const runCalls = mockDatabase.run.mock.calls
-      const alterCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes('ALTER TABLE actionables ADD COLUMN confidence')
-      )
-      expect(alterCall).toBeDefined()
+    it('v17 ensures actionables has a confidence column', async () => {
+      const db = await bootDatabase()
+      const cols = (db.queryAll<{ name: string }>('PRAGMA table_info(actionables)')).map(c => c.name)
+      expect(cols).toContain('confidence')
     })
 
-    it('migration v17 should skip confidence column if it already exists', async () => {
-      const fs = await import('fs')
-      ;(fs.existsSync as any).mockReturnValue(false)
-
-      ;(mockDatabase.exec as any).mockImplementation((sql: string) => {
-        if (sql.includes('PRAGMA table_info(actionables)')) {
-          // actionables WITH confidence column already present
-          return [{ values: [
-            [0, 'id', 'TEXT', 0, null, 1],
-            [1, 'type', 'TEXT', 0, null, 0],
-            [2, 'title', 'TEXT', 0, null, 0],
-            [3, 'status', 'TEXT', 0, null, 0],
-            [4, 'confidence', 'REAL', 0, null, 0]
-          ] }]
-        }
-        if (sql.includes('PRAGMA table_info(chat_messages)')) {
-          return [{ values: [
-            [0, 'id', 'TEXT', 0, null, 1],
-            [1, 'content', 'TEXT', 0, null, 0],
-            [2, 'role', 'TEXT', 0, null, 0],
-            [3, 'edited_at', 'TEXT', 0, null, 0],
-            [4, 'original_content', 'TEXT', 0, null, 0],
-            [5, 'created_output_id', 'TEXT', 0, null, 0],
-            [6, 'saved_as_insight_id', 'TEXT', 0, null, 0],
-          ] }]
-        }
-        if (sql.includes('PRAGMA table_info')) {
-          return FULL_COLUMNS_PRAGMA
-        }
-        if (sql.includes('schema_version')) {
-          return [{ values: [[16]] }]
-        }
-        return []
-      })
-
-      const dbModule = await import('../database')
-      await dbModule.initializeDatabase()
-
-      const runCalls = mockDatabase.run.mock.calls
-      const alterCall = runCalls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes('ALTER TABLE actionables ADD COLUMN confidence')
-      )
-      expect(alterCall).toBeUndefined()
-    })
-
-    it('migration v18 should add missing chat_messages columns', async () => {
-      const fs = await import('fs')
-      ;(fs.existsSync as any).mockReturnValue(false)
-
-      ;(mockDatabase.exec as any).mockImplementation((sql: string) => {
-        if (sql.includes('PRAGMA table_info(actionables)')) {
-          return [{ values: [
-            [0, 'id', 'TEXT', 0, null, 1],
-            [1, 'confidence', 'REAL', 0, null, 0]
-          ] }]
-        }
-        if (sql.includes('PRAGMA table_info(chat_messages)')) {
-          // chat_messages WITHOUT the v18 columns
-          return [{ values: [
-            [0, 'id', 'TEXT', 0, null, 1],
-            [1, 'content', 'TEXT', 0, null, 0],
-            [2, 'role', 'TEXT', 0, null, 0]
-          ] }]
-        }
-        if (sql.includes('PRAGMA table_info')) {
-          return FULL_COLUMNS_PRAGMA
-        }
-        if (sql.includes('schema_version')) {
-          return [{ values: [[17]] }]
-        }
-        return []
-      })
-
-      const dbModule = await import('../database')
-      await dbModule.initializeDatabase()
-
-      // v18 migration should add 4 columns to chat_messages
-      const runCalls = mockDatabase.run.mock.calls
-      const v18Alters = runCalls.filter(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes('ALTER TABLE chat_messages ADD COLUMN')
-      )
-
-      const allAlterSqls = v18Alters.map((c: any[]) => c[0] as string)
-      expect(allAlterSqls.some((s: string) => s.includes('edited_at'))).toBe(true)
-      expect(allAlterSqls.some((s: string) => s.includes('original_content'))).toBe(true)
-      expect(allAlterSqls.some((s: string) => s.includes('created_output_id'))).toBe(true)
-      expect(allAlterSqls.some((s: string) => s.includes('saved_as_insight_id'))).toBe(true)
+    it('v18 ensures chat_messages has the assistant-mapper columns', async () => {
+      const db = await bootDatabase()
+      const cols = (db.queryAll<{ name: string }>('PRAGMA table_info(chat_messages)')).map(c => c.name)
+      expect(cols).toContain('edited_at')
+      expect(cols).toContain('original_content')
+      expect(cols).toContain('created_output_id')
+      expect(cols).toContain('saved_as_insight_id')
     })
   })
 
   // =========================================================================
-  // Additional: saveDatabase, closeDatabase, run helpers
+  // closeDatabase
   // =========================================================================
-  describe('saveDatabase()', () => {
-    it('should export database and write to disk', async () => {
-      const dbModule = await initTestDatabase()
-      const fs = await import('fs')
-
-      ;(fs.writeFileSync as any).mockClear()
-      mockDatabase.export.mockClear()
-
-      dbModule.saveDatabase()
-
-      expect(mockDatabase.export).toHaveBeenCalled()
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        '/tmp/test-hidock.db',
-        expect.any(Buffer)
-      )
-    })
-  })
-
   describe('closeDatabase()', () => {
-    it('should save and close the database', async () => {
-      const dbModule = await initTestDatabase()
+    it('closes the database so getDatabase() throws afterward', async () => {
+      const db = await bootDatabase()
+      // Sanity: usable before close.
+      expect(() => db.getDatabase()).not.toThrow()
 
-      mockDatabase.close.mockClear()
+      db.closeDatabase()
 
-      dbModule.closeDatabase()
-
-      expect(mockDatabase.export).toHaveBeenCalled()
-      expect(mockDatabase.close).toHaveBeenCalled()
+      expect(() => db.getDatabase()).toThrow('Database not initialized')
     })
   })
 
   // =========================================================================
-  // updateRecordingStatus (legacy)
+  // updateRecordingStatus (legacy status column)
   // =========================================================================
   describe('updateRecordingStatus()', () => {
-    it('should update the legacy status column', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.run.mockClear()
-
-      dbModule.updateRecordingStatus('rec-100', 'complete')
-
-      const updateCall = mockDatabase.run.mock.calls.find(
-        (call: any[]) => typeof call[0] === 'string' && (call[0] as string).includes('UPDATE recordings SET status = ?')
+    it('updates the legacy status column', async () => {
+      const db = await bootDatabase()
+      db.run(
+        `INSERT INTO recordings (id, filename, date_recorded, status) VALUES (?, ?, ?, ?)`,
+        ['rec-100', 'f.hda', '2026-01-01', 'pending']
       )
-      expect(updateCall).toBeDefined()
-      expect(updateCall![1]).toEqual(['complete', 'rec-100'])
+
+      db.updateRecordingStatus('rec-100', 'complete')
+
+      const row = db.queryOne<{ status: string }>('SELECT status FROM recordings WHERE id = ?', ['rec-100'])
+      expect(row?.status).toBe('complete')
     })
   })
 
   // =========================================================================
-  // queryAll / queryOne helpers
+  // queryAll helper
   // =========================================================================
   describe('queryAll()', () => {
-    it('should return multiple rows', async () => {
-      const dbModule = await initTestDatabase()
+    it('returns multiple rows', async () => {
+      const db = await bootDatabase()
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['r1', 'a.hda', '2026-01-01'])
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['r2', 'b.hda', '2026-01-02'])
+      db.run(`INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`, ['r3', 'c.hda', '2026-01-03'])
 
-      const mockRows = [
-        { id: 'r1', filename: 'a.hda' },
-        { id: 'r2', filename: 'b.hda' },
-        { id: 'r3', filename: 'c.hda' }
-      ]
-      setQueryResults(mockRows)
-
-      const results = dbModule.queryAll<{ id: string; filename: string }>(
-        'SELECT * FROM recordings ORDER BY filename',
-        []
+      const results = db.queryAll<{ id: string; filename: string }>(
+        'SELECT id, filename FROM recordings ORDER BY filename'
       )
 
       expect(results).toHaveLength(3)
       expect(results[0].id).toBe('r1')
+      expect(results[0].filename).toBe('a.hda')
       expect(results[2].filename).toBe('c.hda')
-      expect(mockStmt.free).toHaveBeenCalled()
     })
   })
 
+  // =========================================================================
+  // run helper
+  // =========================================================================
   describe('run()', () => {
-    it('should run SQL and save the database', async () => {
-      const dbModule = await initTestDatabase()
-      const fs = await import('fs')
+    it('runs SQL and the effect takes hold', async () => {
+      const db = await bootDatabase()
 
-      mockDatabase.run.mockClear()
-      ;(fs.writeFileSync as any).mockClear()
-      mockDatabase.export.mockClear()
+      db.run('INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)', ['test-id', 'test.hda', '2026-01-01'])
 
-      dbModule.run('INSERT INTO recordings (id, filename) VALUES (?, ?)', ['test-id', 'test.hda'])
-
-      expect(mockDatabase.run).toHaveBeenCalledWith(
-        'INSERT INTO recordings (id, filename) VALUES (?, ?)',
-        ['test-id', 'test.hda']
+      const row = db.queryOne<{ id: string; filename: string }>(
+        'SELECT id, filename FROM recordings WHERE id = ?', ['test-id']
       )
-
-      // Should auto-save after run()
-      expect(mockDatabase.export).toHaveBeenCalled()
-      expect(fs.writeFileSync).toHaveBeenCalled()
+      expect(row?.id).toBe('test-id')
+      expect(row?.filename).toBe('test.hda')
     })
   })
 
@@ -919,76 +508,92 @@ describe('Database Service', () => {
   // getContacts / getContactById — voiceprint_count LEFT JOIN aggregate
   // =========================================================================
   describe('getContacts() voiceprint_count aggregate', () => {
-    it('prepared SQL includes the LEFT JOIN sub-aggregate for voiceprint_count', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.prepare.mockClear()
+    /** Seed a contact with the NOT NULL columns the contacts table requires. */
+    function insertContact(db: Awaited<ReturnType<typeof bootDatabase>>, id: string, name: string, extra: Partial<{ email: string; type: string; company: string; role: string }> = {}) {
+      db.run(
+        `INSERT INTO contacts (id, name, email, type, company, role, first_seen_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          name,
+          extra.email ?? null,
+          extra.type ?? 'unknown',
+          extra.company ?? null,
+          extra.role ?? null,
+          '2026-01-01T00:00:00',
+          '2026-01-01T00:00:00'
+        ]
+      )
+    }
 
-      // First call: COUNT query (returns 0); second call: main SELECT (returns [])
-      setQueryResults([{ count: 0 }])
+    /** Insert an active (non-disabled) voiceprint for a contact. */
+    function insertVoiceprint(db: Awaited<ReturnType<typeof bootDatabase>>, id: string, contactId: string, disabled = false) {
+      db.run(
+        `INSERT INTO voiceprints (id, contact_id, model_id, dim, embedding, created_at, disabled_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, contactId, 'eres2net', 256, Buffer.from([1, 2, 3]), '2026-01-01T00:00:00', disabled ? '2026-01-02T00:00:00' : null]
+      )
+    }
 
-      dbModule.getContacts()
+    it('counts only active voiceprints per contact (disabled excluded)', async () => {
+      const db = await bootDatabase()
+      insertContact(db, 'c1', 'Mario')
+      insertContact(db, 'c2', 'Luigi')
+      // c1: 2 active + 1 disabled => count 2
+      insertVoiceprint(db, 'vp1', 'c1')
+      insertVoiceprint(db, 'vp2', 'c1')
+      insertVoiceprint(db, 'vp3', 'c1', true)
+      // c2: none => count 0
 
-      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
-      const mainQuery = sqls.find((s) => s.includes('voiceprint_count'))
-      expect(mainQuery).toBeDefined()
-      expect(mainQuery).toContain('LEFT JOIN')
-      expect(mainQuery).toContain('disabled_at IS NULL')
-      expect(mainQuery).toContain('COALESCE')
+      const { contacts, total } = db.getContacts()
+      expect(total).toBe(2)
+      const byId = new Map(contacts.map(c => [c.id, c]))
+      expect((byId.get('c1') as unknown as { voiceprint_count: number }).voiceprint_count).toBe(2)
+      expect((byId.get('c2') as unknown as { voiceprint_count: number }).voiceprint_count).toBe(0)
     })
 
-    it('getContacts qualifies WHERE columns with c. alias when search is passed', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.prepare.mockClear()
-      setQueryResults([{ count: 0 }])
+    it('filters by search term — returns only matching contacts with correct total', async () => {
+      const db = await bootDatabase()
+      insertContact(db, 'c1', 'Mario Rossi', { email: 'mario@example.com', company: 'Acme' })
+      insertContact(db, 'c2', 'Luigi Verdi', { email: 'luigi@example.com', company: 'Other' })
+      insertContact(db, 'c3', 'Toad', { email: 'toad@example.com', company: 'Acme' })
+      // Give c1 one active voiceprint to verify voiceprint_count still works under filter
+      insertVoiceprint(db, 'vp1', 'c1')
 
-      dbModule.getContacts('mario')
-
-      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
-      const searchQuery = sqls.find((s) => s.includes('c.name'))
-      expect(searchQuery).toBeDefined()
-      expect(searchQuery).toContain('c.name LIKE')
-      expect(searchQuery).toContain('c.email LIKE')
-      expect(searchQuery).toContain('c.company LIKE')
-      expect(searchQuery).toContain('c.role LIKE')
+      const { contacts, total } = db.getContacts('mario')
+      expect(total).toBe(1)
+      expect(contacts).toHaveLength(1)
+      expect(contacts[0].id).toBe('c1')
+      expect((contacts[0] as unknown as { voiceprint_count: number }).voiceprint_count).toBe(1)
     })
 
-    it('getContacts qualifies type WHERE clause with c. alias when type is passed', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.prepare.mockClear()
-      setQueryResults([{ count: 0 }])
+    it('filters by type — returns only contacts of that type with correct total', async () => {
+      const db = await bootDatabase()
+      insertContact(db, 'c1', 'Team Member A', { type: 'team' })
+      insertContact(db, 'c2', 'Team Member B', { type: 'team' })
+      insertContact(db, 'c3', 'A Customer', { type: 'customer' })
 
-      dbModule.getContacts(undefined, 'team')
-
-      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
-      const typeQuery = sqls.find((s) => s.includes('c.type'))
-      expect(typeQuery).toBeDefined()
-      expect(typeQuery).toContain('c.type = ?')
+      const { contacts, total } = db.getContacts(undefined, 'team')
+      expect(total).toBe(2)
+      expect(contacts).toHaveLength(2)
+      expect(contacts.every(c => c.type === 'team')).toBe(true)
     })
 
-    it('getContactById SQL also includes the LEFT JOIN and WHERE c.id = ?', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.prepare.mockClear()
-      setQueryResults([])
+    it('getContactById returns the contact with its voiceprint_count', async () => {
+      const db = await bootDatabase()
+      insertContact(db, 'c1', 'Mario')
+      insertVoiceprint(db, 'vp1', 'c1')
+      insertVoiceprint(db, 'vp2', 'c1')
 
-      dbModule.getContactById('test-id')
-
-      const sqls: string[] = mockDatabase.prepare.mock.calls.map((c: unknown[]) => c[0] as string)
-      const byIdQuery = sqls.find((s) => s.includes('voiceprint_count'))
-      expect(byIdQuery).toBeDefined()
-      expect(byIdQuery).toContain('LEFT JOIN')
-      expect(byIdQuery).toContain('disabled_at IS NULL')
-      expect(byIdQuery).toContain('WHERE c.id = ?')
+      const contact = db.getContactById('c1')
+      expect(contact).toBeDefined()
+      expect(contact?.id).toBe('c1')
+      expect((contact as unknown as { voiceprint_count: number }).voiceprint_count).toBe(2)
     })
 
-    it('getContactById binds the correct id parameter', async () => {
-      const dbModule = await initTestDatabase()
-      mockDatabase.prepare.mockClear()
-      setQueryResults([])
-
-      dbModule.getContactById('contact-uuid-123')
-
-      expect(mockStmt.bind).toHaveBeenCalledWith(['contact-uuid-123'])
-      expect(mockStmt.free).toHaveBeenCalled()
+    it('getContactById returns undefined for an unknown id', async () => {
+      const db = await bootDatabase()
+      expect(db.getContactById('does-not-exist')).toBeUndefined()
     })
   })
 })

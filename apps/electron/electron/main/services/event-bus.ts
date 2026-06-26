@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import { BrowserWindow } from 'electron'
+import { getBroadcaster } from './broadcaster'
 
 // Domain Event Types
 export interface DomainEvent {
@@ -77,20 +77,12 @@ function sanitizeEventPayload<T extends DomainEvent>(event: T): T {
  * Supports both in-process EventEmitter and renderer process communication
  */
 class DomainEventBus extends EventEmitter {
-  private mainWindow: BrowserWindow | null = null
   private domainListenerCount: Map<string, number> = new Map()
   private readonly MAX_LISTENERS_PER_EVENT = 20
 
   constructor() {
     super()
     this.setMaxListeners(100) // Global limit across all events
-  }
-
-  /**
-   * Set the main window for broadcasting events to renderer
-   */
-  setMainWindow(window: BrowserWindow): void {
-    this.mainWindow = window
   }
 
   /**
@@ -106,11 +98,8 @@ class DomainEventBus extends EventEmitter {
     this.emit(event.type, enrichedEvent)
     this.emit('*', enrichedEvent) // Wildcard listener for all events
 
-    // Broadcast to renderer if available (sanitized)
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      const sanitized = sanitizeEventPayload(enrichedEvent)
-      this.mainWindow.webContents.send('domain-event', sanitized)
-    }
+    // Broadcast to renderer via transport-agnostic broadcaster (sanitized)
+    getBroadcaster().broadcast('domain-event', sanitizeEventPayload(enrichedEvent))
 
     console.log(`[EventBus] Emitted: ${event.type}`, enrichedEvent.payload)
   }
@@ -178,6 +167,3 @@ export function getEventBus(): DomainEventBus {
   return eventBusInstance
 }
 
-export function setMainWindowForEventBus(window: BrowserWindow): void {
-  getEventBus().setMainWindow(window)
-}

@@ -9,8 +9,8 @@
  *
  * @vitest-environment node
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mkdtempSync, readFileSync } from 'fs'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
@@ -19,20 +19,16 @@ let currentTmpDir: string
 beforeEach(() => {
   currentTmpDir = mkdtempSync(join(tmpdir(), 'hidock-cfg-aai-'))
   vi.resetModules()
-  vi.mock('electron', () => ({
-    app: {
-      getPath: (name: string) => {
-        if (name === 'userData') return currentTmpDir
-        if (name === 'home') return currentTmpDir
-        return currentTmpDir
-      }
-    },
-    safeStorage: {
-      isEncryptionAvailable: () => true,
-      encryptString: (s: string) => Buffer.from('ENC:' + s),
-      decryptString: (b: Buffer) => b.toString().replace(/^ENC:/, '')
-    }
-  }))
+  process.env.HIDOCK_DATA_ROOT = currentTmpDir
+  delete process.env.HIDOCK_CONFIG_PATH
+  process.env.HIDOCK_SECRET_KEY = 'test-key'
+})
+
+afterEach(() => {
+  rmSync(currentTmpDir, { recursive: true, force: true })
+  delete process.env.HIDOCK_DATA_ROOT
+  delete process.env.HIDOCK_CONFIG_PATH
+  delete process.env.HIDOCK_SECRET_KEY
 })
 
 describe('config — AssemblyAI defaults (§6.2)', () => {
@@ -62,20 +58,9 @@ describe('config — assemblyaiApiKey crypto (both sites)', () => {
     expect(raw.transcription.assemblyaiApiKey).not.toContain('aai-secret')
 
     vi.resetModules()
-    vi.mock('electron', () => ({
-      app: {
-        getPath: (name: string) => {
-          if (name === 'userData') return currentTmpDir
-          if (name === 'home') return currentTmpDir
-          return currentTmpDir
-        }
-      },
-      safeStorage: {
-        isEncryptionAvailable: () => true,
-        encryptString: (s: string) => Buffer.from('ENC:' + s),
-        decryptString: (b: Buffer) => b.toString().replace(/^ENC:/, '')
-      }
-    }))
+    process.env.HIDOCK_DATA_ROOT = currentTmpDir
+    delete process.env.HIDOCK_CONFIG_PATH
+    process.env.HIDOCK_SECRET_KEY = 'test-key'
     const mod2 = await import('../config')
     await mod2.initializeConfig()
     expect(mod2.getConfig().transcription.assemblyaiApiKey).toBe('aai-secret')
@@ -92,7 +77,10 @@ describe('config — assemblyaiApiKey crypto (both sites)', () => {
     // In-memory config now holds the decrypted value; a second save must not double-wrap.
     await saveConfig({ transcription: { ...getConfig().transcription } })
     const twice = JSON.parse(readFileSync(configPath, 'utf-8')).transcription.assemblyaiApiKey
-    expect(twice).toBe(once)
+    // AES-GCM uses a random nonce, so ciphertexts differ across calls — toBe(once) is too strict.
+    // What matters: second write is still a single-wrapped __enc__ token, never __enc____enc__.
+    expect(once).toMatch(/^__enc__/)
+    expect(twice).toMatch(/^__enc__/)
     expect(twice.startsWith('__enc____enc__')).toBe(false)
   })
 })

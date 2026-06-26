@@ -1,0 +1,2692 @@
+{
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\benchmark-app.js": {
+    "mtime": 1781134522.315717,
+    "ast_hash": "d8d9cd9fb8678cd6beca06f952a4ab9e",
+    "semantic_hash": "d8d9cd9fb8678cd6beca06f952a4ab9e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\create-dev-shortcut.ps1": {
+    "mtime": 1780689522.4694686,
+    "ast_hash": "01b6ec415901f753aeddc813c69a3771",
+    "semantic_hash": "01b6ec415901f753aeddc813c69a3771"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron.vite.config.ts": {
+    "mtime": 1781886169.4008937,
+    "ast_hash": "0eaa4d0c5592cabe92dac8c1560ad3f8",
+    "semantic_hash": "0eaa4d0c5592cabe92dac8c1560ad3f8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\index.ts": {
+    "mtime": 1782053266.3549755,
+    "ast_hash": "4f61da33a1f0384903e5f80caa3a5f85",
+    "semantic_hash": "4f61da33a1f0384903e5f80caa3a5f85"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\actionables-handlers.test.ts": {
+    "mtime": 1781134522.3167193,
+    "ast_hash": "43c845ee35e7679185f1addb94aee1c9",
+    "semantic_hash": "43c845ee35e7679185f1addb94aee1c9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\assistant-handlers.test.ts": {
+    "mtime": 1782273076.5210905,
+    "ast_hash": "f1aa77122f74d00f50cb15435f2b3423",
+    "semantic_hash": "f1aa77122f74d00f50cb15435f2b3423"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\calendar-handlers.test.ts": {
+    "mtime": 1781134522.3177168,
+    "ast_hash": "21124751e224b31b995e6bf8b6d8995b",
+    "semantic_hash": "21124751e224b31b995e6bf8b6d8995b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\config-handlers-repend.test.ts": {
+    "mtime": 1781298341.0245914,
+    "ast_hash": "a65393a8f55e8144d9f0a3b3a7b9a339",
+    "semantic_hash": "a65393a8f55e8144d9f0a3b3a7b9a339"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\contacts-handlers.test.ts": {
+    "mtime": 1782009440.9469655,
+    "ast_hash": "ff8c0b6d2cd65b668b3cd2cf3e5e1492",
+    "semantic_hash": "ff8c0b6d2cd65b668b3cd2cf3e5e1492"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\diarization-handlers.test.ts": {
+    "mtime": 1781926404.2449367,
+    "ast_hash": "efb48446c975e49cb49ac98ae028e14c",
+    "semantic_hash": "efb48446c975e49cb49ac98ae028e14c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\jensen-handlers.test.ts": {
+    "mtime": 1780689522.487192,
+    "ast_hash": "35aeb23063af543af10fc12bdec803ef",
+    "semantic_hash": "35aeb23063af543af10fc12bdec803ef"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\knowledge-getByIds.test.ts": {
+    "mtime": 1781134522.3202262,
+    "ast_hash": "84fd09635b5ff1d7e5c90a5a2e7cbcfc",
+    "semantic_hash": "84fd09635b5ff1d7e5c90a5a2e7cbcfc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\knowledge-handlers.test.ts": {
+    "mtime": 1781134522.3212357,
+    "ast_hash": "7b72ea3c74c67465653e34122f9f36a1",
+    "semantic_hash": "7b72ea3c74c67465653e34122f9f36a1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\meetings-handlers.test.ts": {
+    "mtime": 1780689522.4898314,
+    "ast_hash": "d2c8a8cece0478ed4e01d7efd4463e2a",
+    "semantic_hash": "d2c8a8cece0478ed4e01d7efd4463e2a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\outputs-handlers-b001.test.ts": {
+    "mtime": 1782273076.525988,
+    "ast_hash": "cf54a291c8b3d11b49735ddbc95dea1d",
+    "semantic_hash": "cf54a291c8b3d11b49735ddbc95dea1d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\projects-handlers.test.ts": {
+    "mtime": 1780689522.4914477,
+    "ast_hash": "0788d4772a2d50519f74371430596167",
+    "semantic_hash": "0788d4772a2d50519f74371430596167"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\rag-search.test.ts": {
+    "mtime": 1780689522.491978,
+    "ast_hash": "7c21df0fc3fbc11f0008304589335cfd",
+    "semantic_hash": "7c21df0fc3fbc11f0008304589335cfd"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\recording-handlers.test.ts": {
+    "mtime": 1782228404.079738,
+    "ast_hash": "55b3529fc2a39142430e44397bf34ad0",
+    "semantic_hash": "55b3529fc2a39142430e44397bf34ad0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\speakers-assign-voiceprint.test.ts": {
+    "mtime": 1781926404.2499578,
+    "ast_hash": "0b594d7a3f18158284ce43f24a77b7ff",
+    "semantic_hash": "0b594d7a3f18158284ce43f24a77b7ff"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\speakers-getsuggestions-singleflight.test.ts": {
+    "mtime": 1782071346.3436038,
+    "ast_hash": "281682867a630086964a17e3502118e8",
+    "semantic_hash": "281682867a630086964a17e3502118e8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\speakers-handlers.test.ts": {
+    "mtime": 1782071346.346598,
+    "ast_hash": "35b9bd9a83ff1f1444dc466cbf0e4bbf",
+    "semantic_hash": "35b9bd9a83ff1f1444dc466cbf0e4bbf"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\speakers-paired-deletes.test.ts": {
+    "mtime": 1782071346.3485985,
+    "ast_hash": "30fecd497d8fd643139723c22ddafe96",
+    "semantic_hash": "30fecd497d8fd643139723c22ddafe96"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\speakers-reassign.test.ts": {
+    "mtime": 1782266213.0760586,
+    "ast_hash": "d0959b057d76e06b12b558a6a919e06c",
+    "semantic_hash": "d0959b057d76e06b12b558a6a919e06c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\summarization-handlers.test.ts": {
+    "mtime": 1781298341.0277238,
+    "ast_hash": "666457c2dccc247f83177d2f8b03fded",
+    "semantic_hash": "666457c2dccc247f83177d2f8b03fded"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\summarization-templates-handlers.test.ts": {
+    "mtime": 1782228404.0821977,
+    "ast_hash": "da1b8a590f7bf8d2a7b3d22dce0c4f3c",
+    "semantic_hash": "da1b8a590f7bf8d2a7b3d22dce0c4f3c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\transcripts-export-handlers.test.ts": {
+    "mtime": 1782174463.4409997,
+    "ast_hash": "edfab52f3a3c8176123938a4e02c1061",
+    "semantic_hash": "edfab52f3a3c8176123938a4e02c1061"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\__tests__\\voiceprints-handlers.test.ts": {
+    "mtime": 1781926404.2529557,
+    "ast_hash": "77d779497f43b676a72be7f4f1ae8a2c",
+    "semantic_hash": "77d779497f43b676a72be7f4f1ae8a2c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\actionables-handlers.ts": {
+    "mtime": 1781134522.3262255,
+    "ast_hash": "a11b144e60bb37adf8c9d4c09efb0247",
+    "semantic_hash": "a11b144e60bb37adf8c9d4c09efb0247"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\app-handlers.ts": {
+    "mtime": 1780689522.495199,
+    "ast_hash": "3d4ab01519cfe5e5109544c5934583bb",
+    "semantic_hash": "3d4ab01519cfe5e5109544c5934583bb"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\assistant-handlers.ts": {
+    "mtime": 1782273076.5281758,
+    "ast_hash": "5dde06b77c613645d411e662993ccaf7",
+    "semantic_hash": "5dde06b77c613645d411e662993ccaf7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\calendar-handlers.ts": {
+    "mtime": 1780689522.4968238,
+    "ast_hash": "547fd873837439c177781e75f683bd84",
+    "semantic_hash": "547fd873837439c177781e75f683bd84"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\config-handlers.ts": {
+    "mtime": 1781298341.0297241,
+    "ast_hash": "c3f65e29b8be8e643627c4cc754341f4",
+    "semantic_hash": "c3f65e29b8be8e643627c4cc754341f4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\contacts-handlers.ts": {
+    "mtime": 1782009365.8544614,
+    "ast_hash": "b6815e1f460a63cbe41d1e63c0d86c7e",
+    "semantic_hash": "b6815e1f460a63cbe41d1e63c0d86c7e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\database-handlers.ts": {
+    "mtime": 1780689522.4988315,
+    "ast_hash": "ea4086c679e3afe33e159138b860539c",
+    "semantic_hash": "ea4086c679e3afe33e159138b860539c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\device-cache-handlers.ts": {
+    "mtime": 1781134522.3272238,
+    "ast_hash": "c59c037b3d3d7737fd3a9df424b4152b",
+    "semantic_hash": "c59c037b3d3d7737fd3a9df424b4152b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\diarization-handlers.ts": {
+    "mtime": 1781926404.2549565,
+    "ast_hash": "9354dadc5185985c8f13308e89ffd0a3",
+    "semantic_hash": "9354dadc5185985c8f13308e89ffd0a3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\handlers.ts": {
+    "mtime": 1782174463.4420004,
+    "ast_hash": "8befb98898429710e3888b9fc81a0db5",
+    "semantic_hash": "8befb98898429710e3888b9fc81a0db5"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\integrity-handlers.ts": {
+    "mtime": 1780689522.5013516,
+    "ast_hash": "ac1ae2e04bdc496c97a0e79aa9fa2427",
+    "semantic_hash": "ac1ae2e04bdc496c97a0e79aa9fa2427"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\jensen-handlers.ts": {
+    "mtime": 1780689522.5033505,
+    "ast_hash": "49920149b5d9d3dadd2beafadce211bb",
+    "semantic_hash": "49920149b5d9d3dadd2beafadce211bb"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\jensen-validation.ts": {
+    "mtime": 1780689522.504353,
+    "ast_hash": "66027dff8003dd510d1da9cd0aa93d39",
+    "semantic_hash": "66027dff8003dd510d1da9cd0aa93d39"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\knowledge-handlers.ts": {
+    "mtime": 1780689522.5053482,
+    "ast_hash": "3cf736899bf087a77ca72ade8bf86da6",
+    "semantic_hash": "3cf736899bf087a77ca72ade8bf86da6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\meetings-handlers.ts": {
+    "mtime": 1780689522.5053482,
+    "ast_hash": "064c4f8a79c5cdb45d3f925964c21b63",
+    "semantic_hash": "064c4f8a79c5cdb45d3f925964c21b63"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\migration-handlers.ts": {
+    "mtime": 1781134522.3292258,
+    "ast_hash": "99c394b5b30b2dbafb2a276551acb3b9",
+    "semantic_hash": "99c394b5b30b2dbafb2a276551acb3b9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\outputs-handlers.ts": {
+    "mtime": 1782273076.530383,
+    "ast_hash": "f848867c009eac23b0545f99497ffc9e",
+    "semantic_hash": "f848867c009eac23b0545f99497ffc9e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\projects-handlers.ts": {
+    "mtime": 1780689522.5083551,
+    "ast_hash": "ca314633862f71d09285ac97d9636653",
+    "semantic_hash": "ca314633862f71d09285ac97d9636653"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\quality-handlers.ts": {
+    "mtime": 1780689522.5093484,
+    "ast_hash": "c3667c4831bd66d232b96e5f9f6818e2",
+    "semantic_hash": "c3667c4831bd66d232b96e5f9f6818e2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\rag-handlers.ts": {
+    "mtime": 1781971316.5814,
+    "ast_hash": "f7b5af2fa23cb4c18c26a390bac355de",
+    "semantic_hash": "f7b5af2fa23cb4c18c26a390bac355de"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\recording-handlers.ts": {
+    "mtime": 1782228404.085209,
+    "ast_hash": "4f579ae9432f03d0026f5a0b7712133c",
+    "semantic_hash": "4f579ae9432f03d0026f5a0b7712133c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\speakers-handlers.ts": {
+    "mtime": 1782266213.0787802,
+    "ast_hash": "f63b80b0513b5ad3b324c121aa72e83c",
+    "semantic_hash": "f63b80b0513b5ad3b324c121aa72e83c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\storage-handlers.ts": {
+    "mtime": 1780689522.5128715,
+    "ast_hash": "1ffac97f5745277a75e0c4ebb2369c19",
+    "semantic_hash": "1ffac97f5745277a75e0c4ebb2369c19"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\summarization-handlers.ts": {
+    "mtime": 1781298341.0342474,
+    "ast_hash": "90e3cfa85637838ba9e53af0ac355f3c",
+    "semantic_hash": "90e3cfa85637838ba9e53af0ac355f3c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\summarization-templates-handlers.ts": {
+    "mtime": 1782228404.0872881,
+    "ast_hash": "f6ac44ff96254ff371700c9e32bf2b0c",
+    "semantic_hash": "f6ac44ff96254ff371700c9e32bf2b0c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\transcripts-export-handlers.ts": {
+    "mtime": 1782174463.4430037,
+    "ast_hash": "ffb67841a7af299a1cc9979803137a8e",
+    "semantic_hash": "ffb67841a7af299a1cc9979803137a8e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\validation.ts": {
+    "mtime": 1782152748.9140635,
+    "ast_hash": "ad32f17f1bc99a1cb338a00580ae950a",
+    "semantic_hash": "ad32f17f1bc99a1cb338a00580ae950a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\voiceprints-handlers.ts": {
+    "mtime": 1781926404.2634525,
+    "ast_hash": "4941844a87c06ef2982dfe9231041126",
+    "semantic_hash": "4941844a87c06ef2982dfe9231041126"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\migrations\\__tests__\\v11-migration.test.ts": {
+    "mtime": 1780689522.517029,
+    "ast_hash": "d91cefada816509dba343f69d2c1cd91",
+    "semantic_hash": "d91cefada816509dba343f69d2c1cd91"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\migrations\\migrate-quality-data.ts": {
+    "mtime": 1780689522.5181186,
+    "ast_hash": "53c1215aa479ff3520f5d7a3d4ff5338",
+    "semantic_hash": "53c1215aa479ff3520f5d7a3d4ff5338"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\activity-log-integration.test.ts": {
+    "mtime": 1781134522.330224,
+    "ast_hash": "03537949be0c306264ede9cbad877e10",
+    "semantic_hash": "03537949be0c306264ede9cbad877e10"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\assemblyai-seam.test.ts": {
+    "mtime": 1781812393.7883105,
+    "ast_hash": "7b1b692c2bb7cf1bd9bced47bdafd681",
+    "semantic_hash": "7b1b692c2bb7cf1bd9bced47bdafd681"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\attributed-summary.test.ts": {
+    "mtime": 1781784457.0739067,
+    "ast_hash": "1d3ef0dd56c0befb2353974dbb09f3c5",
+    "semantic_hash": "1d3ef0dd56c0befb2353974dbb09f3c5"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\audio-normalize.test.ts": {
+    "mtime": 1781298341.0352478,
+    "ast_hash": "e31c373343719db20e4da536a6be0146",
+    "semantic_hash": "e31c373343719db20e4da536a6be0146"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\baseline-sync.test.ts": {
+    "mtime": 1781534463.580909,
+    "ast_hash": "e29800bc4833270356d13f6a3e7d44db",
+    "semantic_hash": "e29800bc4833270356d13f6a3e7d44db"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\benchmark.test.ts": {
+    "mtime": 1780689522.520293,
+    "ast_hash": "e98a3066f1db8d47b3a32db22332890f",
+    "semantic_hash": "e98a3066f1db8d47b3a32db22332890f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\calendar-sync-errors.test.ts": {
+    "mtime": 1780689522.5214334,
+    "ast_hash": "3e6d6f6a1a813197833887f089d50745",
+    "semantic_hash": "3e6d6f6a1a813197833887f089d50745"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\chat-provider.test.ts": {
+    "mtime": 1782013678.8777125,
+    "ast_hash": "377962ad8b550eae06c70af29d3f55a4",
+    "semantic_hash": "377962ad8b550eae06c70af29d3f55a4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\config-assemblyai.test.ts": {
+    "mtime": 1781784457.0761197,
+    "ast_hash": "e8bd20f20ce7c4a985fdca1869794dcf",
+    "semantic_hash": "e8bd20f20ce7c4a985fdca1869794dcf"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\config-crypto.test.ts": {
+    "mtime": 1782151287.5712185,
+    "ast_hash": "b12a9d3809f1c88bfc1526bd175f8629",
+    "semantic_hash": "b12a9d3809f1c88bfc1526bd175f8629"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\config-interface.test.ts": {
+    "mtime": 1781886169.4040937,
+    "ast_hash": "6c3dbf0e4148d26de90e734e5c122995",
+    "semantic_hash": "6c3dbf0e4148d26de90e734e5c122995"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\config-labels.test.ts": {
+    "mtime": 1782013678.8817794,
+    "ast_hash": "8363248611f29e354399b9183ba5d08a",
+    "semantic_hash": "8363248611f29e354399b9183ba5d08a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\database-v25.test.ts": {
+    "mtime": 1781298341.0382483,
+    "ast_hash": "f0ebe50c5a33d6358228051bea8d2708",
+    "semantic_hash": "f0ebe50c5a33d6358228051bea8d2708"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\database-v26.test.ts": {
+    "mtime": 1782135717.0864382,
+    "ast_hash": "49662de32f9baff25c7bfb779962f86d",
+    "semantic_hash": "49662de32f9baff25c7bfb779962f86d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\database-v27.test.ts": {
+    "mtime": 1782135717.087895,
+    "ast_hash": "5d5d220d908a3c2e421053378f3c6ec7",
+    "semantic_hash": "5d5d220d908a3c2e421053378f3c6ec7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\database-v30.test.ts": {
+    "mtime": 1782135717.0889077,
+    "ast_hash": "85fa333c66eee6277c213c7902b6eead",
+    "semantic_hash": "85fa333c66eee6277c213c7902b6eead"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\database-v31.test.ts": {
+    "mtime": 1782135717.0899227,
+    "ast_hash": "dd8ca26860eeee62a9ec64c2d6dd6134",
+    "semantic_hash": "dd8ca26860eeee62a9ec64c2d6dd6134"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\database-v33.test.ts": {
+    "mtime": 1782135717.090907,
+    "ast_hash": "b3f3ecc58310bd124cab537ce4d03e9b",
+    "semantic_hash": "b3f3ecc58310bd124cab537ce4d03e9b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\database.test.ts": {
+    "mtime": 1782009301.4513698,
+    "ast_hash": "818a52ae4e9e1c7d46caf446c509b549",
+    "semantic_hash": "818a52ae4e9e1c7d46caf446c509b549"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\download-service-b007.test.ts": {
+    "mtime": 1782274163.5197194,
+    "ast_hash": "1bae3bd87e275954f1e951225be10383",
+    "semantic_hash": "1bae3bd87e275954f1e951225be10383"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\download-service-c004.test.ts": {
+    "mtime": 1782274163.5223017,
+    "ast_hash": "2e0c6cfe7c6e2b032783b88a2004fb02",
+    "semantic_hash": "2e0c6cfe7c6e2b032783b88a2004fb02"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\download-service.test.ts": {
+    "mtime": 1782274163.5246327,
+    "ast_hash": "6f65d9aba48e7dbbc979f696fa8a6641",
+    "semantic_hash": "6f65d9aba48e7dbbc979f696fa8a6641"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\e2e-smoke.test.ts": {
+    "mtime": 1781784457.0821624,
+    "ast_hash": "efedccc3d58c86d04665980a2d0a7a3e",
+    "semantic_hash": "efedccc3d58c86d04665980a2d0a7a3e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\e2e-whisper-ollama.test.ts": {
+    "mtime": 1781534463.5825608,
+    "ast_hash": "7167f429cf33bdab6c0c8bd804213df1",
+    "semantic_hash": "7167f429cf33bdab6c0c8bd804213df1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\embedding-provider.test.ts": {
+    "mtime": 1781705175.6686263,
+    "ast_hash": "5b450b41b5786b1babc859ad2f896623",
+    "semantic_hash": "5b450b41b5786b1babc859ad2f896623"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\file-storage-paths.test.ts": {
+    "mtime": 1782053266.3569953,
+    "ast_hash": "27f21ac6540231a1e38a3868ad34bec1",
+    "semantic_hash": "27f21ac6540231a1e38a3868ad34bec1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\fixtures\\llm.ts": {
+    "mtime": 1782237208.2933438,
+    "ast_hash": "a25e00d208e48bb18d5fedf7432b6dca",
+    "semantic_hash": "a25e00d208e48bb18d5fedf7432b6dca"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\fixtures\\templates.ts": {
+    "mtime": 1782237208.29469,
+    "ast_hash": "c09701a0ecd426d5d0ef932bf20cdcce",
+    "semantic_hash": "c09701a0ecd426d5d0ef932bf20cdcce"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\jensen.test.ts": {
+    "mtime": 1780689522.5284896,
+    "ast_hash": "0db5d95c7c8660b23bdbaf99b6624ee0",
+    "semantic_hash": "0db5d95c7c8660b23bdbaf99b6624ee0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\ollama-cloud-llm.test.ts": {
+    "mtime": 1781298341.0432024,
+    "ast_hash": "87601ecbd2394c1376dc76f3f57abe87",
+    "semantic_hash": "87601ecbd2394c1376dc76f3f57abe87"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\output-generator.test.ts": {
+    "mtime": 1781971316.5836194,
+    "ast_hash": "3f3acdd65069897d65c43fdc80054ec2",
+    "semantic_hash": "3f3acdd65069897d65c43fdc80054ec2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\parking-taxonomy.test.ts": {
+    "mtime": 1781298341.044281,
+    "ast_hash": "fc56aac58dd2fb85484c563e7f02e196",
+    "semantic_hash": "fc56aac58dd2fb85484c563e7f02e196"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\providers-p1.test.ts": {
+    "mtime": 1781298341.0459025,
+    "ast_hash": "d5dba800724e15df74c80b2bc953cf65",
+    "semantic_hash": "d5dba800724e15df74c80b2bc953cf65"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\quality-assessment.test.ts": {
+    "mtime": 1780689522.5300922,
+    "ast_hash": "7753f39e6607b45d7ee4528bb31d61a2",
+    "semantic_hash": "7753f39e6607b45d7ee4528bb31d61a2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\rag-context.test.ts": {
+    "mtime": 1781971316.5880919,
+    "ast_hash": "ab0960e363100876204fce93e2cc9f1f",
+    "semantic_hash": "ab0960e363100876204fce93e2cc9f1f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\storage-policy.integration.test.ts": {
+    "mtime": 1780689522.5328794,
+    "ast_hash": "c5364d897d89710c90351a507648ad93",
+    "semantic_hash": "c5364d897d89710c90351a507648ad93"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\summarization-injection.test.ts": {
+    "mtime": 1782237208.2958975,
+    "ast_hash": "e62537fe0b70a41acacd70e141642c8d",
+    "semantic_hash": "e62537fe0b70a41acacd70e141642c8d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\summarization-prompt.test.ts": {
+    "mtime": 1782237208.298351,
+    "ast_hash": "64359df2f3a66d5dbf112bfad5db34f1",
+    "semantic_hash": "64359df2f3a66d5dbf112bfad5db34f1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\summarization-runs.test.ts": {
+    "mtime": 1782152748.9160607,
+    "ast_hash": "11bbbc2e4a176c92899304410b451b24",
+    "semantic_hash": "11bbbc2e4a176c92899304410b451b24"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\summarization-selector-decide.test.ts": {
+    "mtime": 1782237208.2993593,
+    "ast_hash": "d874390527fde49eff01c9e6747ccfa9",
+    "semantic_hash": "d874390527fde49eff01c9e6747ccfa9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\summarization-selector-run.test.ts": {
+    "mtime": 1782237208.302877,
+    "ast_hash": "97a3c53d4b040fcd44089ca47e8ea45c",
+    "semantic_hash": "97a3c53d4b040fcd44089ca47e8ea45c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\summarization-templates.test.ts": {
+    "mtime": 1782152748.9190612,
+    "ast_hash": "4b6a6e79638c7f3cfe7571ff898aa177",
+    "semantic_hash": "4b6a6e79638c7f3cfe7571ff898aa177"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\summary-staleness.test.ts": {
+    "mtime": 1781784457.0836673,
+    "ast_hash": "1c60d704e555624af32c90b0afab51d2",
+    "semantic_hash": "1c60d704e555624af32c90b0afab51d2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\test-helpers\\fake-llm.ts": {
+    "mtime": 1782152748.9210744,
+    "ast_hash": "af84ad8d357b6a502f154e165689de41",
+    "semantic_hash": "af84ad8d357b6a502f154e165689de41"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcript-export.test.ts": {
+    "mtime": 1782174463.4440005,
+    "ast_hash": "673b55201886b7af16b3b4c3d737a576",
+    "semantic_hash": "673b55201886b7af16b3b4c3d737a576"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription-b007.test.ts": {
+    "mtime": 1780689522.533942,
+    "ast_hash": "426652b04a833a11c3c27ed569a6ed77",
+    "semantic_hash": "426652b04a833a11c3c27ed569a6ed77"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription-nonretryable.test.ts": {
+    "mtime": 1781784457.084675,
+    "ast_hash": "e0b8faa0abc94dc00122e5ed3e80c216",
+    "semantic_hash": "e0b8faa0abc94dc00122e5ed3e80c216"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription-override.test.ts": {
+    "mtime": 1782228404.089303,
+    "ast_hash": "7b6359d34eda807c025adc55a6c6a028",
+    "semantic_hash": "7b6359d34eda807c025adc55a6c6a028"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription-speaker-options.test.ts": {
+    "mtime": 1782152748.923195,
+    "ast_hash": "8821bb92be83d35d9fc5ff0919ef6ee0",
+    "semantic_hash": "8821bb92be83d35d9fc5ff0919ef6ee0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription-templates.test.ts": {
+    "mtime": 1782152748.925205,
+    "ast_hash": "634846d18e3ae99e953b3a07d6279bac",
+    "semantic_hash": "634846d18e3ae99e953b3a07d6279bac"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription.resummarize-log.test.ts": {
+    "mtime": 1782237208.3038776,
+    "ast_hash": "1215a76a2cb120c28e26a0b4538af308",
+    "semantic_hash": "1215a76a2cb120c28e26a0b4538af308"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription.template-driven.test.ts": {
+    "mtime": 1782237208.3059852,
+    "ast_hash": "f430c0e7903385c19e7227d923eec136",
+    "semantic_hash": "f430c0e7903385c19e7227d923eec136"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\transcription.test.ts": {
+    "mtime": 1782152748.9269388,
+    "ast_hash": "bd91eebebd27b4330080d83e35743754",
+    "semantic_hash": "bd91eebebd27b4330080d83e35743754"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\two-stage-worker.test.ts": {
+    "mtime": 1781784457.08698,
+    "ast_hash": "8effe9bf46febf3d4538c8737bd09298",
+    "semantic_hash": "8effe9bf46febf3d4538c8737bd09298"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\usb-smoke.test.ts": {
+    "mtime": 1780689522.5360692,
+    "ast_hash": "9c7eb7854333790da5ee503ff4d5da6d",
+    "semantic_hash": "9c7eb7854333790da5ee503ff4d5da6d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\vector-store-embeddings.test.ts": {
+    "mtime": 1781705175.676147,
+    "ast_hash": "de1368f98703a660b1426e20ee91344e",
+    "semantic_hash": "de1368f98703a660b1426e20ee91344e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\voiceprint-bundle-config.test.ts": {
+    "mtime": 1781886169.4104362,
+    "ast_hash": "a1b6dacf56ade9cb362c17eae6300bb6",
+    "semantic_hash": "a1b6dacf56ade9cb362c17eae6300bb6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\voiceprint-service.test.ts": {
+    "mtime": 1782071346.3668125,
+    "ast_hash": "8ffee03e5af150a1b7cf021d959830d0",
+    "semantic_hash": "8ffee03e5af150a1b7cf021d959830d0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\voiceprint-worker-pool.test.ts": {
+    "mtime": 1781886169.4146242,
+    "ast_hash": "2d10c761ca54a816f3744b58d9c68e72",
+    "semantic_hash": "2d10c761ca54a816f3744b58d9c68e72"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\voiceprints-db.test.ts": {
+    "mtime": 1781784457.0917172,
+    "ast_hash": "aef97439921a1992f56404328c83fe6a",
+    "semantic_hash": "aef97439921a1992f56404328c83fe6a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\whisper-asr.test.ts": {
+    "mtime": 1781705175.6781485,
+    "ast_hash": "7398469c928909c5ed11f27c2bb3e4bc",
+    "semantic_hash": "7398469c928909c5ed11f27c2bb3e4bc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\window-embeddings-db.test.ts": {
+    "mtime": 1782135717.0939023,
+    "ast_hash": "669728d438707cda55dd363f48040a61",
+    "semantic_hash": "669728d438707cda55dd363f48040a61"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\activity-log.ts": {
+    "mtime": 1780689522.5365968,
+    "ast_hash": "09e1ba57d928856d629c6ab806e70662",
+    "semantic_hash": "09e1ba57d928856d629c6ab806e70662"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\__tests__\\asr-provider.test.ts": {
+    "mtime": 1781784457.0927222,
+    "ast_hash": "93556d0001b36406457e1ad10634fe6a",
+    "semantic_hash": "93556d0001b36406457e1ad10634fe6a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\__tests__\\assemblyai-asr.test.ts": {
+    "mtime": 1781926404.2750175,
+    "ast_hash": "0b64023845de12604478aa582ce6a227",
+    "semantic_hash": "0b64023845de12604478aa582ce6a227"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\__tests__\\solo-detection.test.ts": {
+    "mtime": 1781926404.276044,
+    "ast_hash": "df54365e99cbe9290449a2708a412fc3",
+    "semantic_hash": "df54365e99cbe9290449a2708a412fc3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\__tests__\\speaker-options-policy.test.ts": {
+    "mtime": 1781926404.2770832,
+    "ast_hash": "c1480bd2b5e487fd3382ac07f163b2e0",
+    "semantic_hash": "c1480bd2b5e487fd3382ac07f163b2e0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\asr-provider.ts": {
+    "mtime": 1781926404.2796085,
+    "ast_hash": "594f098aaad62f21c51a88ddb3fa359b",
+    "semantic_hash": "594f098aaad62f21c51a88ddb3fa359b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\assemblyai-asr.ts": {
+    "mtime": 1781926404.281099,
+    "ast_hash": "b0f847e19c9b27549a2bff2df80a36f1",
+    "semantic_hash": "b0f847e19c9b27549a2bff2df80a36f1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\audio-normalize.ts": {
+    "mtime": 1781298341.0524049,
+    "ast_hash": "27c72bf37b2f716949511f17d9981bf2",
+    "semantic_hash": "27c72bf37b2f716949511f17d9981bf2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\gemini-asr.ts": {
+    "mtime": 1781235573.4712996,
+    "ast_hash": "f7f5dd9b2cd6ac107c5922354a22ab87",
+    "semantic_hash": "f7f5dd9b2cd6ac107c5922354a22ab87"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\solo-detection.ts": {
+    "mtime": 1781926404.282514,
+    "ast_hash": "cbd3b238c4f4adf99ed6809102c4fe9f",
+    "semantic_hash": "cbd3b238c4f4adf99ed6809102c4fe9f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\speaker-options-policy.ts": {
+    "mtime": 1781926404.2839115,
+    "ast_hash": "17f06ab2afd0ec9a84061d4fa948923d",
+    "semantic_hash": "17f06ab2afd0ec9a84061d4fa948923d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\turn.drift.test-d.ts": {
+    "mtime": 1781784457.099121,
+    "ast_hash": "fb89fec9226a7aac55fb9561c00d0834",
+    "semantic_hash": "fb89fec9226a7aac55fb9561c00d0834"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\asr\\whisper-asr.ts": {
+    "mtime": 1781705175.6786537,
+    "ast_hash": "59d43fa1ba1a8d726e78e34c03d66638",
+    "semantic_hash": "59d43fa1ba1a8d726e78e34c03d66638"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\calendar-sync.ts": {
+    "mtime": 1781134522.3387353,
+    "ast_hash": "895710ea9ed589eb7eb0fe42f391af74",
+    "semantic_hash": "895710ea9ed589eb7eb0fe42f391af74"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\chat\\chat-provider.ts": {
+    "mtime": 1781971316.6140034,
+    "ast_hash": "a8b58aaf9cc7fa9a97abafa66dc142c8",
+    "semantic_hash": "a8b58aaf9cc7fa9a97abafa66dc142c8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\chat\\gemini-chat.ts": {
+    "mtime": 1781971316.6254492,
+    "ast_hash": "496b20684411d2567adb452243db54b4",
+    "semantic_hash": "496b20684411d2567adb452243db54b4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\chat\\ollama-cloud-chat.ts": {
+    "mtime": 1781971316.6175177,
+    "ast_hash": "a8a57dcccac555b8883f90a5650f6bf8",
+    "semantic_hash": "a8a57dcccac555b8883f90a5650f6bf8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\chat\\ollama-local-chat.ts": {
+    "mtime": 1781971316.6217308,
+    "ast_hash": "39ddc3cbede4f2d65b23da9359c93677",
+    "semantic_hash": "39ddc3cbede4f2d65b23da9359c93677"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\config.ts": {
+    "mtime": 1782152748.9280286,
+    "ast_hash": "9ce417342787a5c836f79c93de3606c7",
+    "semantic_hash": "9ce417342787a5c836f79c93de3606c7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\database.ts": {
+    "mtime": 1782273076.5331726,
+    "ast_hash": "f43bb0412b824a3bda639ab008bb79c1",
+    "semantic_hash": "f43bb0412b824a3bda639ab008bb79c1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\download-service.ts": {
+    "mtime": 1782274163.526655,
+    "ast_hash": "97adab7cc910516b0e33d2e1ef7ef521",
+    "semantic_hash": "97adab7cc910516b0e33d2e1ef7ef521"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\embeddings\\embedding-provider.ts": {
+    "mtime": 1781705175.67967,
+    "ast_hash": "6a6326366ca06ae525a7784b8be3a55b",
+    "semantic_hash": "6a6326366ca06ae525a7784b8be3a55b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\event-bus.ts": {
+    "mtime": 1780689522.5418892,
+    "ast_hash": "0427f55795613bed9539832bc08d186a",
+    "semantic_hash": "0427f55795613bed9539832bc08d186a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\file-storage.ts": {
+    "mtime": 1782053266.3605125,
+    "ast_hash": "998544d922a7a91663c9013244d72164",
+    "semantic_hash": "998544d922a7a91663c9013244d72164"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\integrity-service.ts": {
+    "mtime": 1780689522.5438955,
+    "ast_hash": "6cf2ef0e69a2402fc89a917b035c8ded",
+    "semantic_hash": "6cf2ef0e69a2402fc89a917b035c8ded"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\jensen.ts": {
+    "mtime": 1780689522.5445032,
+    "ast_hash": "3427698da8ad1ef35985533c766bde50",
+    "semantic_hash": "3427698da8ad1ef35985533c766bde50"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\llm\\gemini-llm.ts": {
+    "mtime": 1781235573.4743247,
+    "ast_hash": "cbe0ef791c5e4f7bffcc1e41b14cfcf4",
+    "semantic_hash": "cbe0ef791c5e4f7bffcc1e41b14cfcf4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\llm\\llm-provider.ts": {
+    "mtime": 1781298341.0597618,
+    "ast_hash": "f2e05dc66df080ab46c5662be41a560f",
+    "semantic_hash": "f2e05dc66df080ab46c5662be41a560f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\llm\\ollama-cloud-llm.ts": {
+    "mtime": 1781298341.0607634,
+    "ast_hash": "6d9eb9d00e0401356108348d49a9ac39",
+    "semantic_hash": "6d9eb9d00e0401356108348d49a9ac39"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\media-protocol.ts": {
+    "mtime": 1782053266.3635192,
+    "ast_hash": "49c479eb220ce977e967bfa7afc5aac9",
+    "semantic_hash": "49c479eb220ce977e967bfa7afc5aac9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\migrations\\__tests__\\json-parsers.test.ts": {
+    "mtime": 1780689522.5470936,
+    "ast_hash": "365c1aa56d0e4c72f003de27c7b1ff77",
+    "semantic_hash": "365c1aa56d0e4c72f003de27c7b1ff77"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\migrations\\__tests__\\v11-migrate.test.ts": {
+    "mtime": 1780689522.5481048,
+    "ast_hash": "ad468f74f196b95582e0df05a59d9729",
+    "semantic_hash": "ad468f74f196b95582e0df05a59d9729"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\migrations\\json-parsers.ts": {
+    "mtime": 1780689522.5496106,
+    "ast_hash": "d90bd95180ce7cbb08c3595a4d031c46",
+    "semantic_hash": "d90bd95180ce7cbb08c3595a4d031c46"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\migrations\\pre-migration-cleanup.ts": {
+    "mtime": 1780689522.5506186,
+    "ast_hash": "31d647e6dd41d35dd7a15aada7430b26",
+    "semantic_hash": "31d647e6dd41d35dd7a15aada7430b26"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\ollama.ts": {
+    "mtime": 1780689522.552617,
+    "ast_hash": "43a9409f23aec1eb67ee9c37f97fc3be",
+    "semantic_hash": "43a9409f23aec1eb67ee9c37f97fc3be"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\output-generator.ts": {
+    "mtime": 1781971316.5982516,
+    "ast_hash": "b8ab7e46e4be078567b9f1b9b6f58b34",
+    "semantic_hash": "b8ab7e46e4be078567b9f1b9b6f58b34"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\output-templates.ts": {
+    "mtime": 1780689522.5536184,
+    "ast_hash": "ed16baafb5fa1a0ec49684c2e6a76951",
+    "semantic_hash": "ed16baafb5fa1a0ec49684c2e6a76951"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\provider-errors.ts": {
+    "mtime": 1781298341.0622728,
+    "ast_hash": "97044e44efa62633c9181efc108700ef",
+    "semantic_hash": "97044e44efa62633c9181efc108700ef"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\quality-assessment.ts": {
+    "mtime": 1780689522.5546172,
+    "ast_hash": "575a509ec72219bbf2238ad951ff5915",
+    "semantic_hash": "575a509ec72219bbf2238ad951ff5915"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\rag.ts": {
+    "mtime": 1781971316.6005137,
+    "ast_hash": "22a65727aa32a52cf554e7c50396dd18",
+    "semantic_hash": "22a65727aa32a52cf554e7c50396dd18"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\recording-watcher.ts": {
+    "mtime": 1781134522.3468633,
+    "ast_hash": "949ac185ab4743f1d32c70e865df37e4",
+    "semantic_hash": "949ac185ab4743f1d32c70e865df37e4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\storage-policy.ts": {
+    "mtime": 1780689522.5586267,
+    "ast_hash": "0c99ce65c250b76c1d4152ac70360d29",
+    "semantic_hash": "0c99ce65c250b76c1d4152ac70360d29"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\summarization-prompt.ts": {
+    "mtime": 1782237208.3080251,
+    "ast_hash": "1a31d8514ed47e89e7bf292310891750",
+    "semantic_hash": "1a31d8514ed47e89e7bf292310891750"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\summarization-selector.ts": {
+    "mtime": 1782237208.3080251,
+    "ast_hash": "ab5170c2f99d876f545f01f4a5889acc",
+    "semantic_hash": "ab5170c2f99d876f545f01f4a5889acc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\summarization-templates.ts": {
+    "mtime": 1782152748.936194,
+    "ast_hash": "39026422ab635499fd7e179f7768bd4c",
+    "semantic_hash": "39026422ab635499fd7e179f7768bd4c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\transcript-export.ts": {
+    "mtime": 1782174463.4458098,
+    "ast_hash": "d651459d96852f5a35223945885d6dca",
+    "semantic_hash": "d651459d96852f5a35223945885d6dca"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\transcription.ts": {
+    "mtime": 1782237208.312043,
+    "ast_hash": "4adcbfbb99e32ba23540a58acc95b134",
+    "semantic_hash": "4adcbfbb99e32ba23540a58acc95b134"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\vector-store.ts": {
+    "mtime": 1781705175.682677,
+    "ast_hash": "e85dc542b70293560b668a6728a8327e",
+    "semantic_hash": "e85dc542b70293560b668a6728a8327e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint-service.ts": {
+    "mtime": 1782071346.3753264,
+    "ast_hash": "e4b9c939b58692b91585283290d68116",
+    "semantic_hash": "e4b9c939b58692b91585283290d68116"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint-worker-pool.ts": {
+    "mtime": 1781886169.4221463,
+    "ast_hash": "dfbc3b0b986fdbd62ae65692d78f8c15",
+    "semantic_hash": "dfbc3b0b986fdbd62ae65692d78f8c15"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\__tests__\\conflict-policy.test.ts": {
+    "mtime": 1781926404.2939703,
+    "ast_hash": "b3546aae00630f34cbb28eec5a97d47c",
+    "semantic_hash": "b3546aae00630f34cbb28eec5a97d47c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\__tests__\\identity-matcher.test.ts": {
+    "mtime": 1781926404.2951424,
+    "ast_hash": "b99c089063826d9f58d85a03ccfeb181",
+    "semantic_hash": "b99c089063826d9f58d85a03ccfeb181"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\__tests__\\label-fingerprint.test.ts": {
+    "mtime": 1782071346.3763237,
+    "ast_hash": "0e517d5c7dc3d7d7ad286daf33adef52",
+    "semantic_hash": "0e517d5c7dc3d7d7ad286daf33adef52"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\__tests__\\merge-detector.test.ts": {
+    "mtime": 1781926404.2967458,
+    "ast_hash": "33e0763a3eb711dc8a1fd9a268c1250b",
+    "semantic_hash": "33e0763a3eb711dc8a1fd9a268c1250b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\__tests__\\mixed-detector.test.ts": {
+    "mtime": 1781926404.2978084,
+    "ast_hash": "3e25ffb732d920f6122d4217dfaa07b2",
+    "semantic_hash": "3e25ffb732d920f6122d4217dfaa07b2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\__tests__\\speaker-matcher.test.ts": {
+    "mtime": 1782071346.3783224,
+    "ast_hash": "9e31b5e82c9a139101edb09f25638f1f",
+    "semantic_hash": "9e31b5e82c9a139101edb09f25638f1f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\__tests__\\vector-math.test.ts": {
+    "mtime": 1781926404.29997,
+    "ast_hash": "6ab49f05c045947f774d9fc4f0f8e0fd",
+    "semantic_hash": "6ab49f05c045947f774d9fc4f0f8e0fd"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\conflict-policy.ts": {
+    "mtime": 1781926404.300502,
+    "ast_hash": "ae8434581002b561e7fbeb20d86f9e07",
+    "semantic_hash": "ae8434581002b561e7fbeb20d86f9e07"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\identity-matcher.ts": {
+    "mtime": 1781926404.3010292,
+    "ast_hash": "40cf138a33b76fc8ea3095a407c4e2f6",
+    "semantic_hash": "40cf138a33b76fc8ea3095a407c4e2f6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\merge-detector.ts": {
+    "mtime": 1781926404.3015647,
+    "ast_hash": "497426527957228c21281b02001d6703",
+    "semantic_hash": "497426527957228c21281b02001d6703"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\mixed-detector.ts": {
+    "mtime": 1781926404.302096,
+    "ast_hash": "5e94789b5a2ecab0eb6f1d73adca0ec4",
+    "semantic_hash": "5e94789b5a2ecab0eb6f1d73adca0ec4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\speaker-matcher.ts": {
+    "mtime": 1782071346.3793235,
+    "ast_hash": "cc53b3b680a10db4839ace3346e2af86",
+    "semantic_hash": "cc53b3b680a10db4839ace3346e2af86"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\voiceprint\\vector-math.ts": {
+    "mtime": 1781926404.3037143,
+    "ast_hash": "b8fb834b8db55030aba0dc302705b324",
+    "semantic_hash": "b8fb834b8db55030aba0dc302705b324"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\types\\api.ts": {
+    "mtime": 1782174463.4478204,
+    "ast_hash": "fb3020f1e4afc27a59ed25532192229a",
+    "semantic_hash": "fb3020f1e4afc27a59ed25532192229a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\types\\database.ts": {
+    "mtime": 1781926404.3047915,
+    "ast_hash": "1d74cf427aea66f59fa4e2b6065fa497",
+    "semantic_hash": "1d74cf427aea66f59fa4e2b6065fa497"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\types\\errors.ts": {
+    "mtime": 1780689522.5660217,
+    "ast_hash": "38dedb0ad22c9bae2f84e07d2f68f9ec",
+    "semantic_hash": "38dedb0ad22c9bae2f84e07d2f68f9ec"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\types\\index.ts": {
+    "mtime": 1780689522.5670865,
+    "ast_hash": "0e599416c37b853ab75eefc45213f747",
+    "semantic_hash": "0e599416c37b853ab75eefc45213f747"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\types\\jensen.ts": {
+    "mtime": 1780689522.5670865,
+    "ast_hash": "c30d43a7a079c1ddddd38522d512bc3f",
+    "semantic_hash": "c30d43a7a079c1ddddd38522d512bc3f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\validation\\common.ts": {
+    "mtime": 1780689522.5685768,
+    "ast_hash": "65f9df8ef4900127761a3355b0627772",
+    "semantic_hash": "65f9df8ef4900127761a3355b0627772"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\validation\\contacts.ts": {
+    "mtime": 1781926404.3053224,
+    "ast_hash": "810114ec7144207c6698b11f11260299",
+    "semantic_hash": "810114ec7144207c6698b11f11260299"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\validation\\outputs.ts": {
+    "mtime": 1780689522.5705905,
+    "ast_hash": "c81fa50a1d68678dca2875d465b0ce49",
+    "semantic_hash": "c81fa50a1d68678dca2875d465b0ce49"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\validation\\projects.ts": {
+    "mtime": 1780689522.571594,
+    "ast_hash": "0d70dcf99069e2955ba8dc33d8f6074d",
+    "semantic_hash": "0d70dcf99069e2955ba8dc33d8f6074d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\validation\\summarization-templates.ts": {
+    "mtime": 1782152748.9405677,
+    "ast_hash": "36e2d6f640d209bddfe3f55e7fbc84f2",
+    "semantic_hash": "36e2d6f640d209bddfe3f55e7fbc84f2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\workers\\calendar-parser.worker.ts": {
+    "mtime": 1781134522.350135,
+    "ast_hash": "f6ae2296fa9d92a82324894017f7f20e",
+    "semantic_hash": "f6ae2296fa9d92a82324894017f7f20e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\workers\\voiceprint-worker.ts": {
+    "mtime": 1781886169.4231515,
+    "ast_hash": "96ff4ee42cd60594a01a51c3647f2295",
+    "semantic_hash": "96ff4ee42cd60594a01a51c3647f2295"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\preload\\index.d.ts": {
+    "mtime": 1780689522.574589,
+    "ast_hash": "fe52a777b764c326b9c1916421f52427",
+    "semantic_hash": "fe52a777b764c326b9c1916421f52427"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\preload\\index.ts": {
+    "mtime": 1782266213.0814228,
+    "ast_hash": "0953f959e54d33035d003f0102c1101c",
+    "semantic_hash": "0953f959e54d33035d003f0102c1101c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\preload\\migration-types.ts": {
+    "mtime": 1780689522.5787952,
+    "ast_hash": "1731af007853496f1bad3bf50607e0d9",
+    "semantic_hash": "1731af007853496f1bad3bf50607e0d9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\preload\\splash.ts": {
+    "mtime": 1780689522.5797946,
+    "ast_hash": "90fe6df6c7fb6a44c06cb8b98e9c7aad",
+    "semantic_hash": "90fe6df6c7fb6a44c06cb8b98e9c7aad"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\eslint.config.mjs": {
+    "mtime": 1781134522.3532627,
+    "ast_hash": "f4c1db3ed41aa41c76b0deb81c539c67",
+    "semantic_hash": "f4c1db3ed41aa41c76b0deb81c539c67"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\hardware-benchmark.js": {
+    "mtime": 1781134522.355464,
+    "ast_hash": "4aae26ae71622b9f04396730678e9dad",
+    "semantic_hash": "4aae26ae71622b9f04396730678e9dad"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\package.json": {
+    "mtime": 1782310202.725552,
+    "ast_hash": "be08f5b92473e48fcd47083dddc3f43a",
+    "semantic_hash": "be08f5b92473e48fcd47083dddc3f43a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\postcss.config.js": {
+    "mtime": 1780689522.5858338,
+    "ast_hash": "96369197598a623052222fed097d6fff",
+    "semantic_hash": "96369197598a623052222fed097d6fff"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\proof-of-optimization.js": {
+    "mtime": 1781134522.3629923,
+    "ast_hash": "23107665669c3633d03b80e1e998cb45",
+    "semantic_hash": "23107665669c3633d03b80e1e998cb45"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\scripts\\fetch-models.mjs": {
+    "mtime": 1781886169.424152,
+    "ast_hash": "02e4269e881e643d1fcc9b36b6168abe",
+    "semantic_hash": "02e4269e881e643d1fcc9b36b6168abe"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\App.tsx": {
+    "mtime": 1782270538.7237859,
+    "ast_hash": "436810ab59cdab022d2aefd500ea97d2",
+    "semantic_hash": "436810ab59cdab022d2aefd500ea97d2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\__tests__\\accessibility\\library-a11y.test.tsx": {
+    "mtime": 1780689522.5924957,
+    "ast_hash": "e69e062c0370d65cd24fc73aceab1dfc",
+    "semantic_hash": "e69e062c0370d65cd24fc73aceab1dfc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\__tests__\\performance\\library-performance.test.tsx": {
+    "mtime": 1782152748.9471486,
+    "ast_hash": "6f674d1610937b44f30eeaa056398a13",
+    "semantic_hash": "6f674d1610937b44f30eeaa056398a13"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\__tests__\\performance\\mockData.ts": {
+    "mtime": 1780689522.5960805,
+    "ast_hash": "ad3fe268f6e91f6dd6a6c12b0a34e724",
+    "semantic_hash": "ad3fe268f6e91f6dd6a6c12b0a34e724"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\AudioPlayer.tsx": {
+    "mtime": 1782008563.0247958,
+    "ast_hash": "4ca69bcfdb211c90ae8d2d59cbd941c2",
+    "semantic_hash": "4ca69bcfdb211c90ae8d2d59cbd941c2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ConfirmDialog.tsx": {
+    "mtime": 1780689522.598922,
+    "ast_hash": "3895c604c4d3c0ef70827c57f0d9f5e8",
+    "semantic_hash": "3895c604c4d3c0ef70827c57f0d9f5e8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ContextPicker.tsx": {
+    "mtime": 1782008563.027128,
+    "ast_hash": "40637e127974fd76586076873abf05c0",
+    "semantic_hash": "40637e127974fd76586076873abf05c0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\DeviceFileList.tsx": {
+    "mtime": 1782008563.0304718,
+    "ast_hash": "344e0a98a88be326a194ae2f60651901",
+    "semantic_hash": "344e0a98a88be326a194ae2f60651901"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ErrorBoundary.tsx": {
+    "mtime": 1780689522.6017401,
+    "ast_hash": "268bc9758c907e018a80952986520049",
+    "semantic_hash": "268bc9758c907e018a80952986520049"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\HealthCheck.tsx": {
+    "mtime": 1782008563.032958,
+    "ast_hash": "50f424887528cef730dc267529b310c0",
+    "semantic_hash": "50f424887528cef730dc267529b310c0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\LoadingSpinner.tsx": {
+    "mtime": 1780689522.6037397,
+    "ast_hash": "5d2c5abb2873794ff996aab728d6b0df",
+    "semantic_hash": "5d2c5abb2873794ff996aab728d6b0df"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\MeetingActionables.tsx": {
+    "mtime": 1782008563.0353153,
+    "ast_hash": "52c4b4e434a5a6c347b6bd5c79dfeb36",
+    "semantic_hash": "52c4b4e434a5a6c347b6bd5c79dfeb36"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\OperationController.tsx": {
+    "mtime": 1782017071.9834533,
+    "ast_hash": "8109c729db3cf35c9a3b6897f3eb003b",
+    "semantic_hash": "8109c729db3cf35c9a3b6897f3eb003b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\QuickAddContact.tsx": {
+    "mtime": 1782008563.037382,
+    "ast_hash": "129579c3654916498c7e6e25d0bb3a2a",
+    "semantic_hash": "129579c3654916498c7e6e25d0bb3a2a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\RecordingLinkDialog.tsx": {
+    "mtime": 1782008563.0388913,
+    "ast_hash": "74bfcaea18f209f22915593ff54f716c",
+    "semantic_hash": "74bfcaea18f209f22915593ff54f716c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\SecurityWarningBanner.tsx": {
+    "mtime": 1780689522.606315,
+    "ast_hash": "dcc726a0970ede362bafe9e219e2d268",
+    "semantic_hash": "dcc726a0970ede362bafe9e219e2d268"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\SmartLabelsCard.tsx": {
+    "mtime": 1782013678.899712,
+    "ast_hash": "6ec27f63400f024e5108ffe8a47e567f",
+    "semantic_hash": "6ec27f63400f024e5108ffe8a47e567f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\SummarizationTemplatesCard.tsx": {
+    "mtime": 1782152748.9481475,
+    "ast_hash": "631029b393caee49761192b5d7945561",
+    "semantic_hash": "631029b393caee49761192b5d7945561"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\WaveformCanvas.tsx": {
+    "mtime": 1782008563.0422058,
+    "ast_hash": "ac0e82af6f4c238c73d33fd4f34f6d34",
+    "semantic_hash": "ac0e82af6f4c238c73d33fd4f34f6d34"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\__tests__\\AudioPlayer-playbackRate.test.tsx": {
+    "mtime": 1780689522.6083205,
+    "ast_hash": "8de697fd3fc5fd4db311eb69b6bdc061",
+    "semantic_hash": "8de697fd3fc5fd4db311eb69b6bdc061"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\__tests__\\ContextPicker.test.tsx": {
+    "mtime": 1780689522.6095724,
+    "ast_hash": "93ab4996330464e935cd840acb0699d2",
+    "semantic_hash": "93ab4996330464e935cd840acb0699d2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\__tests__\\DeviceFileList-c004.test.ts": {
+    "mtime": 1780689522.61158,
+    "ast_hash": "128830ebd8274bd5062f2549a10dadc0",
+    "semantic_hash": "128830ebd8274bd5062f2549a10dadc0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\__tests__\\QuickAddContact.test.tsx": {
+    "mtime": 1781784457.1273026,
+    "ast_hash": "17a3b8077e5b4ae0ad120ffafb8ca3e7",
+    "semantic_hash": "17a3b8077e5b4ae0ad120ffafb8ca3e7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\__tests__\\SmartLabelsCard.test.tsx": {
+    "mtime": 1782013678.901722,
+    "ast_hash": "347d89b9de6512c34bbdb6fa30a845f3",
+    "semantic_hash": "347d89b9de6512c34bbdb6fa30a845f3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\__tests__\\SummarizationTemplatesCard.test.tsx": {
+    "mtime": 1782152748.9491491,
+    "ast_hash": "994d0b92c61268dca8026163dcb652ad",
+    "semantic_hash": "994d0b92c61268dca8026163dcb652ad"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\calendar\\CalendarHeader.tsx": {
+    "mtime": 1782008563.0432057,
+    "ast_hash": "8cebd4bbf88426a297d6f052b3a09858",
+    "semantic_hash": "8cebd4bbf88426a297d6f052b3a09858"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\calendar\\CalendarStatsBar.tsx": {
+    "mtime": 1782008563.0462062,
+    "ast_hash": "97b8b2ff468d66b23bf35c4f4ecf7088",
+    "semantic_hash": "97b8b2ff468d66b23bf35c4f4ecf7088"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\calendar\\CalendarTooltips.tsx": {
+    "mtime": 1782008563.0487194,
+    "ast_hash": "a6df54ab02768c0c1b9bfd6194e1a64f",
+    "semantic_hash": "a6df54ab02768c0c1b9bfd6194e1a64f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\calendar\\index.ts": {
+    "mtime": 1780689522.61558,
+    "ast_hash": "8292400e1359a06c5d144bbc60ef98c0",
+    "semantic_hash": "8292400e1359a06c5d144bbc60ef98c0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\harbor\\Eyebrow.tsx": {
+    "mtime": 1782008563.0507433,
+    "ast_hash": "a213c8390448bf1a7ce194a7ffb6f6b0",
+    "semantic_hash": "a213c8390448bf1a7ce194a7ffb6f6b0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\harbor\\PersonAvatar.tsx": {
+    "mtime": 1782270538.7260659,
+    "ast_hash": "6e7283d88f8f77c102368315042fef07",
+    "semantic_hash": "6e7283d88f8f77c102368315042fef07"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\harbor\\StatCard.tsx": {
+    "mtime": 1782008563.0537455,
+    "ast_hash": "4bbc8fc35726660733181b572038c2da",
+    "semantic_hash": "4bbc8fc35726660733181b572038c2da"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\harbor\\__tests__\\PersonAvatar.test.tsx": {
+    "mtime": 1782009512.2712438,
+    "ast_hash": "4d891eae5c0f6e5b6277875b6e0b98de",
+    "semantic_hash": "4d891eae5c0f6e5b6277875b6e0b98de"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\layout\\Layout.tsx": {
+    "mtime": 1782270538.726575,
+    "ast_hash": "0593308d1d4f5f290ada10cc34cfece2",
+    "semantic_hash": "0593308d1d4f5f290ada10cc34cfece2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\layout\\OperationsPanel.tsx": {
+    "mtime": 1782008563.0567257,
+    "ast_hash": "91ef8652f040acb9f5c024c79e80b320",
+    "semantic_hash": "91ef8652f040acb9f5c024c79e80b320"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\layout\\__tests__\\OperationsPanel.test.tsx": {
+    "mtime": 1781134522.3679905,
+    "ast_hash": "25131e989a59aed41a9ab1c6a4746c82",
+    "semantic_hash": "25131e989a59aed41a9ab1c6a4746c82"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\__tests__\\markdown.test.tsx": {
+    "mtime": 1782310202.7285745,
+    "ast_hash": "4907adcf1ae8ee985907d82bbf3b0a68",
+    "semantic_hash": "4907adcf1ae8ee985907d82bbf3b0a68"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\alert-dialog.tsx": {
+    "mtime": 1780689522.621643,
+    "ast_hash": "5a7536c9ca00df4fe4d1ccf7dccc2350",
+    "semantic_hash": "5a7536c9ca00df4fe4d1ccf7dccc2350"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\badge.tsx": {
+    "mtime": 1782270538.7290936,
+    "ast_hash": "1c7c596f5f81a8ecfa43cdc99b8c5c9d",
+    "semantic_hash": "1c7c596f5f81a8ecfa43cdc99b8c5c9d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\button.tsx": {
+    "mtime": 1782270538.7310944,
+    "ast_hash": "6645f9acc20164a12c3664e96d7cb4a5",
+    "semantic_hash": "6645f9acc20164a12c3664e96d7cb4a5"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\card.tsx": {
+    "mtime": 1782270538.7330942,
+    "ast_hash": "b5da4a75b531ab717031b5980e39f7cb",
+    "semantic_hash": "b5da4a75b531ab717031b5980e39f7cb"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\checkbox.tsx": {
+    "mtime": 1780689522.6240091,
+    "ast_hash": "24d42a2cbf976e0fab3e7e1cfc09b167",
+    "semantic_hash": "24d42a2cbf976e0fab3e7e1cfc09b167"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\dialog.tsx": {
+    "mtime": 1780689522.6251113,
+    "ast_hash": "6e1a57251eb591fbcf5d874497625a10",
+    "semantic_hash": "6e1a57251eb591fbcf5d874497625a10"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\dropdown-menu.tsx": {
+    "mtime": 1780689522.6251113,
+    "ast_hash": "ba83c4f47829305db097acb600be11ef",
+    "semantic_hash": "ba83c4f47829305db097acb600be11ef"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\input.tsx": {
+    "mtime": 1782270538.734093,
+    "ast_hash": "95d9f79df33c729e1277408cc2868cc6",
+    "semantic_hash": "95d9f79df33c729e1277408cc2868cc6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\label.tsx": {
+    "mtime": 1780689522.6271238,
+    "ast_hash": "e525cbc065bc51c9b85ac0ad849bab38",
+    "semantic_hash": "e525cbc065bc51c9b85ac0ad849bab38"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\markdown.tsx": {
+    "mtime": 1782310202.7307308,
+    "ast_hash": "e37a09dded17905976e318c5dd191407",
+    "semantic_hash": "e37a09dded17905976e318c5dd191407"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\popover.tsx": {
+    "mtime": 1782008563.058725,
+    "ast_hash": "7dec3bc47ac0caecbcaa6029a9858645",
+    "semantic_hash": "7dec3bc47ac0caecbcaa6029a9858645"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\progress.tsx": {
+    "mtime": 1780689522.6281228,
+    "ast_hash": "034ce34333be6cb1ed41be758043da01",
+    "semantic_hash": "034ce34333be6cb1ed41be758043da01"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\radio-group.tsx": {
+    "mtime": 1780689522.6281228,
+    "ast_hash": "39a8efc1cb10dd9778e42bcf36b152f9",
+    "semantic_hash": "39a8efc1cb10dd9778e42bcf36b152f9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\resizable.tsx": {
+    "mtime": 1780689522.6281228,
+    "ast_hash": "2148f174f9a6a2c83a5c25ca74ff7832",
+    "semantic_hash": "2148f174f9a6a2c83a5c25ca74ff7832"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\segmented-toggle.tsx": {
+    "mtime": 1782008563.0597847,
+    "ast_hash": "a7a2e828171f501c03f142675fd64dfa",
+    "semantic_hash": "a7a2e828171f501c03f142675fd64dfa"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\select.tsx": {
+    "mtime": 1782270538.7356,
+    "ast_hash": "e4b45b274c5938d57cd5a5017719528d",
+    "semantic_hash": "e4b45b274c5938d57cd5a5017719528d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\sheet.tsx": {
+    "mtime": 1780689522.6306458,
+    "ast_hash": "1ab3b688ff8e423cc3957c2520895bc0",
+    "semantic_hash": "1ab3b688ff8e423cc3957c2520895bc0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\slider.tsx": {
+    "mtime": 1780689522.631635,
+    "ast_hash": "8071192a3b14f5fc759016849d60b412",
+    "semantic_hash": "8071192a3b14f5fc759016849d60b412"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\switch.tsx": {
+    "mtime": 1782270538.7376075,
+    "ast_hash": "4b8914915b4dd44bb55828a55b08bdfa",
+    "semantic_hash": "4b8914915b4dd44bb55828a55b08bdfa"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\tabs.tsx": {
+    "mtime": 1780689522.6326346,
+    "ast_hash": "b3197c5bd9fa434384f89ad08640631a",
+    "semantic_hash": "b3197c5bd9fa434384f89ad08640631a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\textarea.tsx": {
+    "mtime": 1782270538.7386103,
+    "ast_hash": "d575b7a652d1387b4a7fac4b715636e7",
+    "semantic_hash": "d575b7a652d1387b4a7fac4b715636e7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\toaster.tsx": {
+    "mtime": 1782008563.063784,
+    "ast_hash": "3b486794ffe34d55c25621de4681ecc8",
+    "semantic_hash": "3b486794ffe34d55c25621de4681ecc8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\components\\ui\\tooltip.tsx": {
+    "mtime": 1782270538.7396078,
+    "ast_hash": "649845a614abae2e1408f2421a9f360c",
+    "semantic_hash": "649845a614abae2e1408f2421a9f360c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\constants\\activity-log.ts": {
+    "mtime": 1780689522.6366394,
+    "ast_hash": "a240c1942e466cba848a622311f37d1b",
+    "semantic_hash": "a240c1942e466cba848a622311f37d1b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\env.d.ts": {
+    "mtime": 1782017071.9851775,
+    "ast_hash": "199a3e152fd51174b4ca04980d165f0b",
+    "semantic_hash": "199a3e152fd51174b4ca04980d165f0b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\AssistantPanel.tsx": {
+    "mtime": 1782270538.7416089,
+    "ast_hash": "aaf7a63a073ee30b77c90765aa68140b",
+    "semantic_hash": "aaf7a63a073ee30b77c90765aa68140b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\BulkActionsBar.tsx": {
+    "mtime": 1782008563.0687845,
+    "ast_hash": "9b2788c963dd612276b002e2a1f7e334",
+    "semantic_hash": "9b2788c963dd612276b002e2a1f7e334"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\BulkProgressModal.tsx": {
+    "mtime": 1782008563.0709436,
+    "ast_hash": "6239af7937abf70c02fd575b907402b7",
+    "semantic_hash": "6239af7937abf70c02fd575b907402b7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\BulkResultSummary.tsx": {
+    "mtime": 1782008563.07393,
+    "ast_hash": "ccfb92a69b67d2a9066de67654624bb8",
+    "semantic_hash": "ccfb92a69b67d2a9066de67654624bb8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\CaptureLabelChips.tsx": {
+    "mtime": 1782010503.1167216,
+    "ast_hash": "16cba514bd79a4bd02eb963599d76ea3",
+    "semantic_hash": "16cba514bd79a4bd02eb963599d76ea3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\CapturePeoplePills.tsx": {
+    "mtime": 1782010552.4930263,
+    "ast_hash": "7f1b15e465ab01dde2401dce5ed07c17",
+    "semantic_hash": "7f1b15e465ab01dde2401dce5ed07c17"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\DeviceDisconnectBanner.tsx": {
+    "mtime": 1782008563.0759435,
+    "ast_hash": "de54b5ef5500f8caf50e3af31c1b0934",
+    "semantic_hash": "de54b5ef5500f8caf50e3af31c1b0934"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\EmptyState.tsx": {
+    "mtime": 1782008563.0769312,
+    "ast_hash": "63dfc23c8ca0b6fea6ceb2d38e58079b",
+    "semantic_hash": "63dfc23c8ca0b6fea6ceb2d38e58079b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\LibraryFilters.tsx": {
+    "mtime": 1782270538.7436142,
+    "ast_hash": "4f006a1cf1db90c3b906f89c9d8b1ddc",
+    "semantic_hash": "4f006a1cf1db90c3b906f89c9d8b1ddc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\LibraryHeader.tsx": {
+    "mtime": 1782008563.082149,
+    "ast_hash": "b45c476c59b97f949d5412c35f34399d",
+    "semantic_hash": "b45c476c59b97f949d5412c35f34399d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\LiveRegion.tsx": {
+    "mtime": 1780689522.64615,
+    "ast_hash": "8e39c0dc4330c3d936b7642965330a04",
+    "semantic_hash": "8e39c0dc4330c3d936b7642965330a04"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\SourceCard.tsx": {
+    "mtime": 1782310202.7328956,
+    "ast_hash": "32aaf43d7d5372da8b9d84857c4db362",
+    "semantic_hash": "32aaf43d7d5372da8b9d84857c4db362"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\SourceReader.tsx": {
+    "mtime": 1782310202.735007,
+    "ast_hash": "479fd6b1bfcc73a5b8bda57befce53bd",
+    "semantic_hash": "479fd6b1bfcc73a5b8bda57befce53bd"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\SourceRow.tsx": {
+    "mtime": 1782270538.74613,
+    "ast_hash": "facd39ea6d1adc607f3111893e6d203e",
+    "semantic_hash": "facd39ea6d1adc607f3111893e6d203e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\SpeakerTargetPicker.tsx": {
+    "mtime": 1782266213.0841255,
+    "ast_hash": "a4d01088251342aae324e67dfaf2351a",
+    "semantic_hash": "a4d01088251342aae324e67dfaf2351a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\SpeakersPanel.tsx": {
+    "mtime": 1782266213.0863197,
+    "ast_hash": "d93d4550e8eb4b55be8414fc610e95d4",
+    "semantic_hash": "d93d4550e8eb4b55be8414fc610e95d4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\StatusIcon.tsx": {
+    "mtime": 1782008563.0932574,
+    "ast_hash": "ac45f910ae2fe4641562ad9dbd10b219",
+    "semantic_hash": "ac45f910ae2fe4641562ad9dbd10b219"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\TemplateChip.tsx": {
+    "mtime": 1782152748.9531038,
+    "ast_hash": "0739f6c7dfa6d1967f14dca128322135",
+    "semantic_hash": "0739f6c7dfa6d1967f14dca128322135"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\TimeAnchor.tsx": {
+    "mtime": 1782008563.0952597,
+    "ast_hash": "76241ec88ecb5af252e858627264b973",
+    "semantic_hash": "76241ec88ecb5af252e858627264b973"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\TranscriptViewer.tsx": {
+    "mtime": 1782266213.08893,
+    "ast_hash": "d8f0fdfc3c1ca275c047755543e689de",
+    "semantic_hash": "d8f0fdfc3c1ca275c047755543e689de"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\TranscriptionStatusBadge.tsx": {
+    "mtime": 1782008563.0997753,
+    "ast_hash": "c92922ec83a12167263bb026881b0b38",
+    "semantic_hash": "c92922ec83a12167263bb026881b0b38"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\TriPaneLayout.tsx": {
+    "mtime": 1782072828.4564202,
+    "ast_hash": "1e146989277b6289fe457a8046bf1018",
+    "semantic_hash": "1e146989277b6289fe457a8046bf1018"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\CaptureLabelChips.test.tsx": {
+    "mtime": 1782010486.775913,
+    "ast_hash": "8879b2133014986065dec0ec59e4bfff",
+    "semantic_hash": "8879b2133014986065dec0ec59e4bfff"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\CapturePeoplePills.test.tsx": {
+    "mtime": 1782010530.2148461,
+    "ast_hash": "eb76142c0d8a773ab95f2168fcd0b9a3",
+    "semantic_hash": "eb76142c0d8a773ab95f2168fcd0b9a3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\LibraryFilters.test.tsx": {
+    "mtime": 1782013678.908273,
+    "ast_hash": "f4f582dee1fdb51b4b78535ccb8ba278",
+    "semantic_hash": "f4f582dee1fdb51b4b78535ccb8ba278"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\LibraryHeader.failurechip.test.tsx": {
+    "mtime": 1781298341.0735765,
+    "ast_hash": "eef802a29eb591a9d9bdcb5b683a8bac",
+    "semantic_hash": "eef802a29eb591a9d9bdcb5b683a8bac"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.metadata.test.tsx": {
+    "mtime": 1782013678.9107916,
+    "ast_hash": "9b133c187ab0b6a3e332c2d4dc6ec77c",
+    "semantic_hash": "9b133c187ab0b6a3e332c2d4dc6ec77c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.reassign.test.tsx": {
+    "mtime": 1782266213.0899935,
+    "ast_hash": "1bd22eee0ba4f9afdb788f4bc60ea8b0",
+    "semantic_hash": "1bd22eee0ba4f9afdb788f4bc60ea8b0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.resummarizeWithTemplate.test.tsx": {
+    "mtime": 1782152748.9551616,
+    "ast_hash": "d6908a1f20b04fcc7ad11b66ad19b119",
+    "semantic_hash": "d6908a1f20b04fcc7ad11b66ad19b119"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.retranscribe.test.tsx": {
+    "mtime": 1781784457.1391275,
+    "ast_hash": "24a6994294ec105a007b80ed659dfcf8",
+    "semantic_hash": "24a6994294ec105a007b80ed659dfcf8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.speakers.test.tsx": {
+    "mtime": 1782014087.1430888,
+    "ast_hash": "25eb9126306c203738102cb3d95cfff3",
+    "semantic_hash": "25eb9126306c203738102cb3d95cfff3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.staleness.test.tsx": {
+    "mtime": 1781784457.1421292,
+    "ast_hash": "ed7d91878e86f782146d8b76dd26744b",
+    "semantic_hash": "ed7d91878e86f782146d8b76dd26744b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.summaryTop.test.tsx": {
+    "mtime": 1782310202.7366576,
+    "ast_hash": "c23be78a2772768861aa8866be1d9ee8",
+    "semantic_hash": "c23be78a2772768861aa8866be1d9ee8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReader.template.test.tsx": {
+    "mtime": 1782152748.9563992,
+    "ast_hash": "8318c330b5a9314ffa1ed7e376dd640e",
+    "semantic_hash": "8318c330b5a9314ffa1ed7e376dd640e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceReaderExport.test.tsx": {
+    "mtime": 1782174463.4518287,
+    "ast_hash": "0f86698ed53641b9c045d5df8eeee587",
+    "semantic_hash": "0f86698ed53641b9c045d5df8eeee587"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SourceRow.selection.test.tsx": {
+    "mtime": 1782270538.7481382,
+    "ast_hash": "fd1d465ec38748ea552832d317a951a3",
+    "semantic_hash": "fd1d465ec38748ea552832d317a951a3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SpeakerTargetPicker.test.tsx": {
+    "mtime": 1782266213.0916083,
+    "ast_hash": "4d7df76ef00bc38260e6a9d445220e3d",
+    "semantic_hash": "4d7df76ef00bc38260e6a9d445220e3d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SpeakersPanel.collapse.test.tsx": {
+    "mtime": 1782217556.933688,
+    "ast_hash": "6f298c72892b214d29db2b961dd48c0b",
+    "semantic_hash": "6f298c72892b214d29db2b961dd48c0b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SpeakersPanel.names.test.tsx": {
+    "mtime": 1782217556.9346857,
+    "ast_hash": "cbdb3e4c025087ea303d4db496e9a66a",
+    "semantic_hash": "cbdb3e4c025087ea303d4db496e9a66a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\SpeakersPanel.test.tsx": {
+    "mtime": 1782266213.0932052,
+    "ast_hash": "3171ee7a10fa19f7d2930a4940ae15f9",
+    "semantic_hash": "3171ee7a10fa19f7d2930a4940ae15f9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\TemplateChip.test.tsx": {
+    "mtime": 1782152748.9584086,
+    "ast_hash": "ecea86723adf5545852d4cb60bce0784",
+    "semantic_hash": "ecea86723adf5545852d4cb60bce0784"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\TranscriptViewer.perSpeakerCollapse.test.tsx": {
+    "mtime": 1782217556.9429793,
+    "ast_hash": "da91c1496a5332c2986b09acfa01b558",
+    "semantic_hash": "da91c1496a5332c2986b09acfa01b558"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\TranscriptViewer.reassign.test.tsx": {
+    "mtime": 1782266213.094318,
+    "ast_hash": "11f640628f7c0adaee58fac20ecead1f",
+    "semantic_hash": "11f640628f7c0adaee58fac20ecead1f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\TranscriptViewer.returnToTop.test.tsx": {
+    "mtime": 1782217556.9462855,
+    "ast_hash": "9bde9e10d9e625c852bdc1efad87a2ee",
+    "semantic_hash": "9bde9e10d9e625c852bdc1efad87a2ee"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\TranscriptViewer.test.tsx": {
+    "mtime": 1782217556.947796,
+    "ast_hash": "c3a7c73ea4a91f7fb89d8ada8325983f",
+    "semantic_hash": "c3a7c73ea4a91f7fb89d8ada8325983f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\TriPaneLayout.test.tsx": {
+    "mtime": 1782019222.5729096,
+    "ast_hash": "0f9ea13cdfffceb15cfd784c578f31c6",
+    "semantic_hash": "0f9ea13cdfffceb15cfd784c578f31c6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\speakersPanelTestUtils.ts": {
+    "mtime": 1782217556.9508135,
+    "ast_hash": "d2e66fb239c8409e5ad0ff85350efa97",
+    "semantic_hash": "d2e66fb239c8409e5ad0ff85350efa97"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\__tests__\\transcriptViewerTestUtils.ts": {
+    "mtime": 1782217556.9518142,
+    "ast_hash": "23b3f38d233b2d6c094a48fe7af5f054",
+    "semantic_hash": "23b3f38d233b2d6c094a48fe7af5f054"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\components\\index.ts": {
+    "mtime": 1782013997.738989,
+    "ast_hash": "5db9c298cfcf4dce2274a3d191874dd7",
+    "semantic_hash": "5db9c298cfcf4dce2274a3d191874dd7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\hooks\\__tests__\\useLibraryFilterManager.test.ts": {
+    "mtime": 1781134522.3729014,
+    "ast_hash": "f608565b232a9af29acc61fba2be04d4",
+    "semantic_hash": "f608565b232a9af29acc61fba2be04d4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\hooks\\__tests__\\useTransitionFilters.test.ts": {
+    "mtime": 1781134522.3745224,
+    "ast_hash": "7706897263f79584adbb08033eec0071",
+    "semantic_hash": "7706897263f79584adbb08033eec0071"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\hooks\\index.ts": {
+    "mtime": 1780689522.6596043,
+    "ast_hash": "afa33629c6dbb0c4a118243f5f8f265b",
+    "semantic_hash": "afa33629c6dbb0c4a118243f5f8f265b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\hooks\\useKeyboardNavigation.ts": {
+    "mtime": 1780689522.6596043,
+    "ast_hash": "aceaeacd0d8d65c2e307c13f461c0fd4",
+    "semantic_hash": "aceaeacd0d8d65c2e307c13f461c0fd4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\hooks\\useLibraryFilterManager.ts": {
+    "mtime": 1780689522.6606135,
+    "ast_hash": "0c362d4db9185cbfece027711494b06f",
+    "semantic_hash": "0c362d4db9185cbfece027711494b06f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\hooks\\useSourceSelection.ts": {
+    "mtime": 1782017072.0009074,
+    "ast_hash": "99693b3c2f9e8c0227534e4973436073",
+    "semantic_hash": "99693b3c2f9e8c0227534e4973436073"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\hooks\\useTransitionFilters.ts": {
+    "mtime": 1780689522.6626122,
+    "ast_hash": "9c481296f9118ccd0c31923a57be2d4f",
+    "semantic_hash": "9c481296f9118ccd0c31923a57be2d4f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\types\\captureMeta.ts": {
+    "mtime": 1782010351.8864794,
+    "ast_hash": "8f167a5a70c4e5d1074d17ba0b20176d",
+    "semantic_hash": "8f167a5a70c4e5d1074d17ba0b20176d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\types\\source.ts": {
+    "mtime": 1780689522.6636112,
+    "ast_hash": "8b5e57748235f7cb832d4c410f872318",
+    "semantic_hash": "8b5e57748235f7cb832d4c410f872318"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\types\\turns.drift.test-d.ts": {
+    "mtime": 1781784457.1476488,
+    "ast_hash": "8475652eb3c1df32b915935fba7e9c5f",
+    "semantic_hash": "8475652eb3c1df32b915935fba7e9c5f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\types\\turns.ts": {
+    "mtime": 1781784457.1500223,
+    "ast_hash": "eb52530894587f131f2fb104e2deabd5",
+    "semantic_hash": "eb52530894587f131f2fb104e2deabd5"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\__tests__\\buildSearchCorpus.test.ts": {
+    "mtime": 1780689522.665115,
+    "ast_hash": "aa3555cd7eb8a27e8d4b6ea3084b7422",
+    "semantic_hash": "aa3555cd7eb8a27e8d4b6ea3084b7422"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\__tests__\\deriveCaptureLabels.test.ts": {
+    "mtime": 1782013678.9128013,
+    "ast_hash": "036fea346e635eea0f0c13f3abd03aa7",
+    "semantic_hash": "036fea346e635eea0f0c13f3abd03aa7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\__tests__\\deriveCapturePeople.test.ts": {
+    "mtime": 1782010424.020728,
+    "ast_hash": "e9e9a6bcfb75975eaf479f96a5f084bb",
+    "semantic_hash": "e9e9a6bcfb75975eaf479f96a5f084bb"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\__tests__\\getDisplayTitle.test.ts": {
+    "mtime": 1780689522.666121,
+    "ast_hash": "d34cc27d5cb23f0473a841f33cba5fff",
+    "semantic_hash": "d34cc27d5cb23f0473a841f33cba5fff"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\__tests__\\highlightText.test.tsx": {
+    "mtime": 1780689522.667125,
+    "ast_hash": "bb504b614637c7f36a6ab947d2997a3c",
+    "semantic_hash": "bb504b614637c7f36a6ab947d2997a3c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\__tests__\\labelTaxonomy.test.ts": {
+    "mtime": 1782013678.913801,
+    "ast_hash": "6409244e203f32e06012315448921f89",
+    "semantic_hash": "6409244e203f32e06012315448921f89"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\adapters.ts": {
+    "mtime": 1780689522.667125,
+    "ast_hash": "165ca9c777f9aa673e8197b2bc8103a3",
+    "semantic_hash": "165ca9c777f9aa673e8197b2bc8103a3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\buildSearchCorpus.ts": {
+    "mtime": 1780689522.6681228,
+    "ast_hash": "16b4165ce7d149ca09ca1cf600c43967",
+    "semantic_hash": "16b4165ce7d149ca09ca1cf600c43967"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\deriveCaptureLabels.ts": {
+    "mtime": 1782013678.916801,
+    "ast_hash": "aac9632d0b17fd2b68b415b24785a2aa",
+    "semantic_hash": "aac9632d0b17fd2b68b415b24785a2aa"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\deriveCapturePeople.ts": {
+    "mtime": 1782010441.4804735,
+    "ast_hash": "b7b101b93954087417c9ae1036bcf28a",
+    "semantic_hash": "b7b101b93954087417c9ae1036bcf28a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\errorHandling.ts": {
+    "mtime": 1780689522.6681228,
+    "ast_hash": "d3351acb945c9cecff14056d8340fb98",
+    "semantic_hash": "d3351acb945c9cecff14056d8340fb98"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\formatTimestamp.ts": {
+    "mtime": 1780689522.6681228,
+    "ast_hash": "974a18c7fc6c44b9bfe0cd1e1d1ba473",
+    "semantic_hash": "974a18c7fc6c44b9bfe0cd1e1d1ba473"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\getDisplayTitle.ts": {
+    "mtime": 1780689522.6696281,
+    "ast_hash": "bca6633c93503e4c13d6508bb1bc3acc",
+    "semantic_hash": "bca6633c93503e4c13d6508bb1bc3acc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\highlightText.tsx": {
+    "mtime": 1782008563.1087818,
+    "ast_hash": "b045c61f25b827cdd157139233917643",
+    "semantic_hash": "b045c61f25b827cdd157139233917643"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\index.ts": {
+    "mtime": 1782013678.918805,
+    "ast_hash": "abf77dba255360e70902bf346deecea6",
+    "semantic_hash": "abf77dba255360e70902bf346deecea6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\labelPalette.ts": {
+    "mtime": 1782013678.9198475,
+    "ast_hash": "a12a6f0b42006ba20cc2147defee8bfe",
+    "semantic_hash": "a12a6f0b42006ba20cc2147defee8bfe"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\utils\\labelTaxonomy.ts": {
+    "mtime": 1782013678.920355,
+    "ast_hash": "857b1959d418f41af8819dbe77a6d23b",
+    "semantic_hash": "857b1959d418f41af8819dbe77a6d23b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\__tests__\\useDeviceSubscriptions.test.ts": {
+    "mtime": 1781721243.6087058,
+    "ast_hash": "c8572fed1332bc858ec3aa6da841d354",
+    "semantic_hash": "c8572fed1332bc858ec3aa6da841d354"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\__tests__\\useDownloadOrchestrator.test.ts": {
+    "mtime": 1781708906.473975,
+    "ast_hash": "377253b7dbcd25e6ea9aa36fabb9b775",
+    "semantic_hash": "377253b7dbcd25e6ea9aa36fabb9b775"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\__tests__\\useOperations.test.ts": {
+    "mtime": 1781811286.9754994,
+    "ast_hash": "e7cd6d736b4d86fb07a7902752a98108",
+    "semantic_hash": "e7cd6d736b4d86fb07a7902752a98108"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\__tests__\\useToday.test.ts": {
+    "mtime": 1780689522.677257,
+    "ast_hash": "e2131308ea75772526f3d45a49f5ac4e",
+    "semantic_hash": "e2131308ea75772526f3d45a49f5ac4e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\__tests__\\useTranscriptionSync.test.ts": {
+    "mtime": 1781298341.0775728,
+    "ast_hash": "1a526483badae34802840b685b635651",
+    "semantic_hash": "1a526483badae34802840b685b635651"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\__tests__\\useUnifiedRecordings.test.ts": {
+    "mtime": 1781134522.3771958,
+    "ast_hash": "ca387a8c73708dc2648d842374881c3f",
+    "semantic_hash": "ca387a8c73708dc2648d842374881c3f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useApplyTheme.ts": {
+    "mtime": 1782008563.1101935,
+    "ast_hash": "70371a675aeb889cd70e3543f9eafefc",
+    "semantic_hash": "70371a675aeb889cd70e3543f9eafefc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useAudioPlayback.ts": {
+    "mtime": 1782053266.3740828,
+    "ast_hash": "8f61e3e0e0939d7719f38492d995f3e7",
+    "semantic_hash": "8f61e3e0e0939d7719f38492d995f3e7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useBulkOperation.ts": {
+    "mtime": 1780689522.6797538,
+    "ast_hash": "2961a6b297e3395ec046c0a2a8b074e4",
+    "semantic_hash": "2961a6b297e3395ec046c0a2a8b074e4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useDeviceSubscriptions.ts": {
+    "mtime": 1781721243.6118357,
+    "ast_hash": "179f5ebec6bc47212dcb475a8796836d",
+    "semantic_hash": "179f5ebec6bc47212dcb475a8796836d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useDownloadOrchestrator.ts": {
+    "mtime": 1781708906.4759939,
+    "ast_hash": "91bd182fee2d171bd3fede69d88f188d",
+    "semantic_hash": "91bd182fee2d171bd3fede69d88f188d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useMediaQuery.ts": {
+    "mtime": 1780689522.6817603,
+    "ast_hash": "6aee2e3ea3f7e53a9d2817cbf5adcd2d",
+    "semantic_hash": "6aee2e3ea3f7e53a9d2817cbf5adcd2d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useOperations.ts": {
+    "mtime": 1781811286.9754994,
+    "ast_hash": "0a0800ccbc94e6c0093428e3caa5a8de",
+    "semantic_hash": "0a0800ccbc94e6c0093428e3caa5a8de"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useOptimisticMutation.ts": {
+    "mtime": 1781134522.380398,
+    "ast_hash": "7e6def3983f657df1214f32431e32c6f",
+    "semantic_hash": "7e6def3983f657df1214f32431e32c6f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useToday.ts": {
+    "mtime": 1780689522.6847618,
+    "ast_hash": "80be49d7dd4f3f4dc37fb113d79a6472",
+    "semantic_hash": "80be49d7dd4f3f4dc37fb113d79a6472"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useTranscriptionSync.ts": {
+    "mtime": 1781298341.079573,
+    "ast_hash": "7cb8479bdddf81d286103bc3ced52faf",
+    "semantic_hash": "7cb8479bdddf81d286103bc3ced52faf"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\hooks\\useUnifiedRecordings.ts": {
+    "mtime": 1780689522.6867633,
+    "ast_hash": "2433f49d4ff799a9a1621c5c0dbab800",
+    "semantic_hash": "2433f49d4ff799a9a1621c5c0dbab800"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\lib\\__tests__\\calendar-utils.test.ts": {
+    "mtime": 1780689522.691274,
+    "ast_hash": "5b9be40147f18955a7619a5dbe8fd7c8",
+    "semantic_hash": "5b9be40147f18955a7619a5dbe8fd7c8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\lib\\__tests__\\utils.test.ts": {
+    "mtime": 1780689522.6932778,
+    "ast_hash": "f678f6afcc06e8cf62f1ffda16a7b965",
+    "semantic_hash": "f678f6afcc06e8cf62f1ffda16a7b965"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\lib\\calendar-utils.ts": {
+    "mtime": 1780689522.6932778,
+    "ast_hash": "a14c382a2d7db1b0bdef4bb1b9020578",
+    "semantic_hash": "a14c382a2d7db1b0bdef4bb1b9020578"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\lib\\ipc-client.ts": {
+    "mtime": 1780689522.6952777,
+    "ast_hash": "e1dabf6d330e8d74094ee95aa28b74a6",
+    "semantic_hash": "e1dabf6d330e8d74094ee95aa28b74a6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\lib\\lazyWithRetry.ts": {
+    "mtime": 1780689522.6962738,
+    "ast_hash": "2b3e78cc36c3357ab03d32e7a4ead6f8",
+    "semantic_hash": "2b3e78cc36c3357ab03d32e7a4ead6f8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\lib\\utils.ts": {
+    "mtime": 1780689522.6972752,
+    "ast_hash": "5551502fdfd410db89db433e93f09210",
+    "semantic_hash": "5551502fdfd410db89db433e93f09210"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\main.tsx": {
+    "mtime": 1782008563.1141934,
+    "ast_hash": "4061a6fddd7520a42a0a6114c7fd39a7",
+    "semantic_hash": "4061a6fddd7520a42a0a6114c7fd39a7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Actionables.tsx": {
+    "mtime": 1782310202.738867,
+    "ast_hash": "3a1713609cd40023fdc8305f86785e7f",
+    "semantic_hash": "3a1713609cd40023fdc8305f86785e7f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Calendar.tsx": {
+    "mtime": 1782008563.118847,
+    "ast_hash": "e5d679f9d16a70467555cfda67990e9a",
+    "semantic_hash": "e5d679f9d16a70467555cfda67990e9a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Chat.tsx": {
+    "mtime": 1782310202.744396,
+    "ast_hash": "31840b962e63ca1db03dee7333b14636",
+    "semantic_hash": "31840b962e63ca1db03dee7333b14636"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Device.tsx": {
+    "mtime": 1782008563.1238787,
+    "ast_hash": "23b235b2cbd4ee563a0d051e0b9e7124",
+    "semantic_hash": "23b235b2cbd4ee563a0d051e0b9e7124"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Explore.tsx": {
+    "mtime": 1782008563.1248517,
+    "ast_hash": "e07b5e31f389560b3993aebfb523f7c9",
+    "semantic_hash": "e07b5e31f389560b3993aebfb523f7c9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Home.tsx": {
+    "mtime": 1782008563.1268516,
+    "ast_hash": "f215ffee6f4346a0607be0c0f0ace004",
+    "semantic_hash": "f215ffee6f4346a0607be0c0f0ace004"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Library.tsx": {
+    "mtime": 1782072828.4596772,
+    "ast_hash": "f27042a428d8b326b925c20a5498aa18",
+    "semantic_hash": "f27042a428d8b326b925c20a5498aa18"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\MeetingDetail.tsx": {
+    "mtime": 1782310202.7478712,
+    "ast_hash": "b7c852e9b306a37a20958c02f010096f",
+    "semantic_hash": "b7c852e9b306a37a20958c02f010096f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\People.tsx": {
+    "mtime": 1782009692.752383,
+    "ast_hash": "cfea7f62335d1870373e892bab4c386f",
+    "semantic_hash": "cfea7f62335d1870373e892bab4c386f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\PersonDetail.tsx": {
+    "mtime": 1782009818.1679142,
+    "ast_hash": "79c55afe78a5b7fbd320a56be66b4eb0",
+    "semantic_hash": "79c55afe78a5b7fbd320a56be66b4eb0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Projects.tsx": {
+    "mtime": 1782008563.1396756,
+    "ast_hash": "da740f5735e799f209519fda7c78f5ab",
+    "semantic_hash": "da740f5735e799f209519fda7c78f5ab"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\Settings.tsx": {
+    "mtime": 1782152748.9604094,
+    "ast_hash": "1b45c6f1d72d670f416a770cb981af39",
+    "semantic_hash": "1b45c6f1d72d670f416a770cb981af39"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Actionables.test.tsx": {
+    "mtime": 1782008563.1460419,
+    "ast_hash": "c81fb26014aee11e1b3c443a429981c7",
+    "semantic_hash": "c81fb26014aee11e1b3c443a429981c7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Chat.test.tsx": {
+    "mtime": 1782008563.149562,
+    "ast_hash": "71ce1c65c4b0bc5b493c2e1532bf595a",
+    "semantic_hash": "71ce1c65c4b0bc5b493c2e1532bf595a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Device.test.tsx": {
+    "mtime": 1781611981.2419612,
+    "ast_hash": "b2dee6239f04b1b29e4e7cddcb44dfa2",
+    "semantic_hash": "b2dee6239f04b1b29e4e7cddcb44dfa2"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Explore.test.tsx": {
+    "mtime": 1782008563.152749,
+    "ast_hash": "330d2fb38c594247ecdeb345e91a546b",
+    "semantic_hash": "330d2fb38c594247ecdeb345e91a546b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Library.test.tsx": {
+    "mtime": 1782019256.1969697,
+    "ast_hash": "fc4bfca38cc448413a9717deb914eb10",
+    "semantic_hash": "fc4bfca38cc448413a9717deb914eb10"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\MeetingDetail.test.tsx": {
+    "mtime": 1780689522.7144191,
+    "ast_hash": "5b8003634de44d26564bf58412bce9d6",
+    "semantic_hash": "5b8003634de44d26564bf58412bce9d6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\People.test.tsx": {
+    "mtime": 1782009649.002132,
+    "ast_hash": "8b9deb200e9baeac4f7184e25590ba61",
+    "semantic_hash": "8b9deb200e9baeac4f7184e25590ba61"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\PersonDetail.test.tsx": {
+    "mtime": 1782009789.0325327,
+    "ast_hash": "9f6ee492e78900cc423ebcc679ad380f",
+    "semantic_hash": "9f6ee492e78900cc423ebcc679ad380f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Projects.test.tsx": {
+    "mtime": 1782008563.1597033,
+    "ast_hash": "bbc4901af70a503744b58b99535fda1d",
+    "semantic_hash": "bbc4901af70a503744b58b99535fda1d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Settings.disclosure.test.tsx": {
+    "mtime": 1782152748.9614096,
+    "ast_hash": "68e4e1bfd9b538ffd6a5bbca40273af5",
+    "semantic_hash": "68e4e1bfd9b538ffd6a5bbca40273af5"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\pages\\__tests__\\Settings.test.tsx": {
+    "mtime": 1782152748.965928,
+    "ast_hash": "e5fbb7cb75fea1b37d159e84c047a3e3",
+    "semantic_hash": "e5fbb7cb75fea1b37d159e84c047a3e3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\__tests__\\growable-buffer.test.ts": {
+    "mtime": 1781134522.3924978,
+    "ast_hash": "cd3b672491119f8252afdcaa397c7abe",
+    "semantic_hash": "cd3b672491119f8252afdcaa397c7abe"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\__tests__\\hidock-device-autoconnect.test.ts": {
+    "mtime": 1781134522.393497,
+    "ast_hash": "2ea6904ab7d06e223fb239fc307a5d1b",
+    "semantic_hash": "2ea6904ab7d06e223fb239fc307a5d1b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\__tests__\\hidock-device.test.ts": {
+    "mtime": 1781134522.3955295,
+    "ast_hash": "b6cfb599e61e81863f41b35218d2629b",
+    "semantic_hash": "b6cfb599e61e81863f41b35218d2629b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\__tests__\\jensen-connect-filter.test.ts": {
+    "mtime": 1780689522.724582,
+    "ast_hash": "5585d49ecd7252dd7f43cc634c72540b",
+    "semantic_hash": "5585d49ecd7252dd7f43cc634c72540b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\__tests__\\jensen.test.ts": {
+    "mtime": 1780689522.7255838,
+    "ast_hash": "a1174624a07471a6d9b8bc7253b2661a",
+    "semantic_hash": "a1174624a07471a6d9b8bc7253b2661a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\growable-buffer.ts": {
+    "mtime": 1780689522.7267969,
+    "ast_hash": "79a71154a18fa365cbaac91c07ac3b2c",
+    "semantic_hash": "79a71154a18fa365cbaac91c07ac3b2c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\hidock-device.ts": {
+    "mtime": 1781134522.3964975,
+    "ast_hash": "97eb7389aac3b5ed2736d82bda5e6716",
+    "semantic_hash": "97eb7389aac3b5ed2736d82bda5e6716"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\jensen.ts": {
+    "mtime": 1780689522.7298129,
+    "ast_hash": "143f97ae24791d53c24b7375bdc7f9a3",
+    "semantic_hash": "143f97ae24791d53c24b7375bdc7f9a3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\services\\qa-monitor.ts": {
+    "mtime": 1780689522.7298129,
+    "ast_hash": "dd04598a64d88f55da1aef98b9aa7716",
+    "semantic_hash": "dd04598a64d88f55da1aef98b9aa7716"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\__tests__\\useAppStore.test.ts": {
+    "mtime": 1781134522.397497,
+    "ast_hash": "99d9b29b90f3f8f6b13ac49598c96380",
+    "semantic_hash": "99d9b29b90f3f8f6b13ac49598c96380"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\__tests__\\useContactsStore.test.ts": {
+    "mtime": 1780689522.7333093,
+    "ast_hash": "f524ac5ab6fd3240a119ecda49b9183a",
+    "semantic_hash": "f524ac5ab6fd3240a119ecda49b9183a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\__tests__\\useLibraryStore.test.ts": {
+    "mtime": 1782072828.4616878,
+    "ast_hash": "67d0d2bb8f0e769673db0d5abcd4eb4e",
+    "semantic_hash": "67d0d2bb8f0e769673db0d5abcd4eb4e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\__tests__\\useProjectsStore.test.ts": {
+    "mtime": 1780689522.7363045,
+    "ast_hash": "3236f8ad009d114df23767624263d167",
+    "semantic_hash": "3236f8ad009d114df23767624263d167"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\__tests__\\useTranscriptionStore.test.ts": {
+    "mtime": 1780689522.7373643,
+    "ast_hash": "f0531b2a1b305a88e2352aa5a0433386",
+    "semantic_hash": "f0531b2a1b305a88e2352aa5a0433386"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\__tests__\\useUIStore-singleton.test.ts": {
+    "mtime": 1780689522.7383726,
+    "ast_hash": "8c6ead140f0936518165b4894548fd03",
+    "semantic_hash": "8c6ead140f0936518165b4894548fd03"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\__tests__\\useUIStore.test.ts": {
+    "mtime": 1782008563.1618192,
+    "ast_hash": "65721249658b7a9b1254b58c0e9f846c",
+    "semantic_hash": "65721249658b7a9b1254b58c0e9f846c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\domain\\useConfigStore.ts": {
+    "mtime": 1780689522.739373,
+    "ast_hash": "5acd32f0b627cfc06ae3df72999d9e8e",
+    "semantic_hash": "5acd32f0b627cfc06ae3df72999d9e8e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\domain\\useContactsStore.ts": {
+    "mtime": 1781134522.3994963,
+    "ast_hash": "888446a8a95c25ec09743ecf16cc5422",
+    "semantic_hash": "888446a8a95c25ec09743ecf16cc5422"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\domain\\useProjectsStore.ts": {
+    "mtime": 1781134522.4020135,
+    "ast_hash": "cb6f55bc5999855c83be309c851a2c10",
+    "semantic_hash": "cb6f55bc5999855c83be309c851a2c10"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\features\\useTranscriptionStore.ts": {
+    "mtime": 1780689522.7428703,
+    "ast_hash": "07423b850962da55a09f21fa1247ce7e",
+    "semantic_hash": "07423b850962da55a09f21fa1247ce7e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\index.ts": {
+    "mtime": 1780689522.7438703,
+    "ast_hash": "c7b76f1cbc520ff439d1d1b100e5a409",
+    "semantic_hash": "c7b76f1cbc520ff439d1d1b100e5a409"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\ui\\useUIStore.ts": {
+    "mtime": 1782008563.1628673,
+    "ast_hash": "e5abac5ac6511d320cb1990f41746939",
+    "semantic_hash": "e5abac5ac6511d320cb1990f41746939"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\useAppStore.ts": {
+    "mtime": 1780689522.7448733,
+    "ast_hash": "6111b8e153a8dffeaed92f314911d37c",
+    "semantic_hash": "6111b8e153a8dffeaed92f314911d37c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\useLibraryStore.ts": {
+    "mtime": 1782072828.4654925,
+    "ast_hash": "a85449ac3234538279eb7b7062bb3f4d",
+    "semantic_hash": "a85449ac3234538279eb7b7062bb3f4d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\store\\useUIStore.ts": {
+    "mtime": 1780689522.7473931,
+    "ast_hash": "3b2690a01bf79bc8ba3c4fe928c08e07",
+    "semantic_hash": "3b2690a01bf79bc8ba3c4fe928c08e07"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\test\\setup.ts": {
+    "mtime": 1782008563.1708505,
+    "ast_hash": "ccceb4fb5d6d861bb45e4169ac28b214",
+    "semantic_hash": "ccceb4fb5d6d861bb45e4169ac28b214"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\types\\__tests__\\json-parsing.test.ts": {
+    "mtime": 1780689522.7504394,
+    "ast_hash": "54de9ecc02b284f27059e622f046edaf",
+    "semantic_hash": "54de9ecc02b284f27059e622f046edaf"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\types\\__tests__\\knowledge-types.test.ts": {
+    "mtime": 1780689522.7514155,
+    "ast_hash": "1112ebe9e631c43ab555f45f1b998c2e",
+    "semantic_hash": "1112ebe9e631c43ab555f45f1b998c2e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\types\\__tests__\\unified-recording.test.ts": {
+    "mtime": 1780689522.7524154,
+    "ast_hash": "7ea51f63a2fb2e1f805423f56c56f5c8",
+    "semantic_hash": "7ea51f63a2fb2e1f805423f56c56f5c8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\types\\index.ts": {
+    "mtime": 1782152748.9683206,
+    "ast_hash": "5d77e3ad0213f0c658891571bb899e6d",
+    "semantic_hash": "5d77e3ad0213f0c658891571bb899e6d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\types\\knowledge.ts": {
+    "mtime": 1782009349.0010202,
+    "ast_hash": "5f257b6787d75bce10bdaafc0e4c813b",
+    "semantic_hash": "5f257b6787d75bce10bdaafc0e4c813b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\types\\stores.ts": {
+    "mtime": 1782008563.1728508,
+    "ast_hash": "e35002636c4628f1963454b0adcdb692",
+    "semantic_hash": "e35002636c4628f1963454b0adcdb692"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\types\\unified-recording.ts": {
+    "mtime": 1780689522.7556417,
+    "ast_hash": "657fa541953725a80a5d7c99c5e76cc4",
+    "semantic_hash": "657fa541953725a80a5d7c99c5e76cc4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\__tests__\\audioUtils.test.ts": {
+    "mtime": 1780689522.758041,
+    "ast_hash": "a2a58b01169bf0ef261d4f08fdbabb4a",
+    "semantic_hash": "a2a58b01169bf0ef261d4f08fdbabb4a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\__tests__\\formatters.test.ts": {
+    "mtime": 1780689522.758041,
+    "ast_hash": "e0cb12a7abacc1b1032a02450040d6ee",
+    "semantic_hash": "e0cb12a7abacc1b1032a02450040d6ee"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\__tests__\\highlight.test.ts": {
+    "mtime": 1780689522.759547,
+    "ast_hash": "5ee47081e15e1bfc2e6d4c442d6a8049",
+    "semantic_hash": "5ee47081e15e1bfc2e6d4c442d6a8049"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\__tests__\\path-validation.test.ts": {
+    "mtime": 1780689522.7605555,
+    "ast_hash": "0083de986f16db0a3a0cde7ef2c48705",
+    "semantic_hash": "0083de986f16db0a3a0cde7ef2c48705"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\__tests__\\timeout.test.ts": {
+    "mtime": 1780689522.7605555,
+    "ast_hash": "2ce83167e74a5422dec88d6013fee0ed",
+    "semantic_hash": "2ce83167e74a5422dec88d6013fee0ed"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\audioUtils.ts": {
+    "mtime": 1782053266.3793924,
+    "ast_hash": "caad03a2dc65859b165d6b9292b46d9a",
+    "semantic_hash": "caad03a2dc65859b165d6b9292b46d9a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\autoSyncGuard.ts": {
+    "mtime": 1780689522.76256,
+    "ast_hash": "a85166cc1e301a53019fadd8a4bf171f",
+    "semantic_hash": "a85166cc1e301a53019fadd8a4bf171f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\formatters.ts": {
+    "mtime": 1780689522.763554,
+    "ast_hash": "ad6a88038aee5b2fc28ff98f2a421ef9",
+    "semantic_hash": "ad6a88038aee5b2fc28ff98f2a421ef9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\highlight.ts": {
+    "mtime": 1780689522.7645555,
+    "ast_hash": "847e88a484ede1835fcefb98912b6ae1",
+    "semantic_hash": "847e88a484ede1835fcefb98912b6ae1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\path-validation.ts": {
+    "mtime": 1781134522.4060142,
+    "ast_hash": "f8e36d3b9c44cff348458af0f653eeab",
+    "semantic_hash": "f8e36d3b9c44cff348458af0f653eeab"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\utils\\timeout.ts": {
+    "mtime": 1780689522.7655559,
+    "ast_hash": "834d2d98be9f97a99eea5ea50c4694f0",
+    "semantic_hash": "834d2d98be9f97a99eea5ea50c4694f0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\tailwind.config.js": {
+    "mtime": 1782008563.1748505,
+    "ast_hash": "5eda53b4c5de30db69066281311bd4df",
+    "semantic_hash": "5eda53b4c5de30db69066281311bd4df"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\tsconfig.json": {
+    "mtime": 1780689522.7787957,
+    "ast_hash": "dc116a28fd1138547b2fee3ccd7993d8",
+    "semantic_hash": "dc116a28fd1138547b2fee3ccd7993d8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\tsconfig.node.json": {
+    "mtime": 1780689522.7797956,
+    "ast_hash": "88516bb9dae90515e574645e5e138594",
+    "semantic_hash": "88516bb9dae90515e574645e5e138594"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\tsconfig.web.json": {
+    "mtime": 1781134522.4080124,
+    "ast_hash": "44707bb9ad8f54e1cd3fd33cb3fbab7e",
+    "semantic_hash": "44707bb9ad8f54e1cd3fd33cb3fbab7e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\vitest.config.ts": {
+    "mtime": 1780689522.7810318,
+    "ast_hash": "c64e4b8420dffcb1504d307024272cf4",
+    "semantic_hash": "c64e4b8420dffcb1504d307024272cf4"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\ACTIONABLES_BUGS_FIXED.md": {
+    "mtime": 1780689522.4115262,
+    "ast_hash": "4c81d5142acc182eb50039b51c658e33",
+    "semantic_hash": "4c81d5142acc182eb50039b51c658e33"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\ACTIONABLES_FIXES.md": {
+    "mtime": 1780689522.412526,
+    "ast_hash": "dfa84225967bc0e41ae81090f8023c69",
+    "semantic_hash": "dfa84225967bc0e41ae81090f8023c69"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\ACTIONABLES_FIX_SUMMARY.md": {
+    "mtime": 1780689522.412526,
+    "ast_hash": "fae066b7aac32cba2b3f0a18ab47f613",
+    "semantic_hash": "fae066b7aac32cba2b3f0a18ab47f613"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\ACTIVE_STORES_AFTER_CLEANUP.md": {
+    "mtime": 1780689522.4135299,
+    "ast_hash": "afde7fdeb36e6fef5ba6bace63f7cf7c",
+    "semantic_hash": "afde7fdeb36e6fef5ba6bace63f7cf7c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\ACTIVITY_LOG_AUDIT_REPORT.md": {
+    "mtime": 1780689522.4135299,
+    "ast_hash": "ed40547e4efce094340b47ce10eb224d",
+    "semantic_hash": "ed40547e4efce094340b47ce10eb224d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\ARCHITECTURE.md": {
+    "mtime": 1780689522.4145267,
+    "ast_hash": "e91de5bff9cc50259d676ad31b1857d7",
+    "semantic_hash": "e91de5bff9cc50259d676ad31b1857d7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\AUDIT_FILE_SCAN_SPEC.md": {
+    "mtime": 1780689522.415529,
+    "ast_hash": "07cb75b8b273608adf13ba2697b71e3e",
+    "semantic_hash": "07cb75b8b273608adf13ba2697b71e3e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\BUGFIXES_2026-02-27.md": {
+    "mtime": 1780689522.416531,
+    "ast_hash": "fa33766120c1ddc16e8413c7512a526f",
+    "semantic_hash": "fa33766120c1ddc16e8413c7512a526f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\BUGS_2026-03-11_SESSION.md": {
+    "mtime": 1780689522.4175313,
+    "ast_hash": "19b1aaf83ef0392efd7d2f0d2d542334",
+    "semantic_hash": "19b1aaf83ef0392efd7d2f0d2d542334"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\BUG_FIX_VERIFICATION_REPORT.md": {
+    "mtime": 1780689522.4175313,
+    "ast_hash": "665bfc3d0eaec1ae06ce3500c004f01a",
+    "semantic_hash": "665bfc3d0eaec1ae06ce3500c004f01a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CALENDAR_BUGS_SUMMARY.md": {
+    "mtime": 1780689522.4185283,
+    "ast_hash": "b4c2703a0081657dabb0d4127970a9b1",
+    "semantic_hash": "b4c2703a0081657dabb0d4127970a9b1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CALENDAR_FIXES.md": {
+    "mtime": 1780689522.420782,
+    "ast_hash": "8100304aec3dbea76ec19acf5c90a931",
+    "semantic_hash": "8100304aec3dbea76ec19acf5c90a931"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES.md": {
+    "mtime": 1780689522.4227798,
+    "ast_hash": "e3c82e25d81667bcf722dc38de51c2ee",
+    "semantic_hash": "e3c82e25d81667bcf722dc38de51c2ee"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-b001.md": {
+    "mtime": 1780689522.4237788,
+    "ast_hash": "649717385557621b8a656395d8a3ce50",
+    "semantic_hash": "649717385557621b8a656395d8a3ce50"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-b002.md": {
+    "mtime": 1780689522.4247813,
+    "ast_hash": "ba6aa2296b2b0cffeba0080f0a3e2f19",
+    "semantic_hash": "ba6aa2296b2b0cffeba0080f0a3e2f19"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-b003.md": {
+    "mtime": 1780689522.4257793,
+    "ast_hash": "8f249f25b2bdcd26ee74ec72c4ec978e",
+    "semantic_hash": "8f249f25b2bdcd26ee74ec72c4ec978e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-b005.md": {
+    "mtime": 1780689522.4277835,
+    "ast_hash": "fa9f513d7967adf6c8a2d25243265c3d",
+    "semantic_hash": "fa9f513d7967adf6c8a2d25243265c3d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-b006.md": {
+    "mtime": 1780689522.428777,
+    "ast_hash": "e763aea4e065e6e08bf14a1de1fd2b1a",
+    "semantic_hash": "e763aea4e065e6e08bf14a1de1fd2b1a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-b007.md": {
+    "mtime": 1780689522.4310226,
+    "ast_hash": "0da0c06a9ed5eb636f720beb5b0c221f",
+    "semantic_hash": "0da0c06a9ed5eb636f720beb5b0c221f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-c001.md": {
+    "mtime": 1780689522.432022,
+    "ast_hash": "a24c7a3b1cec51a71db5e04168324d8c",
+    "semantic_hash": "a24c7a3b1cec51a71db5e04168324d8c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-c002.md": {
+    "mtime": 1780689522.4330242,
+    "ast_hash": "d0d60f84ed9264111883a095a73b88a0",
+    "semantic_hash": "d0d60f84ed9264111883a095a73b88a0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-c003.md": {
+    "mtime": 1780689522.434023,
+    "ast_hash": "38389ed52330d8952e29cc59de40ecf3",
+    "semantic_hash": "38389ed52330d8952e29cc59de40ecf3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-c004.md": {
+    "mtime": 1780689522.4350255,
+    "ast_hash": "53e30fe34a205da4718b67d80d9cfa1a",
+    "semantic_hash": "53e30fe34a205da4718b67d80d9cfa1a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-c005.md": {
+    "mtime": 1780689522.436026,
+    "ast_hash": "8c79543a1cbd8e426db3c920d8de8114",
+    "semantic_hash": "8c79543a1cbd8e426db3c920d8de8114"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CHANGES_spec-c006.md": {
+    "mtime": 1780689522.4370213,
+    "ast_hash": "7a698a573121f9d4e52c155cbc78c76c",
+    "semantic_hash": "7a698a573121f9d4e52c155cbc78c76c"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\COMPLETE_FIX_REPORT.md": {
+    "mtime": 1780689522.4380245,
+    "ast_hash": "9566b4af4501dbc5aa141996e8c48fb1",
+    "semantic_hash": "9566b4af4501dbc5aa141996e8c48fb1"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\COMPREHENSIVE_BUG_AUDIT.md": {
+    "mtime": 1780689522.4394045,
+    "ast_hash": "ea66c9bf1ea8d9f318f7549680b83cc9",
+    "semantic_hash": "ea66c9bf1ea8d9f318f7549680b83cc9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\COMPREHENSIVE_BUG_AUDIT_WAVE2.md": {
+    "mtime": 1780689522.4394045,
+    "ast_hash": "53e8292ea360cc0cb5056b13f0b4e512",
+    "semantic_hash": "53e8292ea360cc0cb5056b13f0b4e512"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\CONTRIBUTING.md": {
+    "mtime": 1780689522.4404125,
+    "ast_hash": "56b1a0fbc63bfb38705a1f1b1614c402",
+    "semantic_hash": "56b1a0fbc63bfb38705a1f1b1614c402"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DEAD_CODE_REMOVAL_REPORT.md": {
+    "mtime": 1780689522.4414635,
+    "ast_hash": "fbfa0f38d0461d399b2a595a1aea18a5",
+    "semantic_hash": "fbfa0f38d0461d399b2a595a1aea18a5"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DEAD_CODE_REMOVED_FILES.txt": {
+    "mtime": 1780689522.4424744,
+    "ast_hash": "fd42aa77e6147305ed0440209dbb8616",
+    "semantic_hash": "fd42aa77e6147305ed0440209dbb8616"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DL01_FIX_SUMMARY.md": {
+    "mtime": 1780689522.443483,
+    "ast_hash": "8ec234aa572bd8b020b77d74bff0f926",
+    "semantic_hash": "8ec234aa572bd8b020b77d74bff0f926"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DOCS_UPDATE_SUMMARY.md": {
+    "mtime": 1780689522.4445193,
+    "ast_hash": "8eb73de6a1b67f9c1457e4e2ea1432f8",
+    "semantic_hash": "8eb73de6a1b67f9c1457e4e2ea1432f8"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DOWNLOAD-PROGRESS-VISIBILITY-AUDIT.md": {
+    "mtime": 1780689522.4460256,
+    "ast_hash": "fe0bc169685a380ab1ba2a5748b84176",
+    "semantic_hash": "fe0bc169685a380ab1ba2a5748b84176"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DOWNLOAD-VISIBILITY-BUGS-SUMMARY.md": {
+    "mtime": 1780689522.4470325,
+    "ast_hash": "23677d28e066b90625401be8e30bea26",
+    "semantic_hash": "23677d28e066b90625401be8e30bea26"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DOWNLOAD_SYNC_BUGS_FIXED.md": {
+    "mtime": 1780689522.4480414,
+    "ast_hash": "e5dda3c18044e98bc4eb124c0a52af1a",
+    "semantic_hash": "e5dda3c18044e98bc4eb124c0a52af1a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DOWNLOAD_SYNC_FIXES.md": {
+    "mtime": 1780689522.4480414,
+    "ast_hash": "994301d9b9b3c49012eb66fc20b0d6e9",
+    "semantic_hash": "994301d9b9b3c49012eb66fc20b0d6e9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DOWNLOAD_SYNC_STATUS_UPDATE.md": {
+    "mtime": 1780689522.4495475,
+    "ast_hash": "5a60b41eda0dbf2da4c25fbac19fe482",
+    "semantic_hash": "5a60b41eda0dbf2da4c25fbac19fe482"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\DOWNLOAD_SYNC_TEST_PLAN.md": {
+    "mtime": 1780689522.4505627,
+    "ast_hash": "8b8a81e8107714bf1169bf5ea6f288c7",
+    "semantic_hash": "8b8a81e8107714bf1169bf5ea6f288c7"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\EXPLORE_PAGE_FIXES.md": {
+    "mtime": 1780689522.4515548,
+    "ast_hash": "6068df044db326e48f8b91f9ec74b7af",
+    "semantic_hash": "6068df044db326e48f8b91f9ec74b7af"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\FILE_LISTING_BUGS_FIXED.md": {
+    "mtime": 1780689522.4515548,
+    "ast_hash": "8cab1e49ba628a522234422c98658359",
+    "semantic_hash": "8cab1e49ba628a522234422c98658359"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\FILE_LISTING_SUMMARY.md": {
+    "mtime": 1780689522.4525545,
+    "ast_hash": "c557aae64589cae7ba2f4b9564d45227",
+    "semantic_hash": "c557aae64589cae7ba2f4b9564d45227"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\PHASE_A_FIXES_COMPLETE.md": {
+    "mtime": 1780689522.4535542,
+    "ast_hash": "032cb078511383f8303a8cbc319c42c3",
+    "semantic_hash": "032cb078511383f8303a8cbc319c42c3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\POST_PHASE_C_AUDIT.md": {
+    "mtime": 1780689522.4545555,
+    "ast_hash": "ac746176083d979e28ab4bd63c4e2aaf",
+    "semantic_hash": "ac746176083d979e28ab4bd63c4e2aaf"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\PROJECTS_BUGS_COMPLETE.md": {
+    "mtime": 1780689522.4555554,
+    "ast_hash": "a95359b1b8d94e259488f722a4d9817d",
+    "semantic_hash": "a95359b1b8d94e259488f722a4d9817d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\PROJECTS_PAGE_FIX_SUMMARY.md": {
+    "mtime": 1780689522.4555554,
+    "ast_hash": "52e5dbd57f9851b795a3af3d7518c8aa",
+    "semantic_hash": "52e5dbd57f9851b795a3af3d7518c8aa"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\PROJECTS_PAGE_VERIFICATION.md": {
+    "mtime": 1780689522.457554,
+    "ast_hash": "adc96ac9eb2df0a128c39db65fa2ead9",
+    "semantic_hash": "adc96ac9eb2df0a128c39db65fa2ead9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\QA_LOGGING_AUDIT.md": {
+    "mtime": 1780689522.457554,
+    "ast_hash": "be48fb4f8414dd1a3a9f2ce68d52b87b",
+    "semantic_hash": "be48fb4f8414dd1a3a9f2ce68d52b87b"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\README.md": {
+    "mtime": 1780689522.4585595,
+    "ast_hash": "f78e8d4b43aae03322cd70560d7847dc",
+    "semantic_hash": "f78e8d4b43aae03322cd70560d7847dc"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\STABILITY_FIXES.md": {
+    "mtime": 1780689522.459555,
+    "ast_hash": "c69ca9d74ace845e3a7b9e9206f6ef04",
+    "semantic_hash": "c69ca9d74ace845e3a7b9e9206f6ef04"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\STATE_MANAGEMENT_FIXES.md": {
+    "mtime": 1780689522.4605947,
+    "ast_hash": "48591db8b28bb3f62afb0adf978637e9",
+    "semantic_hash": "48591db8b28bb3f62afb0adf978637e9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\STORE_FIXES_SUMMARY.md": {
+    "mtime": 1780689522.4615943,
+    "ast_hash": "80e6c6362f844b274af7742d6ffa8923",
+    "semantic_hash": "80e6c6362f844b274af7742d6ffa8923"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\STORE_FIXES_W1_HS.md": {
+    "mtime": 1780689522.4625964,
+    "ast_hash": "1f0e9a6b5ad7efe0d1792386483ade6d",
+    "semantic_hash": "1f0e9a6b5ad7efe0d1792386483ade6d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\STUB_HANDLERS_IMPLEMENTATION.md": {
+    "mtime": 1780689522.4635954,
+    "ast_hash": "e0ed31e1acf0e1207a47a18fe325190a",
+    "semantic_hash": "e0ed31e1acf0e1207a47a18fe325190a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\TQ_FILES_MODIFIED.md": {
+    "mtime": 1780689522.4635954,
+    "ast_hash": "9bd65a223691cd566fbd8c3f4c2a4673",
+    "semantic_hash": "9bd65a223691cd566fbd8c3f4c2a4673"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\TRANSCRIPTION_QUEUE_FIXES.md": {
+    "mtime": 1780689522.464595,
+    "ast_hash": "4b5084bc625f45a5f1bbdcbccd097f23",
+    "semantic_hash": "4b5084bc625f45a5f1bbdcbccd097f23"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\UI_RESPONSIVENESS_FIXES.md": {
+    "mtime": 1780689522.465595,
+    "ast_hash": "8aa083e0e3280a58f54c551652768b2e",
+    "semantic_hash": "8aa083e0e3280a58f54c551652768b2e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\USB_CONNECTION_AUDIT.md": {
+    "mtime": 1780689522.465595,
+    "ast_hash": "f2669f234f002c1a647eefe471703f3e",
+    "semantic_hash": "f2669f234f002c1a647eefe471703f3e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\UX_SIMPLIFICATION_COMPLETE.md": {
+    "mtime": 1780689522.4665966,
+    "ast_hash": "a390b216c67dec77ff1bfc8e77bae6b9",
+    "semantic_hash": "a390b216c67dec77ff1bfc8e77bae6b9"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\benchmark-ui.html": {
+    "mtime": 1780689522.4679587,
+    "ast_hash": "f6e6e321fc54faa3d3116be91495440f",
+    "semantic_hash": "f6e6e321fc54faa3d3116be91495440f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\HARBOR_REDESIGN_BACKLOG.md": {
+    "mtime": 1782008563.0061276,
+    "ast_hash": "34fd23a5f61b852f28c89f2c27d2825e",
+    "semantic_hash": "34fd23a5f61b852f28c89f2c27d2825e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\VOICEPRINT.md": {
+    "mtime": 1781886169.3994396,
+    "ast_hash": "c68943f7a572fa461e9b05167d00c0df",
+    "semantic_hash": "c68943f7a572fa461e9b05167d00c0df"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-001-ipc-event-bridge.md": {
+    "mtime": 1780689522.4714775,
+    "ast_hash": "4a39c938b4c969a1205d4a5c371fb091",
+    "semantic_hash": "4a39c938b4c969a1205d4a5c371fb091"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-002-recording-identity-unification.md": {
+    "mtime": 1780689522.4714775,
+    "ast_hash": "2d6ea6c7beef5f7e6bb66c790e6d1dfd",
+    "semantic_hash": "2d6ea6c7beef5f7e6bb66c790e6d1dfd"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-003-device-connection-file-list.md": {
+    "mtime": 1780689522.4724753,
+    "ast_hash": "909a3e9da10fb5d3ba6c1f941f0a2fae",
+    "semantic_hash": "909a3e9da10fb5d3ba6c1f941f0a2fae"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-004-auto-download-transcribe-pipeline.md": {
+    "mtime": 1780689522.4734778,
+    "ast_hash": "3e9f1d1a3655eda550a98fb6072157e6",
+    "semantic_hash": "3e9f1d1a3655eda550a98fb6072157e6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-005-audio-player-waveform.md": {
+    "mtime": 1780689522.4744768,
+    "ast_hash": "9bc8e8535183bc021c7d40265d8b0c55",
+    "semantic_hash": "9bc8e8535183bc021c7d40265d8b0c55"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-006-meeting-linking-ai-analysis.md": {
+    "mtime": 1780689522.4754753,
+    "ast_hash": "c4b93cef1b7fed59a3d0cd91f0ab823a",
+    "semantic_hash": "c4b93cef1b7fed59a3d0cd91f0ab823a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-007-transcription-status-lifecycle.md": {
+    "mtime": 1780689522.476476,
+    "ast_hash": "754bb8dfb58d4bd80e8cf8d4a41f6101",
+    "semantic_hash": "754bb8dfb58d4bd80e8cf8d4a41f6101"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\spec\\SPEC-008-library-selection-file-operations.md": {
+    "mtime": 1780689522.476476,
+    "ast_hash": "03db881d0458876d158bd4e20fe7a20d",
+    "semantic_hash": "03db881d0458876d158bd4e20fe7a20d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\superpowers\\plans\\2026-06-20-people-pills-label-chips-mvp.md": {
+    "mtime": 1782010329.7275498,
+    "ast_hash": "71bafb1867426c1b0b61cf2cf5b44b69",
+    "semantic_hash": "71bafb1867426c1b0b61cf2cf5b44b69"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\superpowers\\plans\\2026-06-20-responsive-layout-master-detail.md": {
+    "mtime": 1782008563.0078592,
+    "ast_hash": "cf61f7de54d09b242a252b9f60b61bfd",
+    "semantic_hash": "cf61f7de54d09b242a252b9f60b61bfd"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\docs\\superpowers\\plans\\2026-06-20-voiceprint-badge.md": {
+    "mtime": 1782009177.7793827,
+    "ast_hash": "7689945ef27999d604c4414770b72a5f",
+    "semantic_hash": "7689945ef27999d604c4414770b72a5f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron-builder.yml": {
+    "mtime": 1781886169.4008937,
+    "ast_hash": "a65c48f3e71b445c50eed358e27ba278",
+    "semantic_hash": "a65c48f3e71b445c50eed358e27ba278"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\ipc\\P1_FIXES_SUMMARY.md": {
+    "mtime": 1780689522.4818332,
+    "ast_hash": "dd7cebc4a753886eaeaffefe2b7c4844",
+    "semantic_hash": "dd7cebc4a753886eaeaffefe2b7c4844"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\__fixtures__\\analysis-prompt-baseline-0.txt": {
+    "mtime": 1782135717.0773797,
+    "ast_hash": "dd3e49dc3aaac57558fb4a0caf38bd8d",
+    "semantic_hash": "dd3e49dc3aaac57558fb4a0caf38bd8d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\__fixtures__\\analysis-prompt-baseline-1.txt": {
+    "mtime": 1782135717.0783923,
+    "ast_hash": "91ef92e0b8555028395abaa38b094810",
+    "semantic_hash": "91ef92e0b8555028395abaa38b094810"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\__tests__\\__fixtures__\\analysis-prompt-baseline-2.txt": {
+    "mtime": 1782135717.0839233,
+    "ast_hash": "3c0b05432f8e524aa8f8dbc958f6b9fd",
+    "semantic_hash": "3c0b05432f8e524aa8f8dbc958f6b9fd"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\migrations\\P1_FIXES_APPLIED.md": {
+    "mtime": 1780689522.5460167,
+    "ast_hash": "9593156100668dcf8f751a86a55dc5db",
+    "semantic_hash": "9593156100668dcf8f751a86a55dc5db"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\migrations\\_temp_cleanup.txt": {
+    "mtime": 1780689522.5481048,
+    "ast_hash": "a6da5be5e42c6458c366bdffac164d22",
+    "semantic_hash": "a6da5be5e42c6458c366bdffac164d22"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\services\\quality_schema.txt": {
+    "mtime": 1780689522.5556188,
+    "ast_hash": "0be72225c125fc8be1054adfc83a55a0",
+    "semantic_hash": "0be72225c125fc8be1054adfc83a55a0"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\main\\splash.html": {
+    "mtime": 1780689522.563014,
+    "ast_hash": "36b694c7f88366fd01e1fc571b818630",
+    "semantic_hash": "36b694c7f88366fd01e1fc571b818630"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\electron\\preload\\migration-impl.txt": {
+    "mtime": 1780689522.5777967,
+    "ast_hash": "bfb28b8c47e2232477134dfb840a7cd6",
+    "semantic_hash": "bfb28b8c47e2232477134dfb840a7cd6"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\features\\library\\docs\\filter-architecture.md": {
+    "mtime": 1780689522.6559224,
+    "ast_hash": "4c1fb7564efee057db48fc186289cd48",
+    "semantic_hash": "4c1fb7564efee057db48fc186289cd48"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\src\\index.html": {
+    "mtime": 1782053266.376078,
+    "ast_hash": "5c3ae9caaacdd71d2cecaa9c76184f81",
+    "semantic_hash": "5c3ae9caaacdd71d2cecaa9c76184f81"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-001-device-file-operations.md": {
+    "mtime": 1780689522.7675543,
+    "ast_hash": "106c91805c6d907c96205096322bb832",
+    "semantic_hash": "106c91805c6d907c96205096322bb832"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-002-audio-playback-rerenders.md": {
+    "mtime": 1780689522.7675543,
+    "ast_hash": "45f14bfafc1441476db94b5c6853e513",
+    "semantic_hash": "45f14bfafc1441476db94b5c6853e513"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-003-memory-leaks-listeners.md": {
+    "mtime": 1780689522.7695568,
+    "ast_hash": "e92d6e4f585f570aba9caad5fb34211a",
+    "semantic_hash": "e92d6e4f585f570aba9caad5fb34211a"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-004-usb-cancellation-abort.md": {
+    "mtime": 1780689522.7706532,
+    "ast_hash": "ee0a803259477ce804af9965f5246045",
+    "semantic_hash": "ee0a803259477ce804af9965f5246045"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-005-transcription-queue-races.md": {
+    "mtime": 1780689522.771665,
+    "ast_hash": "176413e32cf1a958d7fea8a6e762c89e",
+    "semantic_hash": "176413e32cf1a958d7fea8a6e762c89e"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-006-settings-critical.md": {
+    "mtime": 1780689522.7726681,
+    "ast_hash": "c3b60d377502ba449149067ed79a76f3",
+    "semantic_hash": "c3b60d377502ba449149067ed79a76f3"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-007-download-sync-critical.md": {
+    "mtime": 1780689522.773665,
+    "ast_hash": "9642080d8e8647df1e753cc617ad1541",
+    "semantic_hash": "9642080d8e8647df1e753cc617ad1541"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-008-chat-rag-critical.md": {
+    "mtime": 1780689522.773665,
+    "ast_hash": "6f2e49568b07df3fb85e546dfbc1de8d",
+    "semantic_hash": "6f2e49568b07df3fb85e546dfbc1de8d"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-009-device-critical-remaining.md": {
+    "mtime": 1780689522.7747853,
+    "ast_hash": "641f76c3cb056ecd0af384f848e6241f",
+    "semantic_hash": "641f76c3cb056ecd0af384f848e6241f"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-010-actionables-calendar-explore-critical.md": {
+    "mtime": 1780689522.7757998,
+    "ast_hash": "314b22d16d1691a5f5c4edb71e35d8ec",
+    "semantic_hash": "314b22d16d1691a5f5c4edb71e35d8ec"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-011-library-critical.md": {
+    "mtime": 1780689522.7757998,
+    "ast_hash": "8d4dc2acccbccbd2c36805145d3cf700",
+    "semantic_hash": "8d4dc2acccbccbd2c36805145d3cf700"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-012-meetingdetail-critical.md": {
+    "mtime": 1780689522.7767935,
+    "ast_hash": "c88216b97f642d9ae1b41c4c539dc265",
+    "semantic_hash": "c88216b97f642d9ae1b41c4c539dc265"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-013-people-projects-critical.md": {
+    "mtime": 1780689522.7777934,
+    "ast_hash": "7c4bc52639f3085f699f06ae4810dcc5",
+    "semantic_hash": "7c4bc52639f3085f699f06ae4810dcc5"
+  },
+  "C:\\Users\\rcox\\hidock-tools\\hidock-next\\apps\\electron\\todos\\todo-014-transcription-critical-remaining.md": {
+    "mtime": 1780689522.7777934,
+    "ast_hash": "1fc27bf44729596997c0441844504b5e",
+    "semantic_hash": "1fc27bf44729596997c0441844504b5e"
+  }
+}

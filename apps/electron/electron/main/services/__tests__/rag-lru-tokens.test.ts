@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { getRAGService, resetRAGService, estimateTokens, trimHistoryByTokens } from '../rag'
 import type { OllamaChatMessage } from '../ollama'
-import initSqlJs from 'sql.js'
+import BetterSqlite3 from 'better-sqlite3'
 
 // Stable mock object
 const mockOllamaService = {
@@ -62,13 +62,7 @@ vi.mock('../database', () => ({
   getDatabase: () => dbInstance,
   queryOne: vi.fn((sql: string, params: any[]) => {
     if (!dbInstance) return undefined
-    const result = dbInstance.exec(sql, params)
-    if (result.length === 0 || result[0].values.length === 0) return undefined
-    const columns = result[0].columns
-    const values = result[0].values[0]
-    const row: any = {}
-    columns.forEach((col: string, i: number) => { row[col] = values[i] })
-    return row
+    return dbInstance.prepare(sql).get(...(params ?? [])) ?? undefined
   }),
   escapeLikePattern: vi.fn((pattern: string) => pattern.replace(/[%_\\]/g, '\\$&'))
 }))
@@ -149,16 +143,13 @@ describe('trimHistoryByTokens', () => {
 // ================================================================
 
 describe('RAGService LRU Eviction', () => {
-  let SQL: any
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks()
     resetRAGService()
-    SQL = await initSqlJs()
-    dbInstance = new SQL.Database()
+    dbInstance = new BetterSqlite3(':memory:')
 
     // Setup tables
-    dbInstance.run(`
+    dbInstance.exec(`
       CREATE TABLE conversations (id TEXT PRIMARY KEY);
       CREATE TABLE conversation_context (id TEXT, conversation_id TEXT, knowledge_capture_id TEXT);
       CREATE TABLE knowledge_captures (id TEXT, title TEXT, source_recording_id TEXT);
@@ -176,7 +167,7 @@ describe('RAGService LRU Eviction', () => {
     // Create 51 sessions by chatting in each one
     for (let i = 0; i < 51; i++) {
       const sessionId = `session-${i}`
-      dbInstance.run(`INSERT OR IGNORE INTO conversations (id) VALUES (?)`, [sessionId])
+      dbInstance.prepare(`INSERT OR IGNORE INTO conversations (id) VALUES (?)`).run(sessionId)
 
       await rag.chat(sessionId, `message for session ${i}`)
     }
@@ -192,7 +183,7 @@ describe('RAGService LRU Eviction', () => {
     // Create sessions 0-49
     for (let i = 0; i < 50; i++) {
       const sessionId = `session-${i}`
-      dbInstance.run(`INSERT OR IGNORE INTO conversations (id) VALUES (?)`, [sessionId])
+      dbInstance.prepare(`INSERT OR IGNORE INTO conversations (id) VALUES (?)`).run(sessionId)
       await rag.chat(sessionId, `message for session ${i}`)
     }
 
@@ -200,7 +191,7 @@ describe('RAGService LRU Eviction', () => {
     await rag.chat('session-0', 'keep me alive')
 
     // Add session-50 which should evict session-1 (LRU, since session-0 was just used)
-    dbInstance.run(`INSERT INTO conversations (id) VALUES ('session-50')`)
+    dbInstance.prepare(`INSERT INTO conversations (id) VALUES (?)`).run('session-50')
     await rag.chat('session-50', 'new session')
 
     const stats = rag.getStats()
@@ -209,7 +200,7 @@ describe('RAGService LRU Eviction', () => {
 
   it('should clear session and cancel controller on clearSession', async () => {
     const rag = getRAGService()
-    dbInstance.run(`INSERT INTO conversations (id) VALUES ('test-session')`)
+    dbInstance.prepare(`INSERT INTO conversations (id) VALUES (?)`).run('test-session')
 
     await rag.chat('test-session', 'hello')
 
@@ -231,15 +222,12 @@ describe('RAGService LRU Eviction', () => {
 // ================================================================
 
 describe('RAGService cancelRequest', () => {
-  let SQL: any
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks()
     resetRAGService()
-    SQL = await initSqlJs()
-    dbInstance = new SQL.Database()
+    dbInstance = new BetterSqlite3(':memory:')
 
-    dbInstance.run(`
+    dbInstance.exec(`
       CREATE TABLE conversations (id TEXT PRIMARY KEY);
       CREATE TABLE conversation_context (id TEXT, conversation_id TEXT, knowledge_capture_id TEXT);
       CREATE TABLE knowledge_captures (id TEXT, title TEXT, source_recording_id TEXT);
@@ -259,7 +247,7 @@ describe('RAGService cancelRequest', () => {
 
   it('should return true when cancelling active session', async () => {
     const rag = getRAGService()
-    dbInstance.run(`INSERT INTO conversations (id) VALUES ('active-session')`)
+    dbInstance.prepare(`INSERT INTO conversations (id) VALUES (?)`).run('active-session')
 
     // Use a deferred promise pattern: the mock will hold until we resolve it
     let resolveChat!: (value: string) => void

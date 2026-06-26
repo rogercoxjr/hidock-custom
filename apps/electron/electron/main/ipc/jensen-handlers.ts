@@ -5,13 +5,14 @@
  * use useDevicePipeline instead of calling these channels directly.
  *
  * Push event patterns:
- *  - Broadcast  : BrowserWindow.getAllWindows()[0].webContents.send() — state, connect, disconnect
+ *  - Broadcast  : getBroadcaster().broadcast() — state, connect, disconnect
  *  - Targeted   : event.sender.send() — download chunks/progress, realtime data
  *
  * Security: All user-supplied values are validated with Zod before reaching the device.
  */
 
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
+import { getBroadcaster } from '../services/broadcaster'
 import { getJensenDevice } from '../services/jensen'
 import {
   JensenDeleteFileSchema,
@@ -32,12 +33,7 @@ let currentDownloadAbort: AbortController | null = null
 // ---------------------------------------------------------------------------
 
 function broadcast(channel: string, payload?: unknown): void {
-  const wins = BrowserWindow.getAllWindows()
-  if (wins.length === 0) return
-  const win = wins[0]
-  if (!win.webContents.isDestroyed()) {
-    win.webContents.send(channel, payload)
-  }
+  getBroadcaster().broadcast(channel, payload)
 }
 
 // ---------------------------------------------------------------------------

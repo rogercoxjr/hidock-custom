@@ -1,14 +1,14 @@
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import Database from 'better-sqlite3'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { getDatabasePath } from './file-storage'
 import type { Turn } from './asr/asr-provider'
 
-let db: SqlJsDatabase | null = null
+let db: Database.Database | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 33
+const SCHEMA_VERSION = 34
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -508,6 +508,15 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Hosted-app access control (invite list). v34.
+CREATE TABLE IF NOT EXISTS allowed_users (
+    email TEXT PRIMARY KEY,
+    role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked')),
+    invited_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Junction table: Meeting-Contact relationship
 CREATE TABLE IF NOT EXISTS meeting_contacts (
     meeting_id TEXT NOT NULL,
@@ -693,7 +702,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     for (const sql of columnsToAdd) {
       try {
-        database.run(sql)
+        database.exec(sql)
       } catch {
         // Column likely already exists, ignore
         console.log(`Column may already exist: ${sql}`)
@@ -702,7 +711,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     // Update existing recordings: if they have a file_path, mark them as on_local
     try {
-      database.run(`
+      database.exec(`
         UPDATE recordings
         SET on_local = 1,
             location = CASE WHEN on_device = 1 THEN 'both' ELSE 'local-only' END
@@ -722,18 +731,19 @@ const MIGRATIONS: Record<number, () => void> = {
 
     try {
       // Get all recordings with .hda extension and file_size available
-      const recordings = database.exec(`
+      const recordings = database.prepare(`
         SELECT id, filename, file_size, duration_seconds
         FROM recordings
         WHERE (filename LIKE '%.hda' OR filename LIKE '%.HDA')
         AND file_size IS NOT NULL
         AND file_size > 0
-      `)
+      `).raw().all() as Array<[string, string, number, number | null]>
 
-      if (recordings.length > 0 && recordings[0].values.length > 0) {
+      if (recordings.length > 0) {
         let updatedCount = 0
-        for (const row of recordings[0].values) {
-          const [id, filename, fileSize, oldDuration] = row as [string, string, number, number | null]
+        const upd = database.prepare('UPDATE recordings SET duration_seconds = ? WHERE id = ?')
+        for (const row of recordings) {
+          const [id, filename, fileSize, oldDuration] = row
 
           // Calculate correct duration: HDA version 1 format uses fileSize / 8000 seconds
           // This formula was verified against real recordings (e.g., 15.7MB = 32m39s)
@@ -741,10 +751,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
           // Only update if different (or was null/0)
           if (oldDuration !== newDuration) {
-            database.run(
-              'UPDATE recordings SET duration_seconds = ? WHERE id = ?',
-              [newDuration, id]
-            )
+            upd.run(newDuration, id)
             updatedCount++
             console.log(`[Migration v7] Updated ${filename}: ${oldDuration || 0}s -> ${newDuration}s`)
           }
@@ -756,24 +763,22 @@ const MIGRATIONS: Record<number, () => void> = {
 
       // Also update device_files_cache if present
       try {
-        const cachedFiles = database.exec(`
+        const cachedFiles = database.prepare(`
           SELECT id, filename, file_size, duration_seconds
           FROM device_files_cache
           WHERE (filename LIKE '%.hda' OR filename LIKE '%.HDA')
           AND file_size IS NOT NULL
           AND file_size > 0
-        `)
+        `).raw().all() as Array<[string, string, number, number | null]>
 
-        if (cachedFiles.length > 0 && cachedFiles[0].values.length > 0) {
-          for (const row of cachedFiles[0].values) {
-            const [id, _filename, fileSize, oldDuration] = row as [string, string, number, number | null]
+        if (cachedFiles.length > 0) {
+          const updCache = database.prepare('UPDATE device_files_cache SET duration_seconds = ? WHERE id = ?')
+          for (const row of cachedFiles) {
+            const [id, _filename, fileSize, oldDuration] = row
             const newDuration = Math.round(fileSize / 8000)
 
             if (oldDuration !== newDuration) {
-              database.run(
-                'UPDATE device_files_cache SET duration_seconds = ? WHERE id = ?',
-                [newDuration, id]
-              )
+              updCache.run(newDuration, id)
             }
           }
           console.log('[Migration v7] Updated device_files_cache durations')
@@ -796,18 +801,19 @@ const MIGRATIONS: Record<number, () => void> = {
 
     try {
       // Get all recordings with .hda extension and file_size available
-      const recordings = database.exec(`
+      const recordings = database.prepare(`
         SELECT id, filename, file_size, duration_seconds
         FROM recordings
         WHERE (filename LIKE '%.hda' OR filename LIKE '%.HDA')
         AND file_size IS NOT NULL
         AND file_size > 0
-      `)
+      `).raw().all() as Array<[string, string, number, number | null]>
 
-      if (recordings.length > 0 && recordings[0].values.length > 0) {
+      if (recordings.length > 0) {
         let updatedCount = 0
-        for (const row of recordings[0].values) {
-          const [id, filename, fileSize, oldDuration] = row as [string, string, number, number | null]
+        const upd = database.prepare('UPDATE recordings SET duration_seconds = ? WHERE id = ?')
+        for (const row of recordings) {
+          const [id, filename, fileSize, oldDuration] = row
 
           // CORRECT formula: fileSize / 8000 gives seconds
           // Verified: 15.7MB file = 1959 seconds = 32m39s
@@ -815,10 +821,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
           // Update if different
           if (oldDuration !== newDuration) {
-            database.run(
-              'UPDATE recordings SET duration_seconds = ? WHERE id = ?',
-              [newDuration, id]
-            )
+            upd.run(newDuration, id)
             updatedCount++
             const oldMin = oldDuration ? Math.floor(oldDuration / 60) : 0
             const oldSec = oldDuration ? Math.round(oldDuration % 60) : 0
@@ -834,24 +837,22 @@ const MIGRATIONS: Record<number, () => void> = {
 
       // Also fix device_files_cache
       try {
-        const cachedFiles = database.exec(`
+        const cachedFiles = database.prepare(`
           SELECT id, filename, file_size, duration_seconds
           FROM device_files_cache
           WHERE (filename LIKE '%.hda' OR filename LIKE '%.HDA')
           AND file_size IS NOT NULL
           AND file_size > 0
-        `)
+        `).raw().all() as Array<[string, string, number, number | null]>
 
-        if (cachedFiles.length > 0 && cachedFiles[0].values.length > 0) {
-          for (const row of cachedFiles[0].values) {
-            const [id, _filename, fileSize, oldDuration] = row as [string, string, number, number | null]
+        if (cachedFiles.length > 0) {
+          const updCache = database.prepare('UPDATE device_files_cache SET duration_seconds = ? WHERE id = ?')
+          for (const row of cachedFiles) {
+            const [id, _filename, fileSize, oldDuration] = row
             const newDuration = Math.round(fileSize / 8000)
 
             if (oldDuration !== newDuration) {
-              database.run(
-                'UPDATE device_files_cache SET duration_seconds = ? WHERE id = ?',
-                [newDuration, id]
-              )
+              updCache.run(newDuration, id)
             }
           }
           console.log('[Migration v8] Fixed device_files_cache durations')
@@ -873,18 +874,19 @@ const MIGRATIONS: Record<number, () => void> = {
 
     try {
       // Get all HDA recordings
-      const recordings = database.exec(`
+      const recordings = database.prepare(`
         SELECT id, filename, file_size, duration_seconds
         FROM recordings
         WHERE (filename LIKE '%.hda' OR filename LIKE '%.HDA')
         AND file_size IS NOT NULL
         AND file_size > 0
-      `)
+      `).raw().all() as Array<[string, string, number, number | null]>
 
-      if (recordings.length > 0 && recordings[0].values.length > 0) {
+      if (recordings.length > 0) {
         let updatedCount = 0
-        for (const row of recordings[0].values) {
-          const [id, filename, fileSize, oldDuration] = row as [string, string, number, number | null]
+        const upd = database.prepare('UPDATE recordings SET duration_seconds = ? WHERE id = ?')
+        for (const row of recordings) {
+          const [id, filename, fileSize, oldDuration] = row
 
           // CORRECT formula: fileSize / 8000 gives seconds
           const newDuration = Math.round(fileSize / 8000)
@@ -893,10 +895,7 @@ const MIGRATIONS: Record<number, () => void> = {
           const needsUpdate = oldDuration !== newDuration || (oldDuration && oldDuration > 21600)
 
           if (needsUpdate) {
-            database.run(
-              'UPDATE recordings SET duration_seconds = ? WHERE id = ?',
-              [newDuration, id]
-            )
+            upd.run(newDuration, id)
             updatedCount++
             const oldMin = oldDuration ? Math.floor(oldDuration / 60) : 0
             const oldSec = oldDuration ? Math.round(oldDuration % 60) : 0
@@ -912,25 +911,23 @@ const MIGRATIONS: Record<number, () => void> = {
 
       // Also fix device_files_cache
       try {
-        const cachedFiles = database.exec(`
+        const cachedFiles = database.prepare(`
           SELECT id, filename, file_size, duration_seconds
           FROM device_files_cache
           WHERE (filename LIKE '%.hda' OR filename LIKE '%.HDA')
           AND file_size IS NOT NULL
           AND file_size > 0
-        `)
+        `).raw().all() as Array<[string, string, number, number | null]>
 
-        if (cachedFiles.length > 0 && cachedFiles[0].values.length > 0) {
-          for (const row of cachedFiles[0].values) {
-            const [id, _filename, fileSize, oldDuration] = row as [string, string, number, number | null]
+        if (cachedFiles.length > 0) {
+          const updCache = database.prepare('UPDATE device_files_cache SET duration_seconds = ? WHERE id = ?')
+          for (const row of cachedFiles) {
+            const [id, _filename, fileSize, oldDuration] = row
             const newDuration = Math.round(fileSize / 8000)
             const needsUpdate = oldDuration !== newDuration || (oldDuration && oldDuration > 21600)
 
             if (needsUpdate) {
-              database.run(
-                'UPDATE device_files_cache SET duration_seconds = ? WHERE id = ?',
-                [newDuration, id]
-              )
+              updCache.run(newDuration, id)
             }
           }
           console.log('[Migration v9] Fixed device_files_cache durations')
@@ -951,7 +948,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     // Add storage_tier column to recordings table if it doesn't exist
     try {
-      database.run(`
+      database.exec(`
         ALTER TABLE recordings
         ADD COLUMN storage_tier TEXT DEFAULT NULL
         CHECK(storage_tier IN (NULL, 'hot', 'warm', 'cold', 'archive'))
@@ -964,7 +961,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     // Create index on storage_tier (must be done after column exists)
     try {
-      database.run('CREATE INDEX IF NOT EXISTS idx_recordings_storage_tier ON recordings(storage_tier)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_recordings_storage_tier ON recordings(storage_tier)')
       console.log('[Migration v10] Created storage_tier index')
     } catch {
       console.log('[Migration v10] storage_tier index may already exist')
@@ -981,10 +978,8 @@ const MIGRATIONS: Record<number, () => void> = {
 
     try {
       // 1. Check if recordings table needs migration columns (v11)
-      const recordingsInfo = database.exec("PRAGMA table_info(recordings)")
-      const hasMigrationStatus = recordingsInfo.length > 0 && recordingsInfo[0].values
-        ? recordingsInfo[0].values.some(col => col[1] === 'migration_status')
-        : false
+      const recordingsInfo = database.pragma('table_info(recordings)') as Array<{ name: string }>
+      const hasMigrationStatus = recordingsInfo.some(col => col.name === 'migration_status')
 
       if (!hasMigrationStatus) {
         console.log('[Migration v11] Migration columns not found in recordings, adding them...')
@@ -994,13 +989,13 @@ const MIGRATIONS: Record<number, () => void> = {
           "ALTER TABLE recordings ADD COLUMN migrated_at TEXT"
         ]
         for (const sql of columnsToAdd) {
-          try { database.run(sql) } catch { /* ignore duplicate */ }
+          try { database.exec(sql) } catch { /* ignore duplicate */ }
         }
       }
 
       // 2. Check if knowledge_captures table exists and has all columns
-      const tableCheck = database.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_captures'")
-      const tableExists = tableCheck.length > 0 && tableCheck[0].values.length > 0
+      const tableCheck = database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_captures'").get()
+      const tableExists = tableCheck !== undefined
 
       if (!tableExists) {
         console.log('[Migration v11] knowledge_captures table not found, executing full schema script...')
@@ -1009,14 +1004,13 @@ const MIGRATIONS: Record<number, () => void> = {
           const schemaSQL = readFileSync(schemaPath, 'utf-8')
           const statements = schemaSQL.split('\n').filter(line => !line.trim().startsWith('--')).join('\n').split(';').map(s => s.trim()).filter(s => s.length > 0)
           for (const sql of statements) {
-            try { database.run(sql) } catch { /* ignore existing */ }
+            try { database.exec(sql) } catch { /* ignore existing */ }
           }
         }
       } else {
         // Table exists, check for ALL columns added during redesign
-        const captureInfo = database.exec("PRAGMA table_info(knowledge_captures)")
-        const existingCols = captureInfo[0].values.map(col => col[1])
-        
+        const existingCols = (database.pragma('table_info(knowledge_captures)') as Array<{ name: string }>).map(col => col.name)
+
         const requiredColumns = [
           { name: 'category', def: "category TEXT CHECK(category IN ('meeting', 'interview', '1:1', 'brainstorm', 'note', 'other')) DEFAULT 'meeting'" },
           { name: 'status', def: "status TEXT CHECK(status IN ('processing', 'ready', 'enriched')) DEFAULT 'ready'" },
@@ -1036,7 +1030,7 @@ const MIGRATIONS: Record<number, () => void> = {
           if (!existingCols.includes(col.name)) {
             console.log(`[Migration v11] Adding missing column ${col.name} to knowledge_captures`)
             try {
-              database.run(`ALTER TABLE knowledge_captures ADD COLUMN ${col.def}`)
+              database.exec(`ALTER TABLE knowledge_captures ADD COLUMN ${col.def}`)
             } catch (e) {
               console.warn(`[Migration v11] Could not add column ${col.name}: ${e}`)
             }
@@ -1052,7 +1046,7 @@ const MIGRATIONS: Record<number, () => void> = {
         "CREATE INDEX IF NOT EXISTS idx_actionables_status ON actionables(status)"
       ]
       for (const sql of indexes) {
-        try { database.run(sql) } catch (e) { console.warn(`Index warning: ${e}`) }
+        try { database.exec(sql) } catch (e) { console.warn(`Index warning: ${e}`) }
       }
 
     } catch (error) {
@@ -1068,7 +1062,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     // Add conversation_id column to chat_messages if it doesn't exist
     try {
-      database.run('ALTER TABLE chat_messages ADD COLUMN conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE')
+      database.exec('ALTER TABLE chat_messages ADD COLUMN conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE')
       console.log('[Migration v12] Added conversation_id column to chat_messages')
     } catch {
       console.log('[Migration v12] conversation_id column may already exist')
@@ -1091,7 +1085,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     for (const sql of columnsToAdd) {
       try {
-        database.run(sql)
+        database.exec(sql)
       } catch {
         console.log(`Column may already exist: ${sql}`)
       }
@@ -1104,7 +1098,7 @@ const MIGRATIONS: Record<number, () => void> = {
     const database = getDatabase()
 
     try {
-      database.run("ALTER TABLE projects ADD COLUMN status TEXT CHECK(status IN ('active', 'archived')) DEFAULT 'active'")
+      database.exec("ALTER TABLE projects ADD COLUMN status TEXT CHECK(status IN ('active', 'archived')) DEFAULT 'active'")
       console.log('[Migration v14] Added status column to projects')
     } catch {
       console.log('[Migration v14] status column may already exist')
@@ -1128,7 +1122,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     for (const sql of columnsToAdd) {
       try {
-        database.run(sql)
+        database.exec(sql)
       } catch {
         // Column likely already exists, ignore
         console.log(`Column may already exist: ${sql}`)
@@ -1143,12 +1137,12 @@ const MIGRATIONS: Record<number, () => void> = {
     const database = getDatabase()
 
     // Check if confidence column already exists
-    const tableInfo = database.exec('PRAGMA table_info(actionables)')
-    if (tableInfo.length > 0 && tableInfo[0].values) {
-      const columns = tableInfo[0].values.map((row: any) => row[1])
+    const v17Columns = (database.pragma('table_info(actionables)') as Array<{ name: string }>).map(row => row.name)
+    if (v17Columns.length > 0) {
+      const columns = v17Columns
       if (!columns.includes('confidence')) {
         try {
-          database.run('ALTER TABLE actionables ADD COLUMN confidence REAL CHECK(confidence >= 0.0 AND confidence <= 1.0)')
+          database.exec('ALTER TABLE actionables ADD COLUMN confidence REAL CHECK(confidence >= 0.0 AND confidence <= 1.0)')
           console.log('[Migration v17] Added confidence column to actionables table')
         } catch (e) {
           console.warn('[Migration v17] Failed to add confidence column:', e)
@@ -1165,9 +1159,9 @@ const MIGRATIONS: Record<number, () => void> = {
     console.log('Running migration to schema v18: Adding missing chat_messages columns')
     const database = getDatabase()
 
-    const tableInfo = database.exec('PRAGMA table_info(chat_messages)')
-    if (tableInfo.length > 0 && tableInfo[0].values) {
-      const columns = tableInfo[0].values.map((row: any) => row[1])
+    const v18Columns = (database.pragma('table_info(chat_messages)') as Array<{ name: string }>).map(row => row.name)
+    if (v18Columns.length > 0) {
+      const columns = v18Columns
 
       const columnsToAdd = [
         { name: 'edited_at', sql: 'ALTER TABLE chat_messages ADD COLUMN edited_at TEXT' },
@@ -1179,7 +1173,7 @@ const MIGRATIONS: Record<number, () => void> = {
       for (const col of columnsToAdd) {
         if (!columns.includes(col.name)) {
           try {
-            database.run(col.sql)
+            database.exec(col.sql)
             console.log(`[Migration v18] Added ${col.name} column to chat_messages`)
           } catch (e) {
             console.warn(`[Migration v18] Failed to add ${col.name}:`, e)
@@ -1197,7 +1191,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
     try {
       // Create the lock table
-      database.run(`
+      database.exec(`
         CREATE TABLE IF NOT EXISTS transcription_service_lock (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           process_id TEXT,
@@ -1207,7 +1201,7 @@ const MIGRATIONS: Record<number, () => void> = {
       `)
 
       // Initialize with a single row (process_id = NULL means unlocked)
-      database.run(`
+      database.exec(`
         INSERT OR IGNORE INTO transcription_service_lock (id, process_id, acquired_at, updated_at)
         VALUES (1, NULL, NULL, NULL)
       `)
@@ -1228,14 +1222,12 @@ const MIGRATIONS: Record<number, () => void> = {
     console.log('[Migration v20] Removing UNIQUE constraint on contacts.email')
     try {
       // Check if the UNIQUE constraint exists by checking the CREATE TABLE sql
-      const tableInfo = database.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='contacts'")
-      const createSql = tableInfo.length > 0 && tableInfo[0].values.length > 0
-        ? (tableInfo[0].values[0][0] as string)
-        : ''
+      const tableInfo = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='contacts'").get() as { sql: string } | undefined
+      const createSql = tableInfo?.sql ?? ''
 
       if (createSql.includes('UNIQUE')) {
         // SQLite requires table recreation to remove constraints
-        database.run(`
+        database.exec(`
           CREATE TABLE contacts_new (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -1251,9 +1243,9 @@ const MIGRATIONS: Record<number, () => void> = {
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
           )
         `)
-        database.run('INSERT INTO contacts_new SELECT * FROM contacts')
-        database.run('DROP TABLE contacts')
-        database.run('ALTER TABLE contacts_new RENAME TO contacts')
+        database.exec('INSERT INTO contacts_new SELECT * FROM contacts')
+        database.exec('DROP TABLE contacts')
+        database.exec('ALTER TABLE contacts_new RENAME TO contacts')
         console.log('[Migration v20] contacts.email UNIQUE constraint removed')
       } else {
         console.log('[Migration v20] contacts.email UNIQUE constraint already absent')
@@ -1265,8 +1257,8 @@ const MIGRATIONS: Record<number, () => void> = {
     // 2. spec-010: Add search indexes for knowledge table
     console.log('[Migration v20] Adding search indexes')
     try {
-      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_title ON knowledge_captures(title)')
-      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_summary ON knowledge_captures(summary)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_title ON knowledge_captures(title)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_summary ON knowledge_captures(summary)')
       console.log('[Migration v20] Search indexes created')
     } catch (e) {
       console.warn('[Migration v20] Search index creation failed:', e)
@@ -1274,13 +1266,11 @@ const MIGRATIONS: Record<number, () => void> = {
 
     // 3. spec-014: Add transcription queue progress columns
     console.log('[Migration v20] Adding transcription queue columns')
-    const tqTableInfo = database.exec('PRAGMA table_info(transcription_queue)')
-    if (tqTableInfo.length > 0 && tqTableInfo[0].values) {
-      const tqColumns = tqTableInfo[0].values.map((row: any) => row[1])
-
+    const tqColumns = (database.pragma('table_info(transcription_queue)') as Array<{ name: string }>).map(row => row.name)
+    if (tqColumns.length > 0) {
       if (!tqColumns.includes('retry_count')) {
         try {
-          database.run('ALTER TABLE transcription_queue ADD COLUMN retry_count INTEGER DEFAULT 0')
+          database.exec('ALTER TABLE transcription_queue ADD COLUMN retry_count INTEGER DEFAULT 0')
           console.log('[Migration v20] Added retry_count column')
         } catch (e) {
           console.warn('[Migration v20] Failed to add retry_count:', e)
@@ -1289,7 +1279,7 @@ const MIGRATIONS: Record<number, () => void> = {
 
       if (!tqColumns.includes('progress')) {
         try {
-          database.run('ALTER TABLE transcription_queue ADD COLUMN progress INTEGER DEFAULT 0')
+          database.exec('ALTER TABLE transcription_queue ADD COLUMN progress INTEGER DEFAULT 0')
           console.log('[Migration v20] Added progress column')
         } catch (e) {
           console.warn('[Migration v20] Failed to add progress:', e)
@@ -1300,7 +1290,7 @@ const MIGRATIONS: Record<number, () => void> = {
     // 4. spec-007: Add download_queue table
     console.log('[Migration v20] Creating download_queue table')
     try {
-      database.run(`
+      database.exec(`
         CREATE TABLE IF NOT EXISTS download_queue (
           id TEXT PRIMARY KEY,
           filename TEXT NOT NULL UNIQUE,
@@ -1347,16 +1337,16 @@ const MIGRATIONS: Record<number, () => void> = {
             AND r.meeting_id IS NOT NULL
           )
       `
-      database.run(sql)
+      database.exec(sql)
 
       // Log how many were updated
-      const updated = database.exec(`
+      const updated = database.prepare(`
         SELECT COUNT(*) as count
         FROM knowledge_captures
         WHERE meeting_id IS NOT NULL
           AND correlation_method = 'recording_migration'
-      `)
-      const count = updated.length > 0 && updated[0].values.length > 0 ? updated[0].values[0][0] : 0
+      `).get() as { count: number } | undefined
+      const count = updated?.count ?? 0
       console.log(`[Migration v21] Backfilled meeting_id for ${count} knowledge captures`)
     } catch (e) {
       console.warn('[Migration v21] Failed to backfill meeting_id:', e)
@@ -1373,38 +1363,45 @@ const MIGRATIONS: Record<number, () => void> = {
     const database = getDatabase()
 
     try {
-      const legacyRows = database.exec("SELECT id FROM recordings WHERE id LIKE 'rec_%'")
-      if (legacyRows.length === 0 || legacyRows[0].values.length === 0) {
+      const legacyRows = database.prepare("SELECT id FROM recordings WHERE id LIKE 'rec_%'").raw().all() as Array<[string]>
+      if (legacyRows.length === 0) {
         console.log('[Migration v22] No legacy rec_ IDs found — nothing to migrate')
         return
       }
 
-      const legacyIds = legacyRows[0].values.map(row => row[0] as string)
+      const legacyIds = legacyRows.map(row => row[0])
       console.log(`[Migration v22] Found ${legacyIds.length} legacy rec_ IDs to migrate`)
+
+      const updTq = database.prepare('UPDATE transcription_queue SET recording_id = ? WHERE recording_id = ?')
+      const updTr = database.prepare('UPDATE transcripts SET recording_id = ? WHERE recording_id = ?')
+      const updVe = database.prepare('UPDATE vector_embeddings SET transcript_id = ? WHERE transcript_id = ?')
+      const updRmc = database.prepare('UPDATE recording_meeting_candidates SET recording_id = ? WHERE recording_id = ?')
+      const selRec = database.prepare('SELECT * FROM recordings WHERE id = ?')
+      const delRec = database.prepare('DELETE FROM recordings WHERE id = ?')
 
       let migratedCount = 0
       for (const oldId of legacyIds) {
         const newId = randomUUID()
 
         // Update foreign keys first (transcription_queue, transcriptions, etc.)
-        database.run('UPDATE transcription_queue SET recording_id = ? WHERE recording_id = ?', [newId, oldId])
-        database.run('UPDATE transcripts SET recording_id = ? WHERE recording_id = ?', [newId, oldId])
-        database.run('UPDATE vector_embeddings SET transcript_id = ? WHERE transcript_id = ?', [newId, oldId])
-        database.run('UPDATE recording_meeting_candidates SET recording_id = ? WHERE recording_id = ?', [newId, oldId])
+        updTq.run(newId, oldId)
+        updTr.run(newId, oldId)
+        updVe.run(newId, oldId)
+        updRmc.run(newId, oldId)
 
         // SQLite doesn't allow updating a PRIMARY KEY directly — use INSERT + DELETE
-        const recRows = database.exec('SELECT * FROM recordings WHERE id = ?', [oldId])
-        if (recRows.length > 0 && recRows[0].values.length > 0) {
-          const columns = recRows[0].columns
-          const values = [...recRows[0].values[0]]
+        const columns = selRec.columns().map(c => c.name)
+        const rowValues = selRec.raw().get(oldId) as unknown[] | undefined
+        if (rowValues) {
+          const values = [...rowValues]
           const idIndex = columns.indexOf('id')
           if (idIndex !== -1) {
             values[idIndex] = newId
           }
           const placeholders = columns.map(() => '?').join(', ')
           const columnList = columns.join(', ')
-          database.run(`INSERT INTO recordings (${columnList}) VALUES (${placeholders})`, values)
-          database.run('DELETE FROM recordings WHERE id = ?', [oldId])
+          database.prepare(`INSERT INTO recordings (${columnList}) VALUES (${placeholders})`).run(...values)
+          delRec.run(oldId)
           migratedCount++
         }
       }
@@ -1424,37 +1421,45 @@ const MIGRATIONS: Record<number, () => void> = {
     const database = getDatabase()
 
     try {
-      const legacyRows = database.exec("SELECT id FROM recordings WHERE id LIKE 'rec_%'")
-      if (legacyRows.length === 0 || legacyRows[0].values.length === 0) {
+      const legacyRows = database.prepare("SELECT id FROM recordings WHERE id LIKE 'rec_%'").raw().all() as Array<[string]>
+      if (legacyRows.length === 0) {
         console.log('[Migration v23] No legacy rec_ IDs found — v22 may have partially succeeded or none existed')
         return
       }
 
-      const legacyIds = legacyRows[0].values.map(row => row[0] as string)
+      const legacyIds = legacyRows.map(row => row[0])
       console.log(`[Migration v23] Found ${legacyIds.length} legacy rec_ IDs to migrate`)
+
+      const updTq = database.prepare('UPDATE transcription_queue SET recording_id = ? WHERE recording_id = ?')
+      const updTr = database.prepare('UPDATE transcripts SET recording_id = ? WHERE recording_id = ?')
+      const updRmc = database.prepare('UPDATE recording_meeting_candidates SET recording_id = ? WHERE recording_id = ?')
+      const updQa = database.prepare('UPDATE quality_assessments SET recording_id = ? WHERE recording_id = ?')
+      const updKc = database.prepare('UPDATE knowledge_captures SET source_recording_id = ? WHERE source_recording_id = ?')
+      const selRec = database.prepare('SELECT * FROM recordings WHERE id = ?')
+      const delRec = database.prepare('DELETE FROM recordings WHERE id = ?')
 
       let migratedCount = 0
       for (const oldId of legacyIds) {
         const newId = randomUUID()
 
-        database.run('UPDATE transcription_queue SET recording_id = ? WHERE recording_id = ?', [newId, oldId])
-        database.run('UPDATE transcripts SET recording_id = ? WHERE recording_id = ?', [newId, oldId])
-        database.run('UPDATE recording_meeting_candidates SET recording_id = ? WHERE recording_id = ?', [newId, oldId])
-        database.run('UPDATE quality_assessments SET recording_id = ? WHERE recording_id = ?', [newId, oldId])
-        database.run('UPDATE knowledge_captures SET source_recording_id = ? WHERE source_recording_id = ?', [newId, oldId])
+        updTq.run(newId, oldId)
+        updTr.run(newId, oldId)
+        updRmc.run(newId, oldId)
+        updQa.run(newId, oldId)
+        updKc.run(newId, oldId)
 
-        const recRows = database.exec('SELECT * FROM recordings WHERE id = ?', [oldId])
-        if (recRows.length > 0 && recRows[0].values.length > 0) {
-          const columns = recRows[0].columns
-          const values = [...recRows[0].values[0]]
+        const columns = selRec.columns().map(c => c.name)
+        const rowValues = selRec.raw().get(oldId) as unknown[] | undefined
+        if (rowValues) {
+          const values = [...rowValues]
           const idIndex = columns.indexOf('id')
           if (idIndex !== -1) {
             values[idIndex] = newId
           }
           const placeholders = columns.map(() => '?').join(', ')
           const columnList = columns.join(', ')
-          database.run(`INSERT INTO recordings (${columnList}) VALUES (${placeholders})`, values)
-          database.run('DELETE FROM recordings WHERE id = ?', [oldId])
+          database.prepare(`INSERT INTO recordings (${columnList}) VALUES (${placeholders})`).run(...values)
+          delRec.run(oldId)
           migratedCount++
         }
       }
@@ -1472,16 +1477,16 @@ const MIGRATIONS: Record<number, () => void> = {
     try {
       // SQLite cannot ALTER CHECK constraints -- must recreate the table
       // Check if migration is needed (idempotent)
-      const tableInfoResult = database.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='download_queue'")
-      if (tableInfoResult.length > 0 && tableInfoResult[0].values.length > 0) {
-        const createSql = String(tableInfoResult[0].values[0][0])
+      const tableInfoResult = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='download_queue'").get() as { sql: string } | undefined
+      if (tableInfoResult) {
+        const createSql = String(tableInfoResult.sql)
         if (createSql.includes("'cancelled'")) {
           console.log('[Migration v24] download_queue already has cancelled status, skipping')
           return
         }
       }
 
-      database.run(`
+      database.exec(`
         CREATE TABLE IF NOT EXISTS download_queue_new (
           id TEXT PRIMARY KEY,
           filename TEXT NOT NULL UNIQUE,
@@ -1497,14 +1502,14 @@ const MIGRATIONS: Record<number, () => void> = {
       `)
 
       // Copy existing data
-      database.run(`
+      database.exec(`
         INSERT OR IGNORE INTO download_queue_new
         SELECT id, filename, file_size, progress, status, error, started_at, completed_at, recording_date, created_at
         FROM download_queue
       `)
 
-      database.run('DROP TABLE IF EXISTS download_queue')
-      database.run('ALTER TABLE download_queue_new RENAME TO download_queue')
+      database.exec('DROP TABLE IF EXISTS download_queue')
+      database.exec('ALTER TABLE download_queue_new RENAME TO download_queue')
 
       console.log('Migration v24 complete: download_queue CHECK constraint updated')
     } catch (e) {
@@ -1526,7 +1531,7 @@ const MIGRATIONS: Record<number, () => void> = {
     ]
     for (const sql of columnsToAdd) {
       try {
-        database.run(sql)
+        database.exec(sql)
       } catch (e) {
         const msg = (e as Error).message
         if (msg.includes('duplicate column name')) {
@@ -1538,7 +1543,7 @@ const MIGRATIONS: Record<number, () => void> = {
       }
     }
 
-    database.run(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS sync_baseline_files (
         device_serial TEXT NOT NULL,
         filename      TEXT NOT NULL,
@@ -1553,7 +1558,7 @@ const MIGRATIONS: Record<number, () => void> = {
     // summarization_model. Rows with NULL summary (the historical silent-failure
     // path) keep a NULL marker: they stay Stage-2-resumable and are recovered
     // via Re-summarize (spec §5.6/§5.8).
-    database.run(`
+    database.exec(`
       UPDATE transcripts
       SET summarization_provider = 'gemini', summarization_model = transcription_model
       WHERE full_text IS NOT NULL AND summary IS NOT NULL AND summarization_provider IS NULL
@@ -1576,7 +1581,7 @@ const MIGRATIONS: Record<number, () => void> = {
     const columnsToAdd = ['ALTER TABLE transcripts ADD COLUMN turns TEXT']
     for (const sql of columnsToAdd) {
       try {
-        database.run(sql)
+        database.exec(sql)
       } catch (e) {
         const msg = (e as Error).message
         if (msg.includes('duplicate column name')) {
@@ -1587,7 +1592,7 @@ const MIGRATIONS: Record<number, () => void> = {
       }
     }
 
-    database.run(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS recording_speakers (
         recording_id TEXT NOT NULL,
         file_label TEXT NOT NULL,
@@ -1599,7 +1604,7 @@ const MIGRATIONS: Record<number, () => void> = {
       )
     `)
 
-    database.run(`
+    database.exec(`
       CREATE TABLE IF NOT EXISTS voiceprints (
         id TEXT PRIMARY KEY,
         contact_id TEXT NOT NULL,
@@ -1625,7 +1630,7 @@ const MIGRATIONS: Record<number, () => void> = {
       'ALTER TABLE contacts ADD COLUMN is_self INTEGER NOT NULL DEFAULT 0'
     ]
     for (const sql of columnsToAdd) {
-      try { database.run(sql) } catch (e) {
+      try { database.exec(sql) } catch (e) {
         const msg = (e as Error).message
         if (msg.includes('duplicate column name')) console.log(`Column already exists: ${sql}`)
         else console.warn(`[Migration v27] ALTER failed (${sql}):`, e)
@@ -1633,12 +1638,12 @@ const MIGRATIONS: Record<number, () => void> = {
     }
 
     // (b) new tables (idempotent)
-    database.run(`CREATE TABLE IF NOT EXISTS recording_label_embeddings (
+    database.exec(`CREATE TABLE IF NOT EXISTS recording_label_embeddings (
       id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, transcript_id TEXT, diarization_run_id TEXT,
       file_label TEXT NOT NULL, model_id TEXT NOT NULL, model_version INTEGER DEFAULT 1, dim INTEGER NOT NULL,
       embedding BLOB NOT NULL, clean_speech_ms INTEGER, turn_count INTEGER, quality_score REAL, status TEXT,
       created_at TEXT NOT NULL, updated_at TEXT)`)
-    database.run(`CREATE TABLE IF NOT EXISTS speaker_suggestions (
+    database.exec(`CREATE TABLE IF NOT EXISTS speaker_suggestions (
       id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, transcript_id TEXT,
       kind TEXT NOT NULL CHECK(kind IN ('identity','merge','mixed','backstop')),
       target_label TEXT, target_label_2 TEXT, contact_id TEXT, score REAL, rank INTEGER, rationale TEXT,
@@ -1646,19 +1651,19 @@ const MIGRATIONS: Record<number, () => void> = {
       created_at TEXT NOT NULL, resolved_at TEXT)`)
 
     // (c) recording_speakers.source CHECK rebuild (sql.js can't ALTER a CHECK — table-rebuild, cf. MIGRATIONS[24])
-    database.run(`CREATE TABLE IF NOT EXISTS recording_speakers_new (
+    database.exec(`CREATE TABLE IF NOT EXISTS recording_speakers_new (
       recording_id TEXT NOT NULL, file_label TEXT NOT NULL, contact_id TEXT, confidence REAL,
       source TEXT NOT NULL CHECK(source IN ('user','auto','confirmed','self_auto','suggestion_confirmed')) DEFAULT 'user',
       created_at TEXT NOT NULL, PRIMARY KEY (recording_id, file_label))`)
-    database.run(`INSERT OR IGNORE INTO recording_speakers_new
+    database.exec(`INSERT OR IGNORE INTO recording_speakers_new
       SELECT recording_id, file_label, contact_id, confidence, source, created_at FROM recording_speakers`)
-    database.run('DROP TABLE IF EXISTS recording_speakers')
-    database.run('ALTER TABLE recording_speakers_new RENAME TO recording_speakers')
+    database.exec('DROP TABLE IF EXISTS recording_speakers')
+    database.exec('ALTER TABLE recording_speakers_new RENAME TO recording_speakers')
 
     // voiceprints created_from CHECK rebuild (sql.js can't ALTER-ADD a CHECK; make the upgraded
     // shape identical to the fresh SCHEMA — cf. the recording_speakers rebuild above). No index
     // on voiceprints, so none to recreate.
-    database.run(`CREATE TABLE IF NOT EXISTS voiceprints_new (
+    database.exec(`CREATE TABLE IF NOT EXISTS voiceprints_new (
       id TEXT PRIMARY KEY,
       contact_id TEXT NOT NULL,
       model_id TEXT NOT NULL,
@@ -1673,11 +1678,11 @@ const MIGRATIONS: Record<number, () => void> = {
       created_from TEXT CHECK(created_from IN ('manual','confirmed','self','import')) DEFAULT 'manual',
       disabled_at TEXT,
       superseded_by TEXT)`)
-    database.run(`INSERT OR IGNORE INTO voiceprints_new
+    database.exec(`INSERT OR IGNORE INTO voiceprints_new
       (id, contact_id, model_id, dim, embedding, created_at)
       SELECT id, contact_id, model_id, dim, embedding, created_at FROM voiceprints`)
-    database.run('DROP TABLE IF EXISTS voiceprints')
-    database.run('ALTER TABLE voiceprints_new RENAME TO voiceprints')
+    database.exec('DROP TABLE IF EXISTS voiceprints')
+    database.exec('ALTER TABLE voiceprints_new RENAME TO voiceprints')
 
     console.log('Migration v27 complete')
   },
@@ -1689,11 +1694,10 @@ const MIGRATIONS: Record<number, () => void> = {
     console.log('Running migration to schema v28: speaker_suggestions diarization_run_id')
     const database = getDatabase()
 
-    const tableInfo = database.exec("PRAGMA table_info(speaker_suggestions)")
-    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map(col => col[1]) : []
+    const cols = (database.pragma('table_info(speaker_suggestions)') as Array<{ name: string }>).map(col => col.name)
     if (!cols.includes('diarization_run_id')) {
       try {
-        database.run('ALTER TABLE speaker_suggestions ADD COLUMN diarization_run_id TEXT')
+        database.exec('ALTER TABLE speaker_suggestions ADD COLUMN diarization_run_id TEXT')
         console.log('[Migration v28] Added diarization_run_id to speaker_suggestions')
       } catch (e) {
         console.warn('[Migration v28] ALTER failed:', e)
@@ -1711,11 +1715,10 @@ const MIGRATIONS: Record<number, () => void> = {
     console.log('Running migration to schema v29: speaker_suggestions contact_id_2')
     const database = getDatabase()
 
-    const tableInfo = database.exec("PRAGMA table_info(speaker_suggestions)")
-    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map(col => col[1]) : []
+    const cols = (database.pragma('table_info(speaker_suggestions)') as Array<{ name: string }>).map(col => col.name)
     if (!cols.includes('contact_id_2')) {
       try {
-        database.run('ALTER TABLE speaker_suggestions ADD COLUMN contact_id_2 TEXT')
+        database.exec('ALTER TABLE speaker_suggestions ADD COLUMN contact_id_2 TEXT')
         console.log('[Migration v29] Added contact_id_2 to speaker_suggestions')
       } catch (e) {
         console.warn('[Migration v29] ALTER failed:', e)
@@ -1733,7 +1736,7 @@ const MIGRATIONS: Record<number, () => void> = {
     console.log('Running migration to schema v30: diarization_runs instrumentation')
     const database = getDatabase()
 
-    database.run(`CREATE TABLE IF NOT EXISTS diarization_runs (
+    database.exec(`CREATE TABLE IF NOT EXISTS diarization_runs (
       id TEXT PRIMARY KEY,
       recording_id TEXT NOT NULL,
       transcript_id TEXT,
@@ -1750,13 +1753,12 @@ const MIGRATIONS: Record<number, () => void> = {
       policy_version INTEGER,
       created_at TEXT NOT NULL
     )`)
-    database.run(`CREATE INDEX IF NOT EXISTS idx_diar_runs_recording ON diarization_runs(recording_id, created_at)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_diar_runs_recording ON diarization_runs(recording_id, created_at)`)
 
-    const tableInfo = database.exec("PRAGMA table_info(transcripts)")
-    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map((col) => col[1]) : []
+    const cols = (database.pragma('table_info(transcripts)') as Array<{ name: string }>).map(col => col.name)
     if (!cols.includes('diarization_run_id')) {
       try {
-        database.run('ALTER TABLE transcripts ADD COLUMN diarization_run_id TEXT')
+        database.exec('ALTER TABLE transcripts ADD COLUMN diarization_run_id TEXT')
         console.log('[Migration v30] Added diarization_run_id to transcripts')
       } catch (e) {
         console.warn('[Migration v30] ALTER failed:', e)
@@ -1784,12 +1786,10 @@ const MIGRATIONS: Record<number, () => void> = {
     const database = getDatabase()
 
     try {
-      const tableInfo = database.exec(
+      const tableInfo = database.prepare(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_captures'"
-      )
-      const createSql = tableInfo.length > 0 && tableInfo[0].values.length > 0
-        ? (tableInfo[0].values[0][0] as string)
-        : ''
+      ).get() as { sql: string } | undefined
+      const createSql = tableInfo?.sql ?? ''
 
       // Idempotent: only rebuild if the category CHECK is still present.
       if (createSql.includes("category IN ('meeting'") || /category[^,]*CHECK/i.test(createSql)) {
@@ -1802,7 +1802,7 @@ const MIGRATIONS: Record<number, () => void> = {
           captured_at, created_at, updated_at, deleted_at
         `.replace(/\s+/g, ' ').trim()
 
-        database.run(`
+        database.exec(`
           CREATE TABLE knowledge_captures_new (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
@@ -1828,20 +1828,20 @@ const MIGRATIONS: Record<number, () => void> = {
           )
         `)
         // Explicit column list both sides → preserves every row + its category verbatim.
-        database.run(`INSERT INTO knowledge_captures_new (${cols}) SELECT ${cols} FROM knowledge_captures`)
-        database.run('DROP TABLE knowledge_captures')
-        database.run('ALTER TABLE knowledge_captures_new RENAME TO knowledge_captures')
+        database.exec(`INSERT INTO knowledge_captures_new (${cols}) SELECT ${cols} FROM knowledge_captures`)
+        database.exec('DROP TABLE knowledge_captures')
+        database.exec('ALTER TABLE knowledge_captures_new RENAME TO knowledge_captures')
         console.log('[Migration v31] knowledge_captures.category CHECK removed (rows preserved)')
       } else {
         console.log('[Migration v31] category CHECK already absent — no rebuild needed')
       }
 
       // Recreate ALL indexes the table rebuild dropped (DROP TABLE drops its indexes).
-      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_category ON knowledge_captures(category)')
-      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_quality ON knowledge_captures(quality_rating)')
-      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_status ON knowledge_captures(status)')
-      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_title ON knowledge_captures(title)')
-      database.run('CREATE INDEX IF NOT EXISTS idx_knowledge_summary ON knowledge_captures(summary)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_category ON knowledge_captures(category)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_quality ON knowledge_captures(quality_rating)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_captures_status ON knowledge_captures(status)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_title ON knowledge_captures(title)')
+      database.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_summary ON knowledge_captures(summary)')
     } catch (e) {
       console.warn('[Migration v31] CHECK-drop rebuild failed:', e)
     }
@@ -1856,12 +1856,12 @@ const MIGRATIONS: Record<number, () => void> = {
     // a fresh DB (already created by the canonical SCHEMA) and an upgraded DB converge.
     console.log('Running migration to schema v32: recording_window_embeddings')
     const database = getDatabase()
-    database.run(`CREATE TABLE IF NOT EXISTS recording_window_embeddings (
+    database.exec(`CREATE TABLE IF NOT EXISTS recording_window_embeddings (
       id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, transcript_id TEXT, diarization_run_id TEXT,
       file_label TEXT NOT NULL, window_index INTEGER NOT NULL, fingerprint TEXT NOT NULL,
       model_id TEXT NOT NULL, model_version INTEGER NOT NULL DEFAULT 1, dim INTEGER NOT NULL,
       embedding BLOB NOT NULL, created_at TEXT NOT NULL)`)
-    database.run(`CREATE INDEX IF NOT EXISTS idx_rwe_recording_label
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_rwe_recording_label
       ON recording_window_embeddings(recording_id, file_label)`)
     console.log('Migration v32 complete')
   },
@@ -1870,34 +1870,46 @@ const MIGRATIONS: Record<number, () => void> = {
     // v33: Summarization templates — 2 tables + indexes + 3 transcripts columns + seeded Default.
     console.log('Running migration to schema v33: summarization templates')
     const database = getDatabase()
-    database.run(`CREATE TABLE IF NOT EXISTS summarization_templates (
+    database.exec(`CREATE TABLE IF NOT EXISTS summarization_templates (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
       instructions TEXT NOT NULL, example_triggers TEXT,
       is_default INTEGER NOT NULL DEFAULT 0, is_builtin INTEGER NOT NULL DEFAULT 0,
       enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
-    database.run(`CREATE INDEX IF NOT EXISTS idx_summ_templates_enabled ON summarization_templates(enabled, is_builtin)`)
-    database.run(`CREATE TABLE IF NOT EXISTS transcript_template_runs (
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_summ_templates_enabled ON summarization_templates(enabled, is_builtin)`)
+    database.exec(`CREATE TABLE IF NOT EXISTS transcript_template_runs (
       id TEXT PRIMARY KEY, recording_id TEXT NOT NULL, template_id TEXT,
       selection_kind TEXT NOT NULL, selection_confidence REAL NOT NULL DEFAULT 0,
       runnerup_confidence REAL, candidate_scores_json TEXT, selection_reason TEXT,
       selector_provider TEXT, selector_model TEXT, selector_elapsed_ms INTEGER,
       full_text_hash TEXT, suggested_template_json TEXT, applied_instructions_hash TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
-    database.run(`CREATE INDEX IF NOT EXISTS idx_template_runs_recording ON transcript_template_runs(recording_id, created_at DESC)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_template_runs_recording ON transcript_template_runs(recording_id, created_at DESC)`)
     for (const sql of [
       'ALTER TABLE transcripts ADD COLUMN summarization_template_id TEXT',
       'ALTER TABLE transcripts ADD COLUMN summarization_template_name TEXT',
       'ALTER TABLE transcripts ADD COLUMN summarization_template_hash TEXT'
     ]) {
-      try { database.run(sql) } catch { console.log(`Column may already exist: ${sql}`) }
+      try { database.exec(sql) } catch { console.log(`Column may already exist: ${sql}`) }
     }
-    database.run(`INSERT OR IGNORE INTO summarization_templates
+    database.exec(`INSERT OR IGNORE INTO summarization_templates
       (id, name, description, instructions, is_default, is_builtin, enabled)
       VALUES ('builtin-default', 'Default', 'Base summarization (no extra emphasis).', '', 0, 1, 1)`)
     console.log('Migration v33 complete')
-  }
+  },
+
+  34: () => {
+    // v34: hosted-app access control (invite list). Additive — new table only.
+    console.log('Running migration to schema v34: allowed_users')
+    getDatabase().exec(`CREATE TABLE IF NOT EXISTS allowed_users (
+      email TEXT PRIMARY KEY,
+      role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked')),
+      invited_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+    console.log('Migration v34 complete')
+  },
 
 }
 
@@ -1909,7 +1921,7 @@ function runMigrations(currentVersion: number): void {
       migration()
     }
     // Record the migration
-    getDatabase().run('INSERT OR REPLACE INTO schema_version (version) VALUES (?)', [v])
+    getDatabase().prepare('INSERT OR REPLACE INTO schema_version (version) VALUES (?)').run(v)
   }
 }
 
@@ -1925,13 +1937,13 @@ export async function initializeDatabase(): Promise<void> {
   dbPath = getDatabasePath()
 
   try {
-    const SQL = await initSqlJs()
-    if (existsSync(dbPath)) {
-      const fileBuffer = readFileSync(dbPath)
-      db = new SQL.Database(fileBuffer)
-    } else {
-      db = new SQL.Database()
-    }
+    db = new Database(dbPath)            // opens existing file or creates a new one
+    db.pragma('journal_mode = WAL')      // concurrent readers + one safe writer
+    db.pragma('foreign_keys = OFF')      // foreign_keys kept OFF to match the prior sql.js runtime (SQLite/sql.js default FK enforcement off;
+                                         // the original code never enabled it). NOTE: better-sqlite3 defaults FK ON, so this explicit OFF is
+                                         // required for faithful behavior. Rebuild-style migrations (v31, v20: DROP TABLE + rename) RELY on
+                                         // FK being off — with FK on they cascade-delete ON DELETE CASCADE children. If FK enforcement is ever
+                                         // enabled deliberately, those rebuild migrations must each be wrapped in their own foreign_keys=OFF/ON.
 
     const database = getDatabase()
     const statements = SCHEMA.split(';').map(s => s.trim()).filter(s => s.length > 0)
@@ -1946,7 +1958,7 @@ export async function initializeDatabase(): Promise<void> {
       // block comments / CRLF that a leading-comment strip would not.
       if (sql.toUpperCase().includes('CREATE TABLE')) {
         try {
-          database.run(sql)
+          database.exec(sql)
         } catch (e) {
           console.warn(`[Database] Table creation warning: ${(e as Error).message}`)
         }
@@ -1958,8 +1970,7 @@ export async function initializeDatabase(): Promise<void> {
     console.log('[Database] Phase 2: Aligning table structures...')
     
     // Repair Recordings
-    const recordingsInfo = database.exec("PRAGMA table_info(recordings)")
-    const recCols = recordingsInfo.length > 0 && recordingsInfo[0].values ? recordingsInfo[0].values.map(col => col[1]) : []
+    const recCols = (database.pragma('table_info(recordings)') as Array<{ name: string }>).map(c => c.name)
     const recordingRepairs = [
       { name: 'migrated_to_capture_id', def: "TEXT" },
       { name: 'migration_status', def: "TEXT CHECK(migration_status IN ('pending', 'migrated', 'skipped', 'error')) DEFAULT 'pending'" },
@@ -1968,13 +1979,12 @@ export async function initializeDatabase(): Promise<void> {
     for (const col of recordingRepairs) {
       if (!recCols.includes(col.name)) {
         console.log(`[Database] Repairing recordings: adding ${col.name}`)
-        try { database.run(`ALTER TABLE recordings ADD COLUMN ${col.name} ${col.def}`) } catch {}
+        try { database.exec(`ALTER TABLE recordings ADD COLUMN ${col.name} ${col.def}`) } catch {}
       }
     }
 
     // Repair Knowledge Captures
-    const captureInfo = database.exec("PRAGMA table_info(knowledge_captures)")
-    const capCols = captureInfo.length > 0 && captureInfo[0].values ? captureInfo[0].values.map(col => col[1]) : []
+    const capCols = (database.pragma('table_info(knowledge_captures)') as Array<{ name: string }>).map(c => c.name)
     const knowledgeRepairs = [
       // v31: relaxed — no CHECK (Smart Labels are user-defined; validated in app layer)
       { name: 'category', def: "category TEXT DEFAULT 'meeting'" },
@@ -1993,14 +2003,13 @@ export async function initializeDatabase(): Promise<void> {
     for (const col of knowledgeRepairs) {
       if (!capCols.includes(col.name)) {
         console.log(`[Database] Repairing knowledge_captures: adding ${col.name}`)
-        try { database.run(`ALTER TABLE knowledge_captures ADD COLUMN ${col.def}`) } catch {}
+        try { database.exec(`ALTER TABLE knowledge_captures ADD COLUMN ${col.def}`) } catch {}
       }
     }
 
     // Repair transcription_queue (spec-014: retry persistence and real-time progress)
-    const queueInfo = database.exec("PRAGMA table_info(transcription_queue)")
-    if (queueInfo.length > 0 && queueInfo[0].values) {
-      const queueCols = queueInfo[0].values.map(col => col[1])
+    const queueCols = (database.pragma('table_info(transcription_queue)') as Array<{ name: string }>).map(c => c.name)
+    if (queueCols.length > 0) {
       const queueRepairs = [
         { name: 'retry_count', def: 'INTEGER DEFAULT 0' },
         { name: 'progress', def: 'INTEGER DEFAULT 0' }
@@ -2008,15 +2017,14 @@ export async function initializeDatabase(): Promise<void> {
       for (const col of queueRepairs) {
         if (!queueCols.includes(col.name)) {
           console.log(`[Database] Repairing transcription_queue: adding ${col.name}`)
-          try { database.run(`ALTER TABLE transcription_queue ADD COLUMN ${col.name} ${col.def}`) } catch {}
+          try { database.exec(`ALTER TABLE transcription_queue ADD COLUMN ${col.name} ${col.def}`) } catch {}
         }
       }
     }
 
     // Repair chat_messages (AI-15: columns referenced by assistant mapper)
-    const chatMsgInfo = database.exec("PRAGMA table_info(chat_messages)")
-    if (chatMsgInfo.length > 0 && chatMsgInfo[0].values) {
-      const chatCols = chatMsgInfo[0].values.map(col => col[1])
+    const chatCols = (database.pragma('table_info(chat_messages)') as Array<{ name: string }>).map(c => c.name)
+    if (chatCols.length > 0) {
       const chatRepairs = [
         { name: 'edited_at', def: 'TEXT' },
         { name: 'original_content', def: 'TEXT' },
@@ -2026,36 +2034,34 @@ export async function initializeDatabase(): Promise<void> {
       for (const col of chatRepairs) {
         if (!chatCols.includes(col.name)) {
           console.log(`[Database] Repairing chat_messages: adding ${col.name}`)
-          try { database.run(`ALTER TABLE chat_messages ADD COLUMN ${col.name} ${col.def}`) } catch {}
+          try { database.exec(`ALTER TABLE chat_messages ADD COLUMN ${col.name} ${col.def}`) } catch {}
         }
       }
     }
 
     // Repair speaker_suggestions (v28: diarization_run_id; v29: contact_id_2)
-    const suggestionsInfo = database.exec("PRAGMA table_info(speaker_suggestions)")
-    if (suggestionsInfo.length > 0 && suggestionsInfo[0].values) {
-      const suggestionCols = suggestionsInfo[0].values.map(col => col[1])
+    const suggestionCols = (database.pragma('table_info(speaker_suggestions)') as Array<{ name: string }>).map(c => c.name)
+    if (suggestionCols.length > 0) {
       if (!suggestionCols.includes('diarization_run_id')) {
         console.log('[Database] Repairing speaker_suggestions: adding diarization_run_id')
-        try { database.run('ALTER TABLE speaker_suggestions ADD COLUMN diarization_run_id TEXT') } catch {}
+        try { database.exec('ALTER TABLE speaker_suggestions ADD COLUMN diarization_run_id TEXT') } catch {}
       }
       if (!suggestionCols.includes('contact_id_2')) {
         console.log('[Database] Repairing speaker_suggestions: adding contact_id_2')
-        try { database.run('ALTER TABLE speaker_suggestions ADD COLUMN contact_id_2 TEXT') } catch {}
+        try { database.exec('ALTER TABLE speaker_suggestions ADD COLUMN contact_id_2 TEXT') } catch {}
       }
     }
 
     // --- PHASE 3: VERSIONED MIGRATIONS ---
-    const versionResult = database.exec('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')
-    const currentVersion = versionResult.length > 0 && versionResult[0].values.length > 0
-        ? (versionResult[0].values[0][0] as number)
-        : 0
+    const versionRow = database.prepare('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')
+      .get() as { version: number } | undefined
+    const currentVersion = versionRow?.version ?? 0
 
     if (currentVersion < SCHEMA_VERSION) {
       console.log(`[Database] Phase 3: Migrating v${currentVersion} -> v${SCHEMA_VERSION}`)
       runMigrations(currentVersion)
     } else if (currentVersion === 0) {
-      database.run('INSERT INTO schema_version (version) VALUES (?)', [SCHEMA_VERSION])
+      database.prepare('INSERT INTO schema_version (version) VALUES (?)').run(SCHEMA_VERSION)
     }
 
     // Structural self-heal for diarization instrumentation (v30) — AFTER migrations
@@ -2067,7 +2073,7 @@ export async function initializeDatabase(): Promise<void> {
     console.log('[Database] Phase 4: Finalizing schema and indexes...')
     for (const sql of statements) {
       try {
-        database.run(sql)
+        database.exec(sql)
       } catch (e) {
         // Log but don't crash the boot if a statement (like an existing index) fails
         const msg = (e as Error).message
@@ -2086,14 +2092,11 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 export function saveDatabase(): void {
-  if (db && dbPath) {
-    const data = db.export()
-    const buffer = Buffer.from(data)
-    writeFileSync(dbPath, buffer)
-  }
+  // No-op: better-sqlite3 persists synchronously to disk (WAL). Retained so the
+  // many existing callers across services keep compiling without edits.
 }
 
-export function getDatabase(): SqlJsDatabase {
+export function getDatabase(): Database.Database {
   if (!db) {
     throw new Error('Database not initialized')
   }
@@ -2111,7 +2114,7 @@ export function getDatabase(): SqlJsDatabase {
 export function ensureDiarizationSchema(): void {
   const database = getDatabase()
   try {
-    database.run(`CREATE TABLE IF NOT EXISTS diarization_runs (
+    database.exec(`CREATE TABLE IF NOT EXISTS diarization_runs (
       id TEXT PRIMARY KEY,
       recording_id TEXT NOT NULL,
       transcript_id TEXT,
@@ -2128,13 +2131,12 @@ export function ensureDiarizationSchema(): void {
       policy_version INTEGER,
       created_at TEXT NOT NULL
     )`)
-    database.run(`CREATE INDEX IF NOT EXISTS idx_diar_runs_recording ON diarization_runs(recording_id, created_at)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_diar_runs_recording ON diarization_runs(recording_id, created_at)`)
 
-    const tableInfo = database.exec("PRAGMA table_info(transcripts)")
-    const cols = tableInfo.length > 0 && tableInfo[0].values ? tableInfo[0].values.map((col) => col[1]) : []
+    const cols = (database.pragma('table_info(transcripts)') as Array<{ name: string }>).map(c => c.name)
     if (!cols.includes('diarization_run_id')) {
       try {
-        database.run('ALTER TABLE transcripts ADD COLUMN diarization_run_id TEXT')
+        database.exec('ALTER TABLE transcripts ADD COLUMN diarization_run_id TEXT')
         console.log('[ensureDiarizationSchema] Added diarization_run_id to transcripts')
       } catch (e) {
         console.warn('[ensureDiarizationSchema] ALTER failed:', e)
@@ -2147,7 +2149,6 @@ export function ensureDiarizationSchema(): void {
 
 export function closeDatabase(): void {
   if (db) {
-    saveDatabase()
     db.close()
     db = null
   }
@@ -2189,65 +2190,49 @@ export function updateKnowledgeCaptureTitle(recordingId: string, titleSuggestion
 
 // Generic query helpers
 export function queryAll<T>(sql: string, params: any[] = []): T[] {
-  const stmt = getDatabase().prepare(sql)
-  stmt.bind(params)
-
-  const results: T[] = []
-  while (stmt.step()) {
-    const row = stmt.getAsObject()
-    results.push(row as T)
-  }
-  stmt.free()
-
-  return results
+  return getDatabase().prepare(sql).all(...params) as T[]
 }
 
 export function queryOne<T>(sql: string, params: any[] = []): T | undefined {
-  const results = queryAll<T>(sql, params)
-  return results[0]
+  return getDatabase().prepare(sql).get(...params) as T | undefined
 }
 
 export function run(sql: string, params: any[] = []): void {
-  getDatabase().run(sql, params)
-  saveDatabase()
+  getDatabase().prepare(sql).run(...params)
 }
 
-// Run that doesn't auto-save — MUST be used for writes inside runInTransaction().
-// (The auto-saving run() calls saveDatabase()/db.export() per statement, which
-// terminates the open transaction so the helper's COMMIT/ROLLBACK then fail with
-// "cannot ... - no transaction is active". runInTransaction saves once on success.)
+// Retained for API compatibility. With better-sqlite3 there is no per-statement
+// export/save, so this is identical to run(); callers inside runInTransaction()
+// may keep using it.
 export function runNoSave(sql: string, params: any[] = []): void {
-  getDatabase().run(sql, params)
+  getDatabase().prepare(sql).run(...params)
 }
 
 /**
  * Execute a function within a database transaction.
- * Automatically handles BEGIN/COMMIT/ROLLBACK and saves only on success.
+ * Automatically handles BEGIN/COMMIT/ROLLBACK.
  * Use this for operations that must be atomic (all-or-nothing).
  */
 export function runInTransaction<T>(fn: () => T): T {
   const database = getDatabase()
-  database.run('BEGIN TRANSACTION')
+  database.exec('BEGIN')
   try {
     const result = fn()
-    database.run('COMMIT')
-    saveDatabase()
+    database.exec('COMMIT')
     return result
   } catch (error) {
-    database.run('ROLLBACK')
+    database.exec('ROLLBACK')
     throw error
   }
 }
 
 export function runMany(sql: string, items: any[][]): void {
-  const stmt = getDatabase().prepare(sql)
-  for (const item of items) {
-    stmt.bind(item)
-    stmt.step()
-    stmt.reset()
-  }
-  stmt.free()
-  saveDatabase()
+  const database = getDatabase()
+  const stmt = database.prepare(sql)
+  const tx = database.transaction((rows: any[][]) => {
+    for (const row of rows) stmt.run(...row)
+  })
+  tx(items)
 }
 
 /**
@@ -2372,6 +2357,56 @@ export function updateMeeting(id: string, updates: Partial<Pick<Meeting, 'subjec
 
   run(`UPDATE meetings SET ${fields.join(', ')} WHERE id = ?`, params)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Hosted-app access control — allowed_users (v34)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface AllowedUser {
+  email: string
+  role: 'admin' | 'member'
+  status: 'active' | 'revoked'
+  invited_by: string | null
+  created_at: string
+}
+
+export function getAllowedUser(email: string): AllowedUser | undefined {
+  return queryOne<AllowedUser>('SELECT * FROM allowed_users WHERE email = ?', [email])
+}
+
+export function listAllowedUsers(): AllowedUser[] {
+  return queryAll<AllowedUser>('SELECT * FROM allowed_users ORDER BY created_at ASC')
+}
+
+export function countActiveAdmins(): number {
+  return queryOne<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM allowed_users WHERE role = 'admin' AND status = 'active'"
+  )?.n ?? 0
+}
+
+export function upsertAllowedUser(input: { email: string; role?: 'admin' | 'member'; invitedBy?: string | null }): void {
+  run(
+    `INSERT INTO allowed_users (email, role, status, invited_by)
+     VALUES (?, ?, 'active', ?)
+     ON CONFLICT(email) DO UPDATE SET role = excluded.role, invited_by = COALESCE(excluded.invited_by, allowed_users.invited_by)`,
+    [input.email, input.role ?? 'member', input.invitedBy ?? null]
+  )
+}
+
+export function setAllowedUserStatus(email: string, status: 'active' | 'revoked'): void {
+  run('UPDATE allowed_users SET status = ? WHERE email = ?', [status, email])
+}
+
+export function ensureBootstrapAdmin(adminEmail: string): void {
+  run(
+    `INSERT INTO allowed_users (email, role, status, invited_by)
+     VALUES (?, 'admin', 'active', NULL)
+     ON CONFLICT(email) DO UPDATE SET role = 'admin', status = 'active'`,
+    [adminEmail]
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 /**
  * Batch get meetings by IDs - avoids N+1 query problem
@@ -2549,7 +2584,7 @@ export interface Recording {
   on_device: number
   device_last_seen?: string
   on_local: number
-  source: 'hidock' | 'import' | 'external'
+  source: 'hidock' | 'import' | 'external' | 'upload'
   is_imported: number
   storage_tier?: 'hot' | 'warm' | 'cold' | 'archive' | null
   // Migration fields (for Phase 0 -> Phase 1 migration)
@@ -2731,8 +2766,9 @@ export function insertRecording(recording: Omit<Recording, 'created_at'>): void 
   run(
     `INSERT INTO recordings (id, filename, original_filename, file_path, file_size,
       duration_seconds, date_recorded, meeting_id, correlation_confidence,
-      correlation_method, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      correlation_method, status,
+      location, transcription_status, on_device, device_last_seen, on_local, source, is_imported)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       recording.id,
       recording.filename,
@@ -2744,7 +2780,14 @@ export function insertRecording(recording: Omit<Recording, 'created_at'>): void 
       recording.meeting_id ?? null,
       recording.correlation_confidence ?? null,
       recording.correlation_method ?? null,
-      recording.status
+      recording.status,
+      recording.location ?? 'device-only',
+      recording.transcription_status ?? 'none',
+      recording.on_device ?? 1,
+      recording.device_last_seen ?? null,
+      recording.on_local ?? 0,
+      recording.source ?? 'hidock',
+      recording.is_imported ?? 0
     ]
   )
 }
@@ -3454,30 +3497,24 @@ export interface WindowEmbeddingGroup {
   fileLabel: string; fingerprint: string; embeddings: Uint8Array[]
 }
 
-/** Insert all window-embedding rows inside ONE transaction and save the sql.js image
- *  ONCE. Never per-row run() (whole-DB write storm). Empty input is a no-op. */
+/** Insert all window-embedding rows inside ONE better-sqlite3 transaction.
+ *  Avoids per-row overhead. Empty input is a no-op. */
 export function insertWindowEmbeddingsBatch(rows: WindowEmbeddingRow[]): void {
   if (rows.length === 0) return
   const now = new Date().toISOString()
-  runInTransaction(() => {
-    const stmt = getDatabase().prepare(`INSERT OR REPLACE INTO recording_window_embeddings
-      (id, recording_id, transcript_id, diarization_run_id, file_label, window_index, fingerprint,
-       model_id, model_version, dim, embedding, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    try {
-      for (const r of rows) {
-        stmt.bind([
-          r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
-          r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
-          r.dim, r.embedding, r.created_at ?? now
-        ])
-        stmt.step()
-        stmt.reset()
-      }
-    } finally {
-      stmt.free()
-    }
+  const database = getDatabase()
+  const stmt = database.prepare(`INSERT OR REPLACE INTO recording_window_embeddings
+    (id, recording_id, transcript_id, diarization_run_id, file_label, window_index, fingerprint,
+     model_id, model_version, dim, embedding, created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const tx = database.transaction((items: Array<readonly unknown[]>) => {
+    for (const args of items) stmt.run(...args)
   })
+  tx(rows.map(r => [
+    r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
+    r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
+    r.dim, Buffer.from(r.embedding), r.created_at ?? now
+  ]))
 }
 
 /** Rows for a recording, grouped by file_label, embeddings ordered by window_index,
@@ -3530,22 +3567,17 @@ export function replaceWindowEmbeddingsForLabel(
       fileLabel,
     ])
     if (rows.length === 0) return
-    const stmt = getDatabase().prepare(`INSERT OR REPLACE INTO recording_window_embeddings
+    const database = getDatabase()
+    const stmt = database.prepare(`INSERT OR REPLACE INTO recording_window_embeddings
       (id, recording_id, transcript_id, diarization_run_id, file_label, window_index, fingerprint,
        model_id, model_version, dim, embedding, created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    try {
-      for (const r of rows) {
-        stmt.bind([
-          r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
-          r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
-          r.dim, r.embedding, r.created_at ?? now
-        ])
-        stmt.step()
-        stmt.reset()
-      }
-    } finally {
-      stmt.free()
+    for (const r of rows) {
+      stmt.run(
+        r.id, r.recording_id, r.transcript_id ?? null, r.diarization_run_id ?? null,
+        r.file_label, r.window_index, r.fingerprint, r.model_id, r.model_version ?? 1,
+        r.dim, Buffer.from(r.embedding), r.created_at ?? now
+      )
     }
   })
 }
@@ -4063,7 +4095,7 @@ export interface MeetingContact {
 }
 
 export function getContacts(search?: string, type?: string, limit = 100, offset = 0): { contacts: Contact[]; total: number } {
-  let countSql = 'SELECT COUNT(*) as count FROM contacts'
+  let countSql = 'SELECT COUNT(*) as count FROM contacts c'
   let sql = `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count
 FROM contacts c
 LEFT JOIN (
@@ -4633,11 +4665,9 @@ export function getMeetingsNearDate(date: string): Meeting[] {
 }
 
 export function selectMeetingForRecordingByUser(recordingId: string, meetingId: string | null): void {
-  const db = getDatabase()
   if (!recordingId || typeof recordingId !== 'string') throw new Error('Invalid recording ID')
 
-  try {
-    db.run('BEGIN TRANSACTION')
+  runInTransaction(() => {
     if (meetingId !== null && !getMeetingById(meetingId)) {
       throw new Error(`Meeting ${meetingId} no longer exists`)
     }
@@ -4651,20 +4681,18 @@ export function selectMeetingForRecordingByUser(recordingId: string, meetingId: 
            WHERE recording_id = ? AND meeting_id = ?`, [recordingId, meetingId])
       linkRecordingToMeeting(recordingId, meetingId, 1.0, 'user_override')
     }
-    db.run('COMMIT')
-    saveDatabase()
-  } catch (error) {
-    db.run('ROLLBACK')
-    throw error
-  }
+  })
 }
 
 export function resetStuckTranscriptions(): { recordingsReset: number; queueItemsReset: number } {
-  const db = getDatabase()
-  db.run("UPDATE recordings SET transcription_status = 'none' WHERE transcription_status IN ('processing', 'pending')")
-  const recordingsReset = db.getRowsModified()
-  db.run("UPDATE transcription_queue SET status = 'pending' WHERE status = 'processing'")
-  const queueItemsReset = db.getRowsModified()
+  const recordingsInfo = getDatabase()
+    .prepare("UPDATE recordings SET transcription_status = 'none' WHERE transcription_status IN ('processing', 'pending')")
+    .run()
+  const recordingsReset = recordingsInfo.changes
+  const queueInfo = getDatabase()
+    .prepare("UPDATE transcription_queue SET status = 'pending' WHERE status = 'processing'")
+    .run()
+  const queueItemsReset = queueInfo.changes
   console.log(`[Database] Reset stuck transcriptions: ${recordingsReset} recordings, ${queueItemsReset} queue items`)
   return { recordingsReset, queueItemsReset }
 }
@@ -4829,16 +4857,14 @@ export function clearStaleTranscriptionLock(): void {
   const now = new Date().toISOString()
 
   // Ensure the lock row exists (handles edge case where migration didn't insert it)
-  database.run(
-    `INSERT OR IGNORE INTO transcription_service_lock (id, process_id, acquired_at, updated_at) VALUES (1, NULL, NULL, ?)`,
-    [now]
-  )
+  database.prepare(
+    `INSERT OR IGNORE INTO transcription_service_lock (id, process_id, acquired_at, updated_at) VALUES (1, NULL, NULL, ?)`
+  ).run(now)
 
   // Unconditionally clear the lock
-  database.run(
-    `UPDATE transcription_service_lock SET process_id = NULL, acquired_at = NULL, updated_at = ? WHERE id = 1`,
-    [now]
-  )
+  database.prepare(
+    `UPDATE transcription_service_lock SET process_id = NULL, acquired_at = NULL, updated_at = ? WHERE id = 1`
+  ).run(now)
 
   console.log('[Transcription] Stale lock cleared on startup')
 }
@@ -4854,23 +4880,21 @@ export function acquireTranscriptionLock(processId: string): boolean {
   const now = new Date().toISOString()
 
   // Check current lock status before attempting to acquire
-  const currentStatus = database.exec('SELECT process_id, acquired_at FROM transcription_service_lock WHERE id = 1')
-  const currentProcessId = currentStatus.length > 0 && currentStatus[0].values.length > 0
-    ? currentStatus[0].values[0][0]
-    : null
+  const currentStatus = database.prepare('SELECT process_id, acquired_at FROM transcription_service_lock WHERE id = 1')
+    .get() as { process_id: string | null; acquired_at: string | null } | undefined
+  const currentProcessId = currentStatus?.process_id ?? null
 
   // If already locked by another process, check for stale lock (held > 5 minutes)
   if (currentProcessId !== null) {
-    const acquiredAt = currentStatus[0].values[0][1] as string | null
+    const acquiredAt = currentStatus?.acquired_at ?? null
     const STALE_LOCK_TIMEOUT_MS = 5 * 60 * 1000
     if (acquiredAt) {
       const lockAge = Date.now() - new Date(acquiredAt).getTime()
       if (lockAge > STALE_LOCK_TIMEOUT_MS) {
         console.warn(`[Transcription] Force-clearing stale lock held by ${currentProcessId} for ${Math.round(lockAge / 1000)}s`)
-        database.run(
-          `UPDATE transcription_service_lock SET process_id = NULL, acquired_at = NULL, updated_at = ? WHERE id = 1`,
-          [now]
-        )
+        database.prepare(
+          `UPDATE transcription_service_lock SET process_id = NULL, acquired_at = NULL, updated_at = ? WHERE id = 1`
+        ).run(now)
         // Fall through to acquire
       } else {
         return false
@@ -4882,18 +4906,16 @@ export function acquireTranscriptionLock(processId: string): boolean {
 
   // Atomic check-and-set using UPDATE with WHERE clause
   // If process_id is NULL, set it to our processId
-  database.run(
+  database.prepare(
     `UPDATE transcription_service_lock
      SET process_id = ?, acquired_at = ?, updated_at = ?
-     WHERE id = 1 AND process_id IS NULL`,
-    [processId, now, now]
-  )
+     WHERE id = 1 AND process_id IS NULL`
+  ).run(processId, now, now)
 
   // Verify we acquired the lock by checking again
-  const verifyStatus = database.exec('SELECT process_id FROM transcription_service_lock WHERE id = 1')
-  const newProcessId = verifyStatus.length > 0 && verifyStatus[0].values.length > 0
-    ? verifyStatus[0].values[0][0]
-    : null
+  const verifyStatus = database.prepare('SELECT process_id FROM transcription_service_lock WHERE id = 1')
+    .get() as { process_id: string | null } | undefined
+  const newProcessId = verifyStatus?.process_id ?? null
 
   return newProcessId === processId
 }
@@ -4907,28 +4929,25 @@ export function releaseTranscriptionLock(processId: string): boolean {
   const database = getDatabase()
 
   // Check if we currently hold the lock
-  const currentStatus = database.exec('SELECT process_id FROM transcription_service_lock WHERE id = 1')
-  const currentProcessId = currentStatus.length > 0 && currentStatus[0].values.length > 0
-    ? currentStatus[0].values[0][0]
-    : null
+  const currentStatus = database.prepare('SELECT process_id FROM transcription_service_lock WHERE id = 1')
+    .get() as { process_id: string | null } | undefined
+  const currentProcessId = currentStatus?.process_id ?? null
 
   if (currentProcessId !== processId) {
     return false // Not our lock to release
   }
 
   // Release the lock
-  database.run(
+  database.prepare(
     `UPDATE transcription_service_lock
      SET process_id = NULL, acquired_at = NULL, updated_at = ?
-     WHERE id = 1 AND process_id = ?`,
-    [new Date().toISOString(), processId]
-  )
+     WHERE id = 1 AND process_id = ?`
+  ).run(new Date().toISOString(), processId)
 
   // Verify lock was released
-  const verifyStatus = database.exec('SELECT process_id FROM transcription_service_lock WHERE id = 1')
-  const newProcessId = verifyStatus.length > 0 && verifyStatus[0].values.length > 0
-    ? verifyStatus[0].values[0][0]
-    : null
+  const verifyStatus = database.prepare('SELECT process_id FROM transcription_service_lock WHERE id = 1')
+    .get() as { process_id: string | null } | undefined
+  const newProcessId = verifyStatus?.process_id ?? null
 
   return newProcessId === null
 }
@@ -5045,11 +5064,11 @@ export function getTranscriptionLockStatus(): {
   updatedAt: string | null
 } {
   const database = getDatabase()
-  const row = database.exec('SELECT process_id, acquired_at, updated_at FROM transcription_service_lock WHERE id = 1')
+  const row = database.prepare('SELECT process_id, acquired_at, updated_at FROM transcription_service_lock WHERE id = 1')
+    .get() as { process_id: string | null; acquired_at: string | null; updated_at: string | null } | undefined
 
-  if (row.length > 0 && row[0].values.length > 0) {
-    const [processId, acquiredAt, updatedAt] = row[0].values[0] as [string | null, string | null, string | null]
-    return { processId, acquiredAt, updatedAt }
+  if (row) {
+    return { processId: row.process_id, acquiredAt: row.acquired_at, updatedAt: row.updated_at }
   }
 
   return { processId: null, acquiredAt: null, updatedAt: null }
