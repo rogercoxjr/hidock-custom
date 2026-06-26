@@ -12,8 +12,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) return reply.code(400).send({ error: 'invalid', details: err.flatten() })
     if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.message })
-    // Fastify's own validation errors carry a statusCode 400
-    if ((err as { statusCode?: number }).statusCode === 400) return reply.code(400).send({ error: err.message })
+    // Duck-type fallback: handles HttpError thrown from a different module instance (e.g. after vi.resetModules()),
+    // plus Fastify's own 400 validation errors.
+    const sc = (err as { statusCode?: number }).statusCode
+    if (typeof sc === 'number' && sc >= 400 && sc < 600) return reply.code(sc).send({ error: err.message })
     app.log.error(err)
     return reply.code(500).send({ error: 'internal' })
   })
