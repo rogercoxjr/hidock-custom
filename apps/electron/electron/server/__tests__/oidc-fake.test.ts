@@ -28,4 +28,10 @@ describe('createFakeOidc', () => {
     const ctx = await oidc.beginLogin()
     await expect(oidc.completeLogin('https://hub.example.com/auth/callback', ctx)).rejects.toThrow()
   })
+
+  it('completeLogin throws if called before beginLogin', async () => {
+    const oidc = createFakeOidc({ email: 'a@x.com', emailVerified: true, sub: 's1' })
+    await expect(oidc.completeLogin('https://hub.example.com/auth/callback',
+      { state: 'x', nonce: 'y', codeVerifier: 'z' })).rejects.toThrow(/before beginLogin/)
+  })
 })

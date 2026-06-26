@@ -75,7 +75,8 @@ export function createFakeOidc(result: OidcUser, opts: { failComplete?: boolean 
     },
     async completeLogin(_currentUrl, ctx) {
       if (opts.failComplete) throw new Error('OIDC exchange failed')
-      if (issued && (ctx.state !== issued.state || ctx.nonce !== issued.nonce || ctx.codeVerifier !== issued.codeVerifier)) {
+      if (!issued) throw new Error('OIDC: completeLogin called before beginLogin')
+      if (ctx.state !== issued.state || ctx.nonce !== issued.nonce || ctx.codeVerifier !== issued.codeVerifier) {
         throw new Error('OIDC: login context mismatch (state/nonce/verifier)')
       }
       return result
