@@ -24,6 +24,7 @@ export function createGoogleOidc(cfg: { clientId: string; clientSecret: string; 
     if (!configPromise) {
       const client = await lib()
       configPromise = client.discovery(new URL(GOOGLE_ISSUER), cfg.clientId, cfg.clientSecret)
+        .catch((err: unknown) => { configPromise = null; throw err })
     }
     return configPromise
   }

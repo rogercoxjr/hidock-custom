@@ -30,7 +30,10 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     if (!req.user || req.user.role !== 'admin') return reply.code(403).send({ error: 'forbidden' })
   })
 
-  // CSRF defense-in-depth: a present-but-foreign Origin on a mutating request is rejected.
+  // CSRF primary control: SameSite=lax on the session cookie blocks cross-site cookie
+  // attachment on mutating requests. requireSameOrigin is a secondary check that rejects
+  // a present-but-foreign Origin header; a missing Origin is intentionally allowed (it
+  // would block legitimate non-browser callers) — to be revisited in a later hardening pass.
   app.decorate('requireSameOrigin', async (req: FastifyRequest, reply: FastifyReply) => {
     if (MUTATING.has(req.method)) {
       const origin = req.headers.origin
