@@ -2,7 +2,7 @@
  * Pre-Migration Cleanup for V11
  */
 
-import { Database as SqlJsDatabase } from 'sql.js'
+import type Database from 'better-sqlite3'
 
 export interface CleanupReport {
   orphanedTranscripts: number
@@ -20,7 +20,7 @@ export interface CleanupPreview {
   invalidMeetingRefs: number
 }
 
-export function generateCleanupPreview(db: SqlJsDatabase): CleanupPreview {
+export function generateCleanupPreview(db: Database.Database): CleanupPreview {
   return {
     orphanedTranscripts: countRows(db, `
       SELECT COUNT(*) as count FROM transcripts t
@@ -41,14 +41,11 @@ export function generateCleanupPreview(db: SqlJsDatabase): CleanupPreview {
   }
 }
 
-function countRows(db: SqlJsDatabase, sql: string): number {
-  const result = db.exec(sql)
-  return result.length > 0 && result[0].values.length > 0
-    ? (result[0].values[0][0] as number)
-    : 0
+function countRows(db: Database.Database, sql: string): number {
+  return (db.prepare(sql).get() as { count: number } | undefined)?.count ?? 0
 }
 
-export async function runPreMigrationCleanup(db: SqlJsDatabase): Promise<CleanupReport> {
+export async function runPreMigrationCleanup(db: Database.Database): Promise<CleanupReport> {
   const report: CleanupReport = {
     orphanedTranscripts: 0,
     orphanedEmbeddings: 0,
@@ -71,35 +68,33 @@ export async function runPreMigrationCleanup(db: SqlJsDatabase): Promise<Cleanup
   return report
 }
 
-function cleanOrphanedTranscripts(db: SqlJsDatabase): number {
-  db.run(`CREATE TABLE IF NOT EXISTS _orphaned_transcripts_backup AS SELECT * FROM transcripts WHERE 0`)
-  db.run(`INSERT INTO _orphaned_transcripts_backup SELECT * FROM transcripts WHERE NOT EXISTS (SELECT 1 FROM recordings WHERE id = recording_id)`)
+function cleanOrphanedTranscripts(db: Database.Database): number {
+  db.exec(`CREATE TABLE IF NOT EXISTS _orphaned_transcripts_backup AS SELECT * FROM transcripts WHERE 0`)
+  db.exec(`INSERT INTO _orphaned_transcripts_backup SELECT * FROM transcripts WHERE NOT EXISTS (SELECT 1 FROM recordings WHERE id = recording_id)`)
   const count = countRows(db, `SELECT COUNT(*) as count FROM _orphaned_transcripts_backup`)
-  db.run(`DELETE FROM transcripts WHERE NOT EXISTS (SELECT 1 FROM recordings WHERE id = recording_id)`)
+  db.exec(`DELETE FROM transcripts WHERE NOT EXISTS (SELECT 1 FROM recordings WHERE id = recording_id)`)
   return count
 }
 
-function cleanOrphanedEmbeddings(db: SqlJsDatabase): number {
+function cleanOrphanedEmbeddings(db: Database.Database): number {
   const count = countRows(db, `SELECT COUNT(*) as count FROM embeddings WHERE NOT EXISTS (SELECT 1 FROM transcripts WHERE id = transcript_id)`)
-  db.run(`DELETE FROM embeddings WHERE NOT EXISTS (SELECT 1 FROM transcripts WHERE id = transcript_id)`)
+  db.exec(`DELETE FROM embeddings WHERE NOT EXISTS (SELECT 1 FROM transcripts WHERE id = transcript_id)`)
   return count
 }
 
-function cleanDuplicateRecordings(db: SqlJsDatabase): number {
-  const duplicates = db.exec(`SELECT filename FROM recordings GROUP BY filename HAVING COUNT(*) > 1`)
+function cleanDuplicateRecordings(db: Database.Database): number {
+  const duplicates = db.prepare(`SELECT filename FROM recordings GROUP BY filename HAVING COUNT(*) > 1`).all() as Array<{ filename: unknown }>
   let count = 0
-  if (duplicates.length > 0) {
-    for (const row of duplicates[0].values) {
-      const filename = row[0]
-      db.run(`UPDATE recordings SET location = 'deleted' WHERE filename = ? AND id NOT IN (SELECT id FROM recordings WHERE filename = ? ORDER BY created_at DESC LIMIT 1)`, [filename, filename])
-      count++
-    }
+  for (const row of duplicates) {
+    const filename = row.filename
+    db.prepare(`UPDATE recordings SET location = 'deleted' WHERE filename = ? AND id NOT IN (SELECT id FROM recordings WHERE filename = ? ORDER BY created_at DESC LIMIT 1)`).run(filename, filename)
+    count++
   }
   return count
 }
 
-function fixInvalidMeetingRefs(db: SqlJsDatabase): number {
+function fixInvalidMeetingRefs(db: Database.Database): number {
   const count = countRows(db, `SELECT COUNT(*) as count FROM recordings WHERE meeting_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM meetings WHERE id = meeting_id)`)
-  db.run(`UPDATE recordings SET meeting_id = NULL WHERE meeting_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM meetings WHERE id = meeting_id)`)
+  db.exec(`UPDATE recordings SET meeting_id = NULL WHERE meeting_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM meetings WHERE id = meeting_id)`)
   return count
 }

@@ -3,7 +3,7 @@
  * Combines vector search with LLM to answer questions about meetings
  */
 
-import type { SqlValue } from 'sql.js'
+type SqlValue = string | number | bigint | Buffer | null
 import { getVectorStore, SearchResult } from './vector-store'
 import { getOllamaService, OllamaChatMessage } from './ollama'
 import { getEmbeddingService } from './embeddings/embedding-provider'
@@ -262,21 +262,20 @@ class RAGService {
       const db = getDatabase()
       if (db) {
         // Get knowledge captures attached to this conversation
-        const contextRes = db.exec('SELECT knowledge_capture_id FROM conversation_context WHERE conversation_id = ?', [sessionId])
-        if (contextRes && contextRes.length > 0 && contextRes[0].values && contextRes[0].values.length > 0) {
-          const kcIds = contextRes[0].values.map(v => v[0] as string)
+        const contextRows = db.prepare('SELECT knowledge_capture_id FROM conversation_context WHERE conversation_id = ?').all(sessionId) as Array<{ knowledge_capture_id: string }>
+        if (contextRows.length > 0) {
+          const kcIds = contextRows.map(r => r.knowledge_capture_id)
           for (const id of kcIds) {
             // Fetch the full transcript for each pinned knowledge capture
-            const transcriptRes = db.exec(`
-              SELECT t.full_text, k.title 
+            const transcriptRow = db.prepare(`
+              SELECT t.full_text, k.title
               FROM transcripts t
               JOIN knowledge_captures k ON k.source_recording_id = t.recording_id
               WHERE k.id = ?
-            `, [id])
-            
-            if (transcriptRes && transcriptRes.length > 0 && transcriptRes[0].values && transcriptRes[0].values.length > 0) {
-              const [text, title] = transcriptRes[0].values[0] as [string, string]
-              pinnedContextParts.push(`[PINNED CONTEXT: ${title}]\n${text}`)
+            `).get(id) as { full_text: string; title: string } | undefined
+
+            if (transcriptRow) {
+              pinnedContextParts.push(`[PINNED CONTEXT: ${transcriptRow.title}]\n${transcriptRow.full_text}`)
             }
           }
         }
@@ -381,8 +380,8 @@ class RAGService {
 
     // Get meeting info
     const db = getDatabase()
-    const meetingRows = db.exec('SELECT subject FROM meetings WHERE id = ?', [meetingId])
-    const subject = meetingRows[0]?.values[0]?.[0] as string | undefined
+    const meetingRow = db.prepare('SELECT subject FROM meetings WHERE id = ?').get(meetingId) as { subject: string } | undefined
+    const subject = meetingRow?.subject
 
     const prompt = `Please provide a concise summary of this meeting${subject ? ` about "${subject}"` : ''}. Include:
 1. Main topics discussed
@@ -505,43 +504,43 @@ ${transcript.substring(0, 8000)}`
         const escaped = escapeLikePattern(terms[0])
         const likeQuery = `%${escaped}%`
 
-        const knowledgeRows = db.exec(`
+        const knowledgeRows = db.prepare(`
           SELECT id, title, summary, captured_at FROM knowledge_captures
           WHERE title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\'
           LIMIT ?
-        `, [likeQuery, likeQuery, limit])
+        `).all(likeQuery, likeQuery, limit) as Array<{ id: unknown; title: unknown; summary: unknown; captured_at: unknown }>
 
-        const knowledge = knowledgeRows.length > 0 ? knowledgeRows[0].values.map(v => ({
-          id: v[0],
-          title: v[1],
-          summary: v[2],
-          capturedAt: v[3]
-        })) : []
+        const knowledge = knowledgeRows.map(v => ({
+          id: v.id,
+          title: v.title,
+          summary: v.summary,
+          capturedAt: v.captured_at
+        }))
 
-        const peopleRows = db.exec(`
+        const peopleRows = db.prepare(`
           SELECT id, name, email, type FROM contacts
           WHERE name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR company LIKE ? ESCAPE '\\' OR role LIKE ? ESCAPE '\\'
           LIMIT ?
-        `, [likeQuery, likeQuery, likeQuery, likeQuery, limit])
+        `).all(likeQuery, likeQuery, likeQuery, likeQuery, limit) as Array<{ id: unknown; name: unknown; email: unknown; type: unknown }>
 
-        const people = peopleRows.length > 0 ? peopleRows[0].values.map(v => ({
-          id: v[0],
-          name: v[1],
-          email: v[2],
-          type: v[3]
-        })) : []
+        const people = peopleRows.map(v => ({
+          id: v.id,
+          name: v.name,
+          email: v.email,
+          type: v.type
+        }))
 
-        const projectRows = db.exec(`
+        const projectRows = db.prepare(`
           SELECT id, name, description, status FROM projects
           WHERE name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\'
           LIMIT ?
-        `, [likeQuery, likeQuery, limit])
+        `).all(likeQuery, likeQuery, limit) as Array<{ id: unknown; name: unknown; description: unknown; status: unknown }>
 
-        const projects = projectRows.length > 0 ? projectRows[0].values.map(v => ({
-          id: v[0],
-          name: v[1],
-          status: v[3]
-        })) : []
+        const projects = projectRows.map(v => ({
+          id: v.id,
+          name: v.name,
+          status: v.status
+        }))
 
         return success({ knowledge, people, projects })
       }
@@ -584,32 +583,32 @@ ${transcript.substring(0, 8000)}`
 
       // 1. Search knowledge captures with explicit columns + multi-term ranking
       const kq = buildMultiTermQuery('knowledge_captures', ['title', 'summary'], 'id, title, summary, captured_at', limit)
-      const knowledgeRows = db.exec(kq.sql, kq.params)
-      const knowledge = knowledgeRows.length > 0 ? knowledgeRows[0].values.map(v => ({
-        id: v[0],
-        title: v[1],
-        summary: v[2],
-        capturedAt: v[3]
-      })) : []
+      const knowledgeRows = db.prepare(kq.sql).all(...kq.params) as Array<{ id: unknown; title: unknown; summary: unknown; captured_at: unknown }>
+      const knowledge = knowledgeRows.map(v => ({
+        id: v.id,
+        title: v.title,
+        summary: v.summary,
+        capturedAt: v.captured_at
+      }))
 
       // 2. Search people with explicit columns + multi-term ranking
       const pq = buildMultiTermQuery('contacts', ['name', 'email', 'company', 'role'], 'id, name, email, type', limit)
-      const peopleRows = db.exec(pq.sql, pq.params)
-      const people = peopleRows.length > 0 ? peopleRows[0].values.map(v => ({
-        id: v[0],
-        name: v[1],
-        email: v[2],
-        type: v[3]
-      })) : []
+      const peopleRows = db.prepare(pq.sql).all(...pq.params) as Array<{ id: unknown; name: unknown; email: unknown; type: unknown }>
+      const people = peopleRows.map(v => ({
+        id: v.id,
+        name: v.name,
+        email: v.email,
+        type: v.type
+      }))
 
       // 3. Search projects with explicit columns + multi-term ranking
       const prq = buildMultiTermQuery('projects', ['name', 'description'], 'id, name, description, status', limit)
-      const projectRows = db.exec(prq.sql, prq.params)
-      const projects = projectRows.length > 0 ? projectRows[0].values.map(v => ({
-        id: v[0],
-        name: v[1],
-        status: v[3]
-      })) : []
+      const projectRows = db.prepare(prq.sql).all(...prq.params) as Array<{ id: unknown; name: unknown; description: unknown; status: unknown }>
+      const projects = projectRows.map(v => ({
+        id: v.id,
+        name: v.name,
+        status: v.status
+      }))
 
       return success({ knowledge, people, projects })
     } catch (err) {

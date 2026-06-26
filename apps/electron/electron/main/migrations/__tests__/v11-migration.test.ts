@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { migrateToV11Impl } from '../../ipc/migration-handlers'
-import initSqlJs from 'sql.js'
+import BetterSqlite3 from 'better-sqlite3'
 
 // Mock Electron
 vi.mock('electron', () => ({
@@ -18,13 +18,10 @@ vi.mock('../../services/database', () => ({
 }))
 
 describe('V11 Migration', () => {
-  let SQL: any
+  beforeEach(() => {
+    dbInstance = new BetterSqlite3(':memory:')
 
-  beforeEach(async () => {
-    SQL = await initSqlJs()
-    dbInstance = new SQL.Database()
-    
-    dbInstance.run(`
+    dbInstance.exec(`
       CREATE TABLE recordings (
         id TEXT PRIMARY KEY,
         filename TEXT NOT NULL,
@@ -43,9 +40,9 @@ describe('V11 Migration', () => {
       CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE schema_version (version INTEGER PRIMARY KEY);
     `)
-    
-    dbInstance.run(`
-      INSERT INTO recordings (id, filename, date_recorded, status) VALUES 
+
+    dbInstance.exec(`
+      INSERT INTO recordings (id, filename, date_recorded, status) VALUES
         ('rec-1', 'test.wav', '2025-01-01T10:00:00Z', 'transcribed');
       INSERT INTO transcripts (id, recording_id, full_text, summary, action_items) VALUES
         ('trans-1', 'rec-1', 'Hello world', 'A summary', '["Action 1"]');
@@ -62,8 +59,8 @@ describe('V11 Migration', () => {
     expect(result.success).toBe(true)
     expect(result.capturesCreated).toBe(1)
 
-    const captures = dbInstance.exec("SELECT * FROM knowledge_captures")
-    expect(captures.length).toBe(1)
-    expect(captures[0].values[0][1]).toBe('Recording: test.wav')
+    const capture = dbInstance.prepare("SELECT * FROM knowledge_captures").get() as Record<string, unknown> | undefined
+    expect(capture).toBeDefined()
+    expect(capture!.title).toBe('Recording: test.wav')
   })
 })

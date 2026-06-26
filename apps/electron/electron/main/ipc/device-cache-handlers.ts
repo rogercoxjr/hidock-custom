@@ -32,7 +32,7 @@ export function registerDeviceCacheHandlers(): void {
       const db = getDatabase()
 
       // Create table if it doesn't exist
-      db.run(`
+      db.exec(`
         CREATE TABLE IF NOT EXISTS device_file_cache (
           filename TEXT PRIMARY KEY,
           size INTEGER,
@@ -42,7 +42,7 @@ export function registerDeviceCacheHandlers(): void {
       `)
 
       // Clear existing cache
-      db.run('DELETE FROM device_file_cache')
+      db.exec('DELETE FROM device_file_cache')
 
       // Insert new files
       const stmt = db.prepare(
@@ -50,9 +50,8 @@ export function registerDeviceCacheHandlers(): void {
       )
 
       for (const file of files) {
-        stmt.run([file.filename, file.size, file.duration, file.dateCreated])
+        stmt.run(file.filename, file.size, file.duration, file.dateCreated)
       }
-      stmt.free()
 
       console.log(`[DeviceCache] Cached ${files.length} files`)
     } catch (error) {

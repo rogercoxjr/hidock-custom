@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { getRAGService, resetRAGService } from '../rag'
-import initSqlJs from 'sql.js'
+import BetterSqlite3 from 'better-sqlite3'
 
 // Stable mock object
 const mockOllamaService = {
@@ -60,28 +60,19 @@ vi.mock('../database', () => ({
   getDatabase: () => dbInstance,
   queryOne: vi.fn((sql: string, params: any[]) => {
     if (!dbInstance) return undefined
-    const result = dbInstance.exec(sql, params)
-    if (result.length === 0 || result[0].values.length === 0) return undefined
-    const columns = result[0].columns
-    const values = result[0].values[0]
-    const row: any = {}
-    columns.forEach((col: string, i: number) => { row[col] = values[i] })
-    return row
+    return dbInstance.prepare(sql).get(...(params ?? [])) ?? undefined
   }),
   escapeLikePattern: vi.fn((pattern: string) => pattern.replace(/[%_\\]/g, '\\$&'))
 }))
 
 describe('RAGService Context Injection', () => {
-  let SQL: any
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks()
     resetRAGService()
-    SQL = await initSqlJs()
-    dbInstance = new SQL.Database()
-    
+    dbInstance = new BetterSqlite3(':memory:')
+
     // Setup tables
-    dbInstance.run(`
+    dbInstance.exec(`
       CREATE TABLE conversations (id TEXT PRIMARY KEY);
       CREATE TABLE conversation_context (id TEXT, conversation_id TEXT, knowledge_capture_id TEXT);
       CREATE TABLE knowledge_captures (id TEXT, title TEXT, source_recording_id TEXT);

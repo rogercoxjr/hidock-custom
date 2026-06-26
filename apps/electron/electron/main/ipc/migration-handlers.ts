@@ -50,22 +50,19 @@ const migrationLock = {
     const db = getDatabase()
     try {
       // Check for stale lock (> 1 hour old)
-      const stmt = db.prepare(`SELECT value FROM config WHERE key = 'migration_lock'`)
-      if (stmt.step()) {
-        const lockTime = parseInt(stmt.getAsObject().value as string, 10)
-        stmt.free()
+      const lockRow = db.prepare(`SELECT value FROM config WHERE key = 'migration_lock'`).get() as { value: string } | undefined
+      if (lockRow) {
+        const lockTime = parseInt(lockRow.value, 10)
         if (Date.now() - lockTime > 3600000) {
           // Lock is stale, remove it
-          db.run(`DELETE FROM config WHERE key = 'migration_lock'`)
+          db.prepare(`DELETE FROM config WHERE key = 'migration_lock'`).run()
         } else {
           return false // Lock is held by another process
         }
-      } else {
-        stmt.free()
       }
 
       // Try to acquire lock
-      db.run(`INSERT INTO config (key, value) VALUES ('migration_lock', ?)`, [Date.now().toString()])
+      db.prepare(`INSERT INTO config (key, value) VALUES ('migration_lock', ?)`).run(Date.now().toString())
       return true
     } catch {
       // UNIQUE constraint violation means lock already held
@@ -75,7 +72,7 @@ const migrationLock = {
   release(): void {
     const db = getDatabase()
     try {
-      db.run(`DELETE FROM config WHERE key = 'migration_lock'`)
+      db.prepare(`DELETE FROM config WHERE key = 'migration_lock'`).run()
     } catch (error) {
       console.error('Failed to release migration lock:', error)
     }
@@ -144,14 +141,13 @@ function createMigrationBackup(): void {
   const db = getDatabase()
 
   // P2-016: Create backup tables as TEMP tables (auto-cleanup on connection close)
-  db.run('DROP TABLE IF EXISTS _backup_recordings')
-  db.run('DROP TABLE IF EXISTS _backup_transcripts')
+  db.exec('DROP TABLE IF EXISTS _backup_recordings')
+  db.exec('DROP TABLE IF EXISTS _backup_transcripts')
 
   // Check if migration_status column exists
   let hasMigrationStatus = false
   try {
-    const stmt = db.prepare('SELECT migration_status FROM recordings LIMIT 1')
-    stmt.free()
+    db.prepare('SELECT migration_status FROM recordings LIMIT 1')
     hasMigrationStatus = true
   } catch {
     hasMigrationStatus = false
@@ -159,13 +155,13 @@ function createMigrationBackup(): void {
 
   if (hasMigrationStatus) {
     // P3-019: Create backup tables in single step (no double-copy)
-    db.run(`
+    db.exec(`
       CREATE TEMP TABLE _backup_recordings AS
       SELECT * FROM recordings
       WHERE migration_status IS NULL OR migration_status = 'pending'
     `)
 
-    db.run(`
+    db.exec(`
       CREATE TEMP TABLE _backup_transcripts AS
       SELECT t.* FROM transcripts t
       INNER JOIN recordings r ON t.recording_id = r.id
@@ -173,8 +169,8 @@ function createMigrationBackup(): void {
     `)
   } else {
     // Fresh migration: backup everything
-    db.run(`CREATE TEMP TABLE _backup_recordings AS SELECT * FROM recordings`)
-    db.run(`CREATE TEMP TABLE _backup_transcripts AS SELECT * FROM transcripts`)
+    db.exec(`CREATE TEMP TABLE _backup_recordings AS SELECT * FROM recordings`)
+    db.exec(`CREATE TEMP TABLE _backup_transcripts AS SELECT * FROM transcripts`)
   }
 }
 
@@ -182,13 +178,10 @@ function createMigrationBackup(): void {
 function checkBackupExists(): boolean {
   const db = getDatabase()
   try {
-    const stmt = db.prepare(`
+    const count = (db.prepare(`
       SELECT COUNT(*) as count FROM sqlite_master
       WHERE type='table' AND name IN ('_backup_recordings', '_backup_transcripts')
-    `)
-    stmt.step()
-    const count = (stmt.getAsObject().count as number) || 0
-    stmt.free()
+    `).get() as { count: number } | undefined)?.count ?? 0
     return count === 2 // Both tables must exist
   } catch (error) {
     console.error('Failed to check backup existence:', error)
@@ -200,13 +193,10 @@ function checkBackupExists(): boolean {
 function verifyRestoration(): boolean {
   const db = getDatabase()
   try {
-    const stmt = db.prepare(`
+    const count = (db.prepare(`
       SELECT COUNT(*) as count FROM recordings
       WHERE migration_status = 'migrated'
-    `)
-    stmt.step()
-    const count = (stmt.getAsObject().count as number) || 0
-    stmt.free()
+    `).get() as { count: number } | undefined)?.count ?? 0
     return count === 0 // No recordings should still be marked as migrated
   } catch (error) {
     console.error('Failed to verify restoration:', error)
@@ -225,7 +215,7 @@ function restoreFromBackup(): void {
     }
 
     // Restore recordings from backup
-    db.run(`
+    db.exec(`
       UPDATE recordings
       SET migration_status = (
         SELECT migration_status FROM _backup_recordings b
@@ -237,8 +227,8 @@ function restoreFromBackup(): void {
     `)
 
     // P2-015: Restore transcripts from backup
-    db.run(`DELETE FROM transcripts WHERE recording_id IN (SELECT id FROM _backup_recordings)`)
-    db.run(`INSERT INTO transcripts SELECT * FROM _backup_transcripts`)
+    db.exec(`DELETE FROM transcripts WHERE recording_id IN (SELECT id FROM _backup_recordings)`)
+    db.exec(`INSERT INTO transcripts SELECT * FROM _backup_transcripts`)
 
     console.log('Successfully restored from backup')
   } catch (error) {
@@ -251,8 +241,8 @@ function cleanupBackupTables(): void {
   const db = getDatabase()
 
   try {
-    db.run('DROP TABLE IF EXISTS _backup_recordings')
-    db.run('DROP TABLE IF EXISTS _backup_transcripts')
+    db.exec('DROP TABLE IF EXISTS _backup_recordings')
+    db.exec('DROP TABLE IF EXISTS _backup_transcripts')
   } catch (error) {
     console.error('Failed to cleanup backup tables:', error)
     // Don't throw - this is just cleanup
@@ -269,69 +259,54 @@ function verifyMigration(): VerificationResult {
 
   try {
     // Verify record counts match
-    const migratedStmt = db.prepare(`
+    const migratedCount = (db.prepare(`
       SELECT COUNT(*) as count
       FROM recordings
       WHERE migration_status = 'migrated'
-    `)
-    migratedStmt.step()
-    const migratedCount = (migratedStmt.getAsObject().count as number) || 0
-    migratedStmt.free()
+    `).get() as { count: number } | undefined)?.count ?? 0
 
-    const capturesStmt = db.prepare(`
+    const capturesCount = (db.prepare(`
       SELECT COUNT(*) as count
       FROM knowledge_captures
       WHERE source_recording_id IS NOT NULL
-    `)
-    capturesStmt.step()
-    const capturesCount = (capturesStmt.getAsObject().count as number) || 0
-    capturesStmt.free()
+    `).get() as { count: number } | undefined)?.count ?? 0
 
     if (capturesCount !== migratedCount) {
       errors.push(`Count mismatch: ${capturesCount} captures created vs ${migratedCount} recordings marked as migrated`)
     }
 
     // Verify required fields are populated
-    const invalidStmt = db.prepare(`
+    const invalidCount = (db.prepare(`
       SELECT COUNT(*) as count
       FROM knowledge_captures
       WHERE title IS NULL OR title = ''
          OR captured_at IS NULL
          OR source_recording_id IS NULL
-    `)
-    invalidStmt.step()
-    const invalidCount = (invalidStmt.getAsObject().count as number) || 0
-    invalidStmt.free()
+    `).get() as { count: number } | undefined)?.count ?? 0
 
     if (invalidCount > 0) {
       errors.push(`Found ${invalidCount} captures with missing required fields (title, captured_at, source_recording_id)`)
     }
 
     // Verify foreign key integrity for meeting references
-    const orphanedStmt = db.prepare(`
+    const orphanedCount = (db.prepare(`
       SELECT COUNT(*) as count
       FROM knowledge_captures
       WHERE meeting_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM meetings WHERE id = knowledge_captures.meeting_id)
-    `)
-    orphanedStmt.step()
-    const orphanedCount = (orphanedStmt.getAsObject().count as number) || 0
-    orphanedStmt.free()
+    `).get() as { count: number } | undefined)?.count ?? 0
 
     if (orphanedCount > 0) {
       errors.push(`Found ${orphanedCount} captures with invalid meeting references`)
     }
 
     // Verify foreign key integrity for recording references
-    const orphanedRecordingsStmt = db.prepare(`
+    const orphanedRecordingsCount = (db.prepare(`
       SELECT COUNT(*) as count
       FROM knowledge_captures
       WHERE source_recording_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM recordings WHERE id = knowledge_captures.source_recording_id)
-    `)
-    orphanedRecordingsStmt.step()
-    const orphanedRecordingsCount = (orphanedRecordingsStmt.getAsObject().count as number) || 0
-    orphanedRecordingsStmt.free()
+    `).get() as { count: number } | undefined)?.count ?? 0
 
     if (orphanedRecordingsCount > 0) {
       errors.push(`Found ${orphanedRecordingsCount} captures with invalid recording references`)
@@ -359,53 +334,44 @@ async function generateCleanupPreviewImpl(): Promise<CleanupPreview> {
 
   try {
     // Find orphaned transcripts
-    const orphanedStmt = db.prepare(`
+    for (const row of db.prepare(`
       SELECT t.id, t.recording_id
       FROM transcripts t
       LEFT JOIN recordings r ON t.recording_id = r.id
       WHERE r.id IS NULL
-    `)
-    while (orphanedStmt.step()) {
-      const row = orphanedStmt.getAsObject()
+    `).all() as Array<Record<string, unknown>>) {
       orphanedTranscripts.push({
         id: row.id as string,
         recording_id: row.recording_id as string
       })
     }
-    orphanedStmt.free()
 
     // Find duplicate recordings
-    const duplicatesStmt = db.prepare(`
+    for (const row of db.prepare(`
       SELECT filename, COUNT(*) as count, MIN(id) as id
       FROM recordings
       GROUP BY filename
       HAVING COUNT(*) > 1
-    `)
-    while (duplicatesStmt.step()) {
-      const row = duplicatesStmt.getAsObject()
+    `).all() as Array<Record<string, unknown>>) {
       duplicateRecordings.push({
         id: row.id as string,
         filename: row.filename as string,
         count: row.count as number
       })
     }
-    duplicatesStmt.free()
 
     // Find invalid meeting references
-    const invalidRefsStmt = db.prepare(`
+    for (const row of db.prepare(`
       SELECT r.id, r.meeting_id
       FROM recordings r
       WHERE r.meeting_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM meetings m WHERE m.id = r.meeting_id)
-    `)
-    while (invalidRefsStmt.step()) {
-      const row = invalidRefsStmt.getAsObject()
+    `).all() as Array<Record<string, unknown>>) {
       invalidMeetingRefs.push({
         id: row.id as string,
         meeting_id: row.meeting_id as string
       })
     }
-    invalidRefsStmt.free()
   } catch (error) {
     console.error('Failed to generate cleanup preview:', error)
   }
@@ -430,24 +396,21 @@ async function runPreMigrationCleanupImpl(): Promise<CleanupResult> {
   try {
     // Remove orphaned transcripts
     try {
-      const orphanedStmt = db.prepare(`
+      result.orphanedTranscriptsRemoved = db.prepare(`
         DELETE FROM transcripts
         WHERE id IN (
           SELECT t.id FROM transcripts t
           LEFT JOIN recordings r ON t.recording_id = r.id
           WHERE r.id IS NULL
         )
-      `)
-      orphanedStmt.step()
-      result.orphanedTranscriptsRemoved = db.getRowsModified()
-      orphanedStmt.free()
+      `).run().changes
     } catch (error) {
       result.errors.push(`Failed to remove orphaned transcripts: ${sanitizeError(error as Error)}`)
     }
 
     // Remove duplicate recordings (keep oldest)
     try {
-      const duplicatesStmt = db.prepare(`
+      result.duplicateRecordingsRemoved = db.prepare(`
         DELETE FROM recordings
         WHERE id NOT IN (
           SELECT MIN(id) FROM recordings GROUP BY filename
@@ -455,25 +418,19 @@ async function runPreMigrationCleanupImpl(): Promise<CleanupResult> {
         AND filename IN (
           SELECT filename FROM recordings GROUP BY filename HAVING COUNT(*) > 1
         )
-      `)
-      duplicatesStmt.step()
-      result.duplicateRecordingsRemoved = db.getRowsModified()
-      duplicatesStmt.free()
+      `).run().changes
     } catch (error) {
       result.errors.push(`Failed to remove duplicate recordings: ${sanitizeError(error as Error)}`)
     }
 
     // Fix invalid meeting references
     try {
-      const invalidRefsStmt = db.prepare(`
+      result.invalidMeetingRefsFixed = db.prepare(`
         UPDATE recordings
         SET meeting_id = NULL, correlation_confidence = NULL, correlation_method = NULL
         WHERE meeting_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM meetings m WHERE m.id = meeting_id)
-      `)
-      invalidRefsStmt.step()
-      result.invalidMeetingRefsFixed = db.getRowsModified()
-      invalidRefsStmt.free()
+      `).run().changes
     } catch (error) {
       result.errors.push(`Failed to fix invalid meeting references: ${sanitizeError(error as Error)}`)
     }
@@ -551,7 +508,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       for (const stmt of statements) {
         if (stmt) {
           try {
-            db.run(stmt)
+            db.exec(stmt)
           } catch (error) {
             // Some statements might fail if tables/columns already exist - that's ok
             console.log('Schema statement warning:', (error as Error).message)
@@ -565,15 +522,12 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       })
 
       // Get total count for progress calculation
-      const countStmt = db.prepare(`
+      const totalCount = (db.prepare(`
         SELECT COUNT(*) as total
         FROM recordings r
         INNER JOIN transcripts t ON r.id = t.recording_id
         WHERE r.migration_status IS NULL OR r.migration_status = 'pending'
-      `)
-      countStmt.step()
-      const totalCount = (countStmt.getAsObject().total as number) || 0
-      countStmt.free()
+      `).get() as { total: number } | undefined)?.total ?? 0
 
       if (totalCount === 0) {
         mainWindow?.webContents.send('migration:progress', {
@@ -620,15 +574,14 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       const PROGRESS_UPDATE_INTERVAL_MS = 500
 
       let processed = 0
-      while (migrateStmt.step()) {
-        const row = migrateStmt.getAsObject()
+      for (const row of migrateStmt.all() as Array<Record<string, unknown>>) {
         try {
           const captureId = randomUUID()
           const now = new Date().toISOString()
           const title = `Recording: ${row.filename}`
 
           // Insert knowledge capture
-          insertCaptureStmt.run([
+          insertCaptureStmt.run(
             captureId,
             title,
             row.summary || null,
@@ -637,7 +590,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
             now,
             row.meeting_id || null,
             row.recording_id
-          ])
+          )
 
           // Migrate action items with full structure preservation
           if (row.action_items) {
@@ -656,7 +609,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
                   }
 
                   if (content && content.trim()) {
-                    insertActionItemStmt.run([randomUUID(), captureId, content, now])
+                    insertActionItemStmt.run(randomUUID(), captureId, content, now)
                   }
                 }
               }
@@ -664,13 +617,13 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
               // If action_items is not valid JSON, try to parse as plain text
               const actionItemsText = row.action_items as string
               if (actionItemsText.trim()) {
-                insertActionItemStmt.run([randomUUID(), captureId, actionItemsText, now])
+                insertActionItemStmt.run(randomUUID(), captureId, actionItemsText, now)
               }
             }
           }
 
           // Update recording status
-          updateRecordingStmt.run([captureId, now, row.recording_id])
+          updateRecordingStmt.run(captureId, now, row.recording_id)
           result.capturesCreated++
           processed++
 
@@ -694,11 +647,6 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
         }
       }
 
-      migrateStmt.free()
-      insertCaptureStmt.free()
-      insertActionItemStmt.free()
-      updateRecordingStmt.free()
-
       mainWindow?.webContents.send('migration:progress', {
         phase: 'verifying',
         progress: 85
@@ -714,7 +662,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       }
 
       // Update schema version
-      db.run(`INSERT OR REPLACE INTO schema_version (version) VALUES (11)`)
+      db.exec(`INSERT OR REPLACE INTO schema_version (version) VALUES (11)`)
 
       mainWindow?.webContents.send('migration:progress', {
         phase: 'complete',
@@ -793,24 +741,24 @@ async function rollbackV11MigrationImpl(): Promise<{ success: boolean; errors: s
       }
 
       // Drop new tables (only after successful restore verification)
-      db.run('DROP TABLE IF EXISTS outputs')
-      db.run('DROP TABLE IF EXISTS follow_ups')
-      db.run('DROP TABLE IF EXISTS decisions')
-      db.run('DROP TABLE IF EXISTS action_items')
-      db.run('DROP TABLE IF EXISTS audio_sources')
-      db.run('DROP TABLE IF EXISTS knowledge_captures')
+      db.exec('DROP TABLE IF EXISTS outputs')
+      db.exec('DROP TABLE IF EXISTS follow_ups')
+      db.exec('DROP TABLE IF EXISTS decisions')
+      db.exec('DROP TABLE IF EXISTS action_items')
+      db.exec('DROP TABLE IF EXISTS audio_sources')
+      db.exec('DROP TABLE IF EXISTS knowledge_captures')
 
       // Reset migration status (only if backup didn't exist)
       if (!hasBackup) {
         try {
-          db.run(`UPDATE recordings SET migration_status = 'pending', migrated_to_capture_id = NULL, migrated_at = NULL WHERE migration_status = 'migrated'`)
+          db.exec(`UPDATE recordings SET migration_status = 'pending', migrated_to_capture_id = NULL, migrated_at = NULL WHERE migration_status = 'migrated'`)
         } catch {
           // Columns might not exist if migration wasn't completed
         }
       }
 
       // Revert schema version
-      db.run(`DELETE FROM schema_version WHERE version = 11`)
+      db.exec(`DELETE FROM schema_version WHERE version = 11`)
 
       // Clean up backup tables
       cleanupBackupTables()
@@ -841,41 +789,27 @@ async function getMigrationStatusImpl(): Promise<MigrationStatus> {
 
   try {
     // Check if migration_status column exists
-    const tableInfoStmt = db.prepare(`PRAGMA table_info(recordings)`)
-    let hasMigrationStatus = false
-    while (tableInfoStmt.step()) {
-      const col = tableInfoStmt.getAsObject()
-      if (col.name === 'migration_status') {
-        hasMigrationStatus = true
-        break
-      }
-    }
-    tableInfoStmt.free()
+    const cols = db.pragma('table_info(recordings)') as Array<{ name: string }>
+    const hasMigrationStatus = cols.some(col => col.name === 'migration_status')
 
     if (hasMigrationStatus) {
-      const stmt = db.prepare(`
+      const row = db.prepare(`
         SELECT
           SUM(CASE WHEN migration_status IS NULL OR migration_status = 'pending' THEN 1 ELSE 0 END) as pending,
           SUM(CASE WHEN migration_status = 'migrated' THEN 1 ELSE 0 END) as migrated,
           SUM(CASE WHEN migration_status = 'skipped' THEN 1 ELSE 0 END) as skipped,
           COUNT(*) as total
         FROM recordings
-      `)
-      stmt.step()
-      const row = stmt.getAsObject()
-      status.pending = (row.pending as number) || 0
-      status.migrated = (row.migrated as number) || 0
-      status.skipped = (row.skipped as number) || 0
-      status.total = (row.total as number) || 0
-      stmt.free()
+      `).get() as { pending: number; migrated: number; skipped: number; total: number } | undefined
+      status.pending = row?.pending ?? 0
+      status.migrated = row?.migrated ?? 0
+      status.skipped = row?.skipped ?? 0
+      status.total = row?.total ?? 0
     } else {
       // If column doesn't exist, count all recordings as pending
-      const stmt = db.prepare(`SELECT COUNT(*) as total FROM recordings`)
-      stmt.step()
-      const row = stmt.getAsObject()
-      status.pending = (row.total as number) || 0
-      status.total = (row.total as number) || 0
-      stmt.free()
+      const row = db.prepare(`SELECT COUNT(*) as total FROM recordings`).get() as { total: number } | undefined
+      status.pending = row?.total ?? 0
+      status.total = row?.total ?? 0
     }
   } catch (error) {
     console.error('Failed to get migration status:', error)
