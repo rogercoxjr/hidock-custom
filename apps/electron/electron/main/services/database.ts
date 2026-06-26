@@ -4016,7 +4016,7 @@ export interface MeetingContact {
 }
 
 export function getContacts(search?: string, type?: string, limit = 100, offset = 0): { contacts: Contact[]; total: number } {
-  let countSql = 'SELECT COUNT(*) as count FROM contacts'
+  let countSql = 'SELECT COUNT(*) as count FROM contacts c'
   let sql = `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count
 FROM contacts c
 LEFT JOIN (

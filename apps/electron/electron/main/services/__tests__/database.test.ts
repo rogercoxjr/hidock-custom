@@ -552,42 +552,31 @@ describe('Database Service (better-sqlite3)', () => {
       expect((byId.get('c2') as unknown as { voiceprint_count: number }).voiceprint_count).toBe(0)
     })
 
-    // ⚠️ KNOWN PRODUCTION BUG (surfaced by this real-DB conversion; masked by the
-    // old sql.js mock). getContacts() builds a count query as
-    //   `SELECT COUNT(*) as count FROM contacts`  (NO `c` alias)
-    // then appends the SAME where-clause used by the main aliased query, which
-    // qualifies columns as `c.name`/`c.email`/`c.type`/etc. So whenever a search
-    // OR type filter is supplied, the COUNT query throws
-    //   SqliteError: no such column: c.name  (or c.type)
-    // The runtime path contacts:getAll → getContacts(search, type, …) is therefore
-    // broken for any filtered People-page query. Fix: alias the count query
-    // (`FROM contacts c`). These two tests pin the CURRENT (buggy) behavior so the
-    // suite is green and the regression is captured; flip them to the
-    // commented-out happy-path assertions once the production bug is fixed.
-    it('filters by search term — currently THROWS due to unaliased count query (bug)', async () => {
+    it('filters by search term — returns only matching contacts with correct total', async () => {
       const db = await bootDatabase()
-      insertContact(db, 'c1', 'Mario Rossi', { email: 'mario@example.com' })
-      insertContact(db, 'c2', 'Luigi Verdi', { email: 'luigi@example.com' })
+      insertContact(db, 'c1', 'Mario Rossi', { email: 'mario@example.com', company: 'Acme' })
+      insertContact(db, 'c2', 'Luigi Verdi', { email: 'luigi@example.com', company: 'Other' })
+      insertContact(db, 'c3', 'Toad', { email: 'toad@example.com', company: 'Acme' })
+      // Give c1 one active voiceprint to verify voiceprint_count still works under filter
+      insertVoiceprint(db, 'vp1', 'c1')
 
-      expect(() => db.getContacts('mario')).toThrow(/no such column: c\.name/)
-      // EXPECTED once fixed:
-      //   const { contacts, total } = db.getContacts('mario')
-      //   expect(total).toBe(1)
-      //   expect(contacts).toHaveLength(1)
-      //   expect(contacts[0].id).toBe('c1')
+      const { contacts, total } = db.getContacts('mario')
+      expect(total).toBe(1)
+      expect(contacts).toHaveLength(1)
+      expect(contacts[0].id).toBe('c1')
+      expect((contacts[0] as unknown as { voiceprint_count: number }).voiceprint_count).toBe(1)
     })
 
-    it('filters by type — currently THROWS due to unaliased count query (bug)', async () => {
+    it('filters by type — returns only contacts of that type with correct total', async () => {
       const db = await bootDatabase()
-      insertContact(db, 'c1', 'Team Member', { type: 'team' })
-      insertContact(db, 'c2', 'A Customer', { type: 'customer' })
+      insertContact(db, 'c1', 'Team Member A', { type: 'team' })
+      insertContact(db, 'c2', 'Team Member B', { type: 'team' })
+      insertContact(db, 'c3', 'A Customer', { type: 'customer' })
 
-      expect(() => db.getContacts(undefined, 'team')).toThrow(/no such column: c\.type/)
-      // EXPECTED once fixed:
-      //   const { contacts, total } = db.getContacts(undefined, 'team')
-      //   expect(total).toBe(1)
-      //   expect(contacts).toHaveLength(1)
-      //   expect(contacts[0].id).toBe('c1')
+      const { contacts, total } = db.getContacts(undefined, 'team')
+      expect(total).toBe(2)
+      expect(contacts).toHaveLength(2)
+      expect(contacts.every(c => c.type === 'team')).toBe(true)
     })
 
     it('getContactById returns the contact with its voiceprint_count', async () => {
