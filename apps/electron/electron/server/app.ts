@@ -27,5 +27,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerAuth } = await import('./auth')
   await registerAuth(app)
 
+  const { registerAdminUsers } = await import('./routes/admin-users')
+  await registerAdminUsers(app)
+
   return app
 }
