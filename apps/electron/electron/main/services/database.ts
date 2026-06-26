@@ -2185,7 +2185,7 @@ export function runNoSave(sql: string, params: any[] = []): void {
 
 /**
  * Execute a function within a database transaction.
- * Automatically handles BEGIN/COMMIT/ROLLBACK and saves only on success.
+ * Automatically handles BEGIN/COMMIT/ROLLBACK.
  * Use this for operations that must be atomic (all-or-nothing).
  */
 export function runInTransaction<T>(fn: () => T): T {
@@ -3414,8 +3414,8 @@ export interface WindowEmbeddingGroup {
   fileLabel: string; fingerprint: string; embeddings: Uint8Array[]
 }
 
-/** Insert all window-embedding rows inside ONE transaction and save the sql.js image
- *  ONCE. Never per-row run() (whole-DB write storm). Empty input is a no-op. */
+/** Insert all window-embedding rows inside ONE better-sqlite3 transaction.
+ *  Avoids per-row overhead. Empty input is a no-op. */
 export function insertWindowEmbeddingsBatch(rows: WindowEmbeddingRow[]): void {
   if (rows.length === 0) return
   const now = new Date().toISOString()
@@ -4582,11 +4582,9 @@ export function getMeetingsNearDate(date: string): Meeting[] {
 }
 
 export function selectMeetingForRecordingByUser(recordingId: string, meetingId: string | null): void {
-  const db = getDatabase()
   if (!recordingId || typeof recordingId !== 'string') throw new Error('Invalid recording ID')
 
-  try {
-    db.run('BEGIN TRANSACTION')
+  runInTransaction(() => {
     if (meetingId !== null && !getMeetingById(meetingId)) {
       throw new Error(`Meeting ${meetingId} no longer exists`)
     }
@@ -4600,20 +4598,18 @@ export function selectMeetingForRecordingByUser(recordingId: string, meetingId: 
            WHERE recording_id = ? AND meeting_id = ?`, [recordingId, meetingId])
       linkRecordingToMeeting(recordingId, meetingId, 1.0, 'user_override')
     }
-    db.run('COMMIT')
-    saveDatabase()
-  } catch (error) {
-    db.run('ROLLBACK')
-    throw error
-  }
+  })
 }
 
 export function resetStuckTranscriptions(): { recordingsReset: number; queueItemsReset: number } {
-  const db = getDatabase()
-  db.run("UPDATE recordings SET transcription_status = 'none' WHERE transcription_status IN ('processing', 'pending')")
-  const recordingsReset = db.getRowsModified()
-  db.run("UPDATE transcription_queue SET status = 'pending' WHERE status = 'processing'")
-  const queueItemsReset = db.getRowsModified()
+  const recordingsInfo = getDatabase()
+    .prepare("UPDATE recordings SET transcription_status = 'none' WHERE transcription_status IN ('processing', 'pending')")
+    .run()
+  const recordingsReset = recordingsInfo.changes
+  const queueInfo = getDatabase()
+    .prepare("UPDATE transcription_queue SET status = 'pending' WHERE status = 'processing'")
+    .run()
+  const queueItemsReset = queueInfo.changes
   console.log(`[Database] Reset stuck transcriptions: ${recordingsReset} recordings, ${queueItemsReset} queue items`)
   return { recordingsReset, queueItemsReset }
 }
