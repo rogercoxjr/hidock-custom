@@ -25,8 +25,7 @@ const ALLOWED_AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.wav', '.ogg', '.flac
 const listQ = z.object({
   limit: z.coerce.number().int().positive().max(1000).default(200),
   offset: z.coerce.number().int().min(0).default(0),
-  status: z.string().optional(),
-  quality: z.string().optional()
+  status: z.string().optional()
 })
 
 const patchBody = z.object({
@@ -57,7 +56,7 @@ export async function registerRecordings(app: FastifyInstance): Promise<void> {
     const q = listQ.parse(req.query)
     let rows = getRecordings()
     if (q.status) rows = rows.filter((r) => r.status === q.status)
-    if (q.quality) rows = rows.filter((r) => (r as { quality_rating?: string }).quality_rating === q.quality)
+    // recordings-by-quality is provided by the 0c-4 quality domain (needs the knowledge_captures join); not a recordings column.
     return { items: rows.slice(q.offset, q.offset + q.limit), total: rows.length }
   })
 
