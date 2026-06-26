@@ -305,7 +305,7 @@ class IntegrityService {
     `)
 
     if (stuckRecordings.length > 0) {
-      db.run(`UPDATE recordings SET status = 'pending' WHERE status = 'transcribing'`)
+      db.exec(`UPDATE recordings SET status = 'pending' WHERE status = 'transcribing'`)
     }
 
     // Reset stuck queue items
@@ -314,7 +314,7 @@ class IntegrityService {
     `)
 
     if (stuckQueue.length > 0) {
-      db.run(`UPDATE transcription_queue SET status = 'pending' WHERE status = 'processing'`)
+      db.exec(`UPDATE transcription_queue SET status = 'pending' WHERE status = 'processing'`)
     }
 
     const totalFixed = stuckRecordings.length + stuckQueue.length

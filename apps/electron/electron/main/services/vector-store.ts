@@ -79,7 +79,7 @@ class VectorStore {
     const db = getDatabase()
 
     // Create vector_embeddings table (separate from database.ts embeddings table)
-    db.run(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS vector_embeddings (
         id TEXT PRIMARY KEY,
         content TEXT NOT NULL,
@@ -94,8 +94,8 @@ class VectorStore {
     `)
 
     // Create index for faster lookups
-    db.run(`CREATE INDEX IF NOT EXISTS idx_vector_embeddings_meeting ON vector_embeddings(meeting_id)`)
-    db.run(`CREATE INDEX IF NOT EXISTS idx_vector_embeddings_recording ON vector_embeddings(recording_id)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_vector_embeddings_meeting ON vector_embeddings(meeting_id)`)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_vector_embeddings_recording ON vector_embeddings(recording_id)`)
 
     // Load existing embeddings into memory
     await this.loadFromDatabase()
@@ -106,27 +106,19 @@ class VectorStore {
 
   private async loadFromDatabase(): Promise<void> {
     const db = getDatabase()
-    const rows = db.exec('SELECT * FROM vector_embeddings')
+    const rows = db.prepare('SELECT * FROM vector_embeddings').all() as Array<Record<string, unknown>>
 
-    if (rows.length === 0) return
-
-    const columns = rows[0].columns
-    for (const row of rows[0].values) {
-      const doc: Record<string, unknown> = {}
-      columns.forEach((col, i) => {
-        doc[col] = row[i]
-      })
-
+    for (const row of rows) {
       const vectorDoc: VectorDocument = {
-        id: doc['id'] as string,
-        content: doc['content'] as string,
-        embedding: JSON.parse(doc['embedding'] as string),
+        id: row['id'] as string,
+        content: row['content'] as string,
+        embedding: JSON.parse(row['embedding'] as string),
         metadata: {
-          meetingId: doc['meeting_id'] as string | undefined,
-          recordingId: doc['recording_id'] as string | undefined,
-          chunkIndex: doc['chunk_index'] as number,
-          timestamp: doc['timestamp'] as string | undefined,
-          subject: doc['subject'] as string | undefined
+          meetingId: row['meeting_id'] as string | undefined,
+          recordingId: row['recording_id'] as string | undefined,
+          chunkIndex: row['chunk_index'] as number,
+          timestamp: row['timestamp'] as string | undefined,
+          subject: row['subject'] as string | undefined
         }
       }
 
@@ -161,20 +153,19 @@ class VectorStore {
 
     // Persist to database
     const db = getDatabase()
-    db.run(
+    db.prepare(
       `INSERT OR REPLACE INTO vector_embeddings
        (id, content, embedding, meeting_id, recording_id, chunk_index, timestamp, subject)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        content,
-        JSON.stringify(embedding),
-        metadata.meetingId || null,
-        metadata.recordingId || null,
-        metadata.chunkIndex,
-        metadata.timestamp || null,
-        metadata.subject || null
-      ]
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id,
+      content,
+      JSON.stringify(embedding),
+      metadata.meetingId ?? null,
+      metadata.recordingId ?? null,
+      metadata.chunkIndex,
+      metadata.timestamp ?? null,
+      metadata.subject ?? null
     )
 
     return id
@@ -258,7 +249,7 @@ class VectorStore {
       }
     }
 
-    db.run('DELETE FROM vector_embeddings WHERE recording_id = ?', [recordingId])
+    db.prepare('DELETE FROM vector_embeddings WHERE recording_id = ?').run(recordingId)
     return deleted
   }
 
@@ -283,15 +274,13 @@ class VectorStore {
 
     // Update in database
     if (meetingSubject) {
-      db.run(
-        'UPDATE vector_embeddings SET meeting_id = ?, subject = ? WHERE recording_id = ?',
-        [meetingId, meetingSubject, recordingId]
-      )
+      db.prepare(
+        'UPDATE vector_embeddings SET meeting_id = ?, subject = ? WHERE recording_id = ?'
+      ).run(meetingId, meetingSubject, recordingId)
     } else {
-      db.run(
-        'UPDATE vector_embeddings SET meeting_id = ? WHERE recording_id = ?',
-        [meetingId, recordingId]
-      )
+      db.prepare(
+        'UPDATE vector_embeddings SET meeting_id = ? WHERE recording_id = ?'
+      ).run(meetingId, recordingId)
     }
 
     console.log(`Updated meeting_id for ${updated} vector chunks (recording ${recordingId} -> meeting ${meetingId})`)
