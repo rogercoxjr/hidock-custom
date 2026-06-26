@@ -154,10 +154,9 @@ describe('v30 voice-library phase-2C schema', () => {
   it('upsertTranscriptStage1 persists and overwrites diarization_run_id', async () => {
     const { run, insertDiarizationRun, upsertTranscriptStage1, getTranscriptByRecordingId } = await boot()
 
-    // transcripts.recording_id carries a FOREIGN KEY to recordings(id) and the real
-    // boot enables PRAGMA foreign_keys=ON, so the parent recording must exist before
-    // a transcript can be upserted for it. (The old sql.js harness ran with FK
-    // enforcement off, which silently masked this.)
+    // Insert a parent recordings row. Harmless defensive setup — the real boot now runs with
+    // foreign_keys=OFF (faithful to prior sql.js), so this isn't strictly required, but it keeps
+    // the fixture realistic and safe in case FK enforcement is enabled in the future.
     run(
       `INSERT INTO recordings (id, filename, date_recorded) VALUES (?, ?, ?)`,
       ['rec-2', 'rec2.wav', '2026-06-19T11:00:00.000Z']

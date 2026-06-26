@@ -1918,7 +1918,11 @@ export async function initializeDatabase(): Promise<void> {
   try {
     db = new Database(dbPath)            // opens existing file or creates a new one
     db.pragma('journal_mode = WAL')      // concurrent readers + one safe writer
-    db.pragma('foreign_keys = OFF')      // match prior sql.js behavior; rebuild-style migrations (e.g. v31 DROP+rename) assume FK enforcement is off.
+    db.pragma('foreign_keys = OFF')      // foreign_keys kept OFF to match the prior sql.js runtime (SQLite/sql.js default FK enforcement off;
+                                         // the original code never enabled it). NOTE: better-sqlite3 defaults FK ON, so this explicit OFF is
+                                         // required for faithful behavior. Rebuild-style migrations (v31, v20: DROP TABLE + rename) RELY on
+                                         // FK being off — with FK on they cascade-delete ON DELETE CASCADE children. If FK enforcement is ever
+                                         // enabled deliberately, those rebuild migrations must each be wrapped in their own foreign_keys=OFF/ON.
 
     const database = getDatabase()
     const statements = SCHEMA.split(';').map(s => s.trim()).filter(s => s.length > 0)
