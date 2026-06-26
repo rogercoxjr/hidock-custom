@@ -24,7 +24,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.decorate('appDeps', deps)
   app.get('/healthz', async () => ({ status: 'ok' }))
 
-  // Auth + admin routes are registered here in Tasks 5 and 6.
+  const { registerAuth } = await import('./auth')
+  await registerAuth(app)
 
   return app
 }
