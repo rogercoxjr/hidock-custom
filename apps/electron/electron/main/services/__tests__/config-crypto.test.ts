@@ -7,8 +7,8 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mkdtempSync, readFileSync } from 'fs'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
@@ -20,22 +20,16 @@ let currentTmpDir: string
 beforeEach(() => {
   currentTmpDir = mkdtempSync(join(tmpdir(), 'hidock-cfg-crypto-'))
   vi.resetModules()
+  process.env.HIDOCK_DATA_ROOT = currentTmpDir
+  delete process.env.HIDOCK_CONFIG_PATH
+  process.env.HIDOCK_SECRET_KEY = 'test-key'
+})
 
-  // Reinstall the mock with the new per-test directory.
-  vi.mock('electron', () => ({
-    app: {
-      getPath: (name: string) => {
-        if (name === 'userData') return currentTmpDir
-        if (name === 'home') return currentTmpDir
-        return currentTmpDir
-      }
-    },
-    safeStorage: {
-      isEncryptionAvailable: () => true,
-      encryptString: (s: string) => Buffer.from('ENC:' + s),
-      decryptString: (b: Buffer) => b.toString().replace(/^ENC:/, '')
-    }
-  }))
+afterEach(() => {
+  rmSync(currentTmpDir, { recursive: true, force: true })
+  delete process.env.HIDOCK_DATA_ROOT
+  delete process.env.HIDOCK_CONFIG_PATH
+  delete process.env.HIDOCK_SECRET_KEY
 })
 
 // ---------------------------------------------------------------------------
@@ -76,20 +70,9 @@ describe('config — summarization section (auto-pipeline P3)', () => {
 
     // Re-import fresh module state and reload from disk
     vi.resetModules()
-    vi.mock('electron', () => ({
-      app: {
-        getPath: (name: string) => {
-          if (name === 'userData') return currentTmpDir
-          if (name === 'home') return currentTmpDir
-          return currentTmpDir
-        }
-      },
-      safeStorage: {
-        isEncryptionAvailable: () => true,
-        encryptString: (s: string) => Buffer.from('ENC:' + s),
-        decryptString: (b: Buffer) => b.toString().replace(/^ENC:/, '')
-      }
-    }))
+    process.env.HIDOCK_DATA_ROOT = currentTmpDir
+    delete process.env.HIDOCK_CONFIG_PATH
+    process.env.HIDOCK_SECRET_KEY = 'test-key'
     const mod2 = await import('../config')
     await mod2.initializeConfig()
     expect(mod2.getConfig().summarization.ollamaCloudApiKey).toBe('ollama-secret-key')
@@ -119,20 +102,9 @@ describe('config — openaiApiKey crypto (auto-pipeline P2)', () => {
 
     // Re-import fresh module state and reload from disk
     vi.resetModules()
-    vi.mock('electron', () => ({
-      app: {
-        getPath: (name: string) => {
-          if (name === 'userData') return currentTmpDir
-          if (name === 'home') return currentTmpDir
-          return currentTmpDir
-        }
-      },
-      safeStorage: {
-        isEncryptionAvailable: () => true,
-        encryptString: (s: string) => Buffer.from('ENC:' + s),
-        decryptString: (b: Buffer) => b.toString().replace(/^ENC:/, '')
-      }
-    }))
+    process.env.HIDOCK_DATA_ROOT = currentTmpDir
+    delete process.env.HIDOCK_CONFIG_PATH
+    process.env.HIDOCK_SECRET_KEY = 'test-key'
     const mod2 = await import('../config')
     await mod2.initializeConfig()
     expect(mod2.getConfig().transcription.openaiApiKey).toBe('sk-secret')
