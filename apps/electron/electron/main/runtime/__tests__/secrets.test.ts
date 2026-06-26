@@ -29,4 +29,19 @@ describe('runtime/secrets', () => {
     process.env.HIDOCK_SECRET_KEY = 'test-key-please-change'
     expect(encryptSensitive('')).toBe('')
   })
+
+  it('returns the prefixed value when the ciphertext is tampered', () => {
+    process.env.HIDOCK_SECRET_KEY = 'test-key-please-change'
+    const enc = encryptSensitive('hello')
+    const tampered = enc.slice(0, -2) + 'XX'   // corrupt last two base64 chars
+    const result = decryptSensitive(tampered)
+    expect(result).not.toBe('hello')           // must not throw, must not leak plaintext
+  })
+
+  it('returns the prefixed value when the key is wrong', () => {
+    process.env.HIDOCK_SECRET_KEY = 'key-a'
+    const enc = encryptSensitive('hello')
+    process.env.HIDOCK_SECRET_KEY = 'key-b'
+    expect(decryptSensitive(enc)).toBe(enc)    // fails closed, returns prefixed blob
+  })
 })
