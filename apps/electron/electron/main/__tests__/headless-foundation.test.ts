@@ -21,7 +21,7 @@ describe('headless foundation', () => {
     const { bootFoundation } = await import('../boot-foundation')
     await bootFoundation()
     const { queryOne } = await import('../services/database')
-    expect(queryOne<{ version: number }>('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')?.version).toBe(33)
+    expect(queryOne<{ version: number }>('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')?.version).toBe(34)
   })
 
   it('foundation modules contain no `from \'electron\'` import', () => {

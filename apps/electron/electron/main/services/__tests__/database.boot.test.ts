@@ -17,7 +17,7 @@ describe('database boot (better-sqlite3)', () => {
     delete process.env.HIDOCK_DATA_ROOT
   })
 
-  it('boots a fresh DB to schema version 33', async () => {
+  it('boots a fresh DB to schema version 34', async () => {
     const { initializeFileStorage } = await import('../file-storage')
     const db = await import('../database')
     await initializeFileStorage()
@@ -25,7 +25,7 @@ describe('database boot (better-sqlite3)', () => {
     const row = db.queryOne<{ version: number }>(
       'SELECT version FROM schema_version ORDER BY version DESC LIMIT 1'
     )
-    expect(row?.version).toBe(33)
+    expect(row?.version).toBe(34)
   })
 
   it('queryAll / run round-trip with spread params', async () => {
@@ -50,7 +50,7 @@ describe('database boot (better-sqlite3)', () => {
     expect(db.queryOne('SELECT id FROM projects WHERE id = ?', ['p2'])).toBeUndefined()
   })
 
-  it('re-boot on an existing file is idempotent (stays at 33)', async () => {
+  it('re-boot on an existing file is idempotent (stays at 34)', async () => {
     const { initializeFileStorage } = await import('../file-storage')
     const db = await import('../database')
     await initializeFileStorage()
@@ -60,6 +60,6 @@ describe('database boot (better-sqlite3)', () => {
     const db2 = await import('../database')
     await db2.initializeDatabase()
     const row = db2.queryOne<{ version: number }>('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1')
-    expect(row?.version).toBe(33)
+    expect(row?.version).toBe(34)
   })
 })

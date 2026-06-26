@@ -8,7 +8,7 @@ import type { Turn } from './asr/asr-provider'
 let db: Database.Database | null = null
 let dbPath: string = ''
 
-const SCHEMA_VERSION = 33
+const SCHEMA_VERSION = 34
 
 const SCHEMA = `
 -- Calendar events from ICS
@@ -506,6 +506,15 @@ CREATE TABLE IF NOT EXISTS projects (
     description TEXT,
     status TEXT CHECK(status IN ('active', 'archived')) DEFAULT 'active',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Hosted-app access control (invite list). v34.
+CREATE TABLE IF NOT EXISTS allowed_users (
+    email TEXT PRIMARY KEY,
+    role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked')),
+    invited_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Junction table: Meeting-Contact relationship
@@ -1888,7 +1897,19 @@ const MIGRATIONS: Record<number, () => void> = {
       (id, name, description, instructions, is_default, is_builtin, enabled)
       VALUES ('builtin-default', 'Default', 'Base summarization (no extra emphasis).', '', 0, 1, 1)`)
     console.log('Migration v33 complete')
-  }
+  },
+
+  34: () => {
+    // v34: hosted-app access control (invite list). Additive — new table only.
+    console.log('Running migration to schema v34: allowed_users')
+    getDatabase().exec(`CREATE TABLE IF NOT EXISTS allowed_users (
+      email TEXT PRIMARY KEY,
+      role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked')),
+      invited_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+    console.log('Migration v34 complete')
+  },
 
 }
 
@@ -2336,6 +2357,56 @@ export function updateMeeting(id: string, updates: Partial<Pick<Meeting, 'subjec
 
   run(`UPDATE meetings SET ${fields.join(', ')} WHERE id = ?`, params)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Hosted-app access control — allowed_users (v34)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface AllowedUser {
+  email: string
+  role: 'admin' | 'member'
+  status: 'active' | 'revoked'
+  invited_by: string | null
+  created_at: string
+}
+
+export function getAllowedUser(email: string): AllowedUser | undefined {
+  return queryOne<AllowedUser>('SELECT * FROM allowed_users WHERE email = ?', [email])
+}
+
+export function listAllowedUsers(): AllowedUser[] {
+  return queryAll<AllowedUser>('SELECT * FROM allowed_users ORDER BY created_at ASC')
+}
+
+export function countActiveAdmins(): number {
+  return queryOne<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM allowed_users WHERE role = 'admin' AND status = 'active'"
+  )?.n ?? 0
+}
+
+export function upsertAllowedUser(input: { email: string; role?: 'admin' | 'member'; invitedBy?: string | null }): void {
+  run(
+    `INSERT INTO allowed_users (email, role, status, invited_by)
+     VALUES (?, ?, 'active', ?)
+     ON CONFLICT(email) DO UPDATE SET role = excluded.role, invited_by = COALESCE(excluded.invited_by, allowed_users.invited_by)`,
+    [input.email, input.role ?? 'member', input.invitedBy ?? null]
+  )
+}
+
+export function setAllowedUserStatus(email: string, status: 'active' | 'revoked'): void {
+  run('UPDATE allowed_users SET status = ? WHERE email = ?', [status, email])
+}
+
+export function ensureBootstrapAdmin(adminEmail: string): void {
+  run(
+    `INSERT INTO allowed_users (email, role, status, invited_by)
+     VALUES (?, 'admin', 'active', NULL)
+     ON CONFLICT(email) DO UPDATE SET role = 'admin', status = 'active'`,
+    [adminEmail]
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 /**
  * Batch get meetings by IDs - avoids N+1 query problem
