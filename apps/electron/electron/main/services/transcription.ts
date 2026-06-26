@@ -44,17 +44,12 @@ import { buildAnalysisPrompt, validateAnalysis } from './summarization-prompt'
 import { userTemplates, getTemplateById } from './summarization-templates'
 import { selectTemplateForTranscript, prefilter, buildExcerpt, hashText } from './summarization-selector'
 import { ProviderRateLimitError } from './provider-errors'
-import { BrowserWindow } from 'electron'
+import { getBroadcaster } from './broadcaster'
 import { getVectorStore } from './vector-store'
 
-let mainWindow: BrowserWindow | null = null
 let isProcessing = false
 let processingInterval: ReturnType<typeof setInterval> | null = null
 let lastSkipLogAt = 0 // Throttle "skipping" spam to once per 60s
-
-export function setMainWindowForTranscription(win: BrowserWindow): void {
-  mainWindow = win
-}
 
 /**
  * Truthful queue-pickup label: a Stage-2-only resume short-circuits ASR, so it is a
@@ -970,7 +965,5 @@ export function getTranscriptionStatus(): {
 }
 
 function notifyRenderer(channel: string, data: unknown): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send(channel, data)
-  }
+  getBroadcaster().broadcast(channel, data)
 }

@@ -11,7 +11,7 @@
  *   emitActivityLog('info', 'Syncing calendar...', 'Fetching from ICS URL')
  */
 
-import { BrowserWindow } from 'electron'
+import { getBroadcaster } from './broadcaster'
 
 export type ActivityLogType = 'error' | 'success' | 'info' | 'warning' | 'usb-in' | 'usb-out'
 
@@ -38,10 +38,5 @@ export function emitActivityLog(
     timestamp: new Date()
   }
 
-  const windows = BrowserWindow.getAllWindows()
-  for (const win of windows) {
-    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-      win.webContents.send('activity-log:entry', entry)
-    }
-  }
+  getBroadcaster().broadcast('activity-log:entry', entry)
 }

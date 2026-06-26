@@ -136,7 +136,8 @@ import {
   addToQueue,
   getRecordingById
 } from '../database'
-import { processQueueManually, setMainWindowForTranscription } from '../transcription'
+import { processQueueManually } from '../transcription'
+import { setBroadcaster } from '../broadcaster'
 import { ProviderRateLimitError, ProviderAuthError } from '../provider-errors'
 
 // ---------------------------------------------------------------------------
@@ -170,17 +171,13 @@ const validAnalysisJson = (title = 'T') =>
     language: 'en'
   })
 
-/** Fake renderer window: captures the channels the worker sends. */
+/** Install a fake broadcaster that captures channels the worker sends. */
 function installFakeWindow(): void {
-  setMainWindowForTranscription({
-    isDestroyed: () => false,
-    webContents: {
-      send: (channel: string) => {
-        shared.sentChannels.push(channel)
-      }
+  setBroadcaster({
+    broadcast: (channel: string) => {
+      shared.sentChannels.push(channel)
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any)
+  })
 }
 
 // ---------------------------------------------------------------------------

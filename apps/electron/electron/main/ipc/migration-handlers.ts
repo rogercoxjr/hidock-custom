@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
+import { getBroadcaster } from '../services/broadcaster'
 import { getDatabase, runInTransaction } from '../services/database'
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -450,7 +451,7 @@ async function runPreMigrationCleanupImpl(): Promise<CleanupResult> {
 // P1 #011: V11 Migration with Transaction Safety
 // ============================================================================
 
-export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promise<MigrationResult> {
+export async function migrateToV11Impl(): Promise<MigrationResult> {
   // P1 #009: Acquire migration lock
   if (!migrationLock.acquire()) {
     return {
@@ -478,7 +479,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       const db = getDatabase()
 
       // Emit progress event
-      mainWindow?.webContents.send('migration:progress', {
+      getBroadcaster().broadcast('migration:progress', {
         phase: 'creating_backup',
         progress: 0
       })
@@ -486,7 +487,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       // P1 #012: Create backup before migration
       createMigrationBackup()
 
-      mainWindow?.webContents.send('migration:progress', {
+      getBroadcaster().broadcast('migration:progress', {
         phase: 'creating_tables',
         progress: 10
       })
@@ -516,7 +517,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
         }
       }
 
-      mainWindow?.webContents.send('migration:progress', {
+      getBroadcaster().broadcast('migration:progress', {
         phase: 'migrating_data',
         progress: 20
       })
@@ -530,7 +531,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       `).get() as { total: number } | undefined)?.total ?? 0
 
       if (totalCount === 0) {
-        mainWindow?.webContents.send('migration:progress', {
+        getBroadcaster().broadcast('migration:progress', {
           phase: 'complete',
           progress: 100
         })
@@ -635,7 +636,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
           if (shouldUpdate || isLastRecord) {
             lastProgressUpdateTime = currentTime
             const progress = Math.floor((processed / totalCount) * 60) + 20
-            mainWindow?.webContents.send('migration:progress', {
+            getBroadcaster().broadcast('migration:progress', {
               phase: 'migrating_data',
               progress,
               processed,
@@ -647,7 +648,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
         }
       }
 
-      mainWindow?.webContents.send('migration:progress', {
+      getBroadcaster().broadcast('migration:progress', {
         phase: 'verifying',
         progress: 85
       })
@@ -664,7 +665,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
       // Update schema version
       db.exec(`INSERT OR REPLACE INTO schema_version (version) VALUES (11)`)
 
-      mainWindow?.webContents.send('migration:progress', {
+      getBroadcaster().broadcast('migration:progress', {
         phase: 'complete',
         progress: 100,
         processed,
@@ -678,7 +679,7 @@ export async function migrateToV11Impl(mainWindow: BrowserWindow | null): Promis
     result.success = false
     result.errors.push(sanitizeError(error as Error))
 
-    mainWindow?.webContents.send('migration:progress', {
+    getBroadcaster().broadcast('migration:progress', {
       phase: 'error',
       error: sanitizeError(error as Error)
     })
@@ -822,12 +823,6 @@ async function getMigrationStatusImpl(): Promise<MigrationStatus> {
 // IPC Handler Registration
 // ============================================================================
 
-let mainWindowRef: BrowserWindow | null = null
-
-export function setMainWindowForMigration(window: BrowserWindow | null): void {
-  mainWindowRef = window
-}
-
 export function registerMigrationHandlers(): void {
   // Get cleanup preview
   ipcMain.handle('migration:previewCleanup', async () => {
@@ -863,7 +858,7 @@ export function registerMigrationHandlers(): void {
   // Run full migration
   ipcMain.handle('migration:runV11', async () => {
     try {
-      return await migrateToV11Impl(mainWindowRef)
+      return await migrateToV11Impl()
     } catch (error) {
       console.error('Failed to run migration:', error)
       return {

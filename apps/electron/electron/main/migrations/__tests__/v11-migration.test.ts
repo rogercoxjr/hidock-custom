@@ -55,7 +55,7 @@ describe('V11 Migration', () => {
   })
 
   it('should migrate recordings to knowledge captures', async () => {
-    const result = await migrateToV11Impl(null)
+    const result = await migrateToV11Impl()
     expect(result.success).toBe(true)
     expect(result.capturesCreated).toBe(1)
 

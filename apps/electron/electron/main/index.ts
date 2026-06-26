@@ -36,21 +36,16 @@ import { registerIpcHandlers } from './ipc/handlers'
 import { stopAutoSync, initializeCalendarAutoSync } from './ipc/calendar-handlers'
 import {
   startRecordingWatcher,
-  stopRecordingWatcher,
-  setMainWindow as setWatcherMainWindow
+  stopRecordingWatcher
 } from './services/recording-watcher'
 import {
   startTranscriptionProcessor,
-  stopTranscriptionProcessor,
-  setMainWindowForTranscription
+  stopTranscriptionProcessor
 } from './services/transcription'
 import { cleanAsrTempDir } from './services/asr/audio-normalize'
 import { getVectorStore } from './services/vector-store'
 import { getRAGService } from './services/rag'
-import { setMainWindowForEventBus } from './services/event-bus'
 import { getStoragePolicyService } from './services/storage-policy'
-import { setMainWindowForMigration } from './ipc/migration-handlers'
-import { setMainWindowForSpeakers } from './ipc/speakers-handlers'
 import { getIntegrityService } from './services/integrity-service'
 
 let mainWindow: BrowserWindow | null = null
@@ -277,14 +272,6 @@ app.whenReady().then(async () => {
   await initializeServices()
 
   createWindow()
-
-  if (mainWindow) {
-    setWatcherMainWindow(mainWindow)
-    setMainWindowForTranscription(mainWindow)
-    setMainWindowForEventBus(mainWindow)
-    setMainWindowForMigration(mainWindow)
-    setMainWindowForSpeakers(mainWindow)
-  }
 
   startRecordingWatcher()
   cleanAsrTempDir() // Wipe any leftover ASR temp files from a previous run (spec §5.1 temp hygiene)

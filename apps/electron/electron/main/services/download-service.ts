@@ -13,7 +13,8 @@
  * - Handle errors gracefully with user notification
  */
 
-import { BrowserWindow, ipcMain, Notification } from 'electron'
+import { ipcMain, Notification } from 'electron'
+import { getBroadcaster } from './broadcaster'
 import {
   markRecordingDownloaded,
   addSyncedFile,
@@ -1058,13 +1059,7 @@ class DownloadService {
       }
 
       const state = this.getState()
-      const windows = BrowserWindow.getAllWindows()
-
-      for (const win of windows) {
-        if (!win.isDestroyed()) {
-          win.webContents.send('download-service:state-update', state)
-        }
-      }
+      getBroadcaster().broadcast('download-service:state-update', state)
 
       // Set a throttle window
       this.emitTimer = setTimeout(() => {

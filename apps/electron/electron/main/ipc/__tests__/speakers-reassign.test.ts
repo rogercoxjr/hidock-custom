@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { registerSpeakersHandlers, nextUnusedLetter, setMainWindowForSpeakers } from '../speakers-handlers'
+import { registerSpeakersHandlers, nextUnusedLetter } from '../speakers-handlers'
+import { setBroadcaster } from '../../services/broadcaster'
 import type { ReassignTurnsRequest } from '../speakers-handlers'
 import { ipcMain } from 'electron'
 
@@ -103,7 +104,7 @@ describe('nextUnusedLetter', () => {
 describe('speakers:reassignTurns', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    setMainWindowForSpeakers(null as any)
+    setBroadcaster(null)
   })
 
   it('registers speakers:reassignTurns', () => {
