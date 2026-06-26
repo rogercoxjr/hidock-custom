@@ -4,19 +4,21 @@
 
 **Goal:** Stand up the hosted web server: a Fastify app on top of `bootFoundation()` with Google-OIDC login gated by an admin-managed `allowed_users` invite list, and admin-only user-management routes.
 
-**Architecture:** A new `electron/server/` tree boots the 0a foundation (`bootFoundation()`), then runs Fastify. Auth is OIDC (Google) behind an injectable `OidcService` interface (real impl uses `openid-client`; a fake drives tests). The session cookie (`@fastify/secure-session`) holds only the authenticated `email`; an auth guard re-reads `allowed_users` on every request so revocation is instant. Admin routes manage the invite list. Domain REST routers, media, renderer, device sync, and Docker are later sub-plans.
+**Architecture:** A new `electron/server/` tree boots the 0a foundation (`bootFoundation()`), then runs Fastify. Auth is OIDC (Google) behind an injectable `OidcService` interface (real impl uses `openid-client`; a fake drives tests and asserts the login-context round-trip). The session cookie (`@fastify/secure-session`) holds only the authenticated `email`; an auth guard re-reads `allowed_users` on every request so revocation is instant. Admin routes manage the invite list. Domain REST routers, media, renderer, device sync, and Docker are later sub-plans.
 
-**Tech Stack:** Node 20+, Fastify 5, `@fastify/secure-session`, `openid-client` v6, better-sqlite3 (via 0a), Vitest (`app.inject` + real DB).
+**Tech Stack:** Node 20+, Fastify 5, `@fastify/secure-session`, `openid-client` v6, better-sqlite3 (via 0a), Zod v4 (already a dep), Vitest (`app.inject` + real DB).
 
 ## Global Constraints
 
-- **Server lives in `apps/electron/electron/server/`** (covered by `tsconfig.node.json` `electron/**`). It imports the foundation via `../main/boot-foundation` and DB via `../main/services/database`.
+- **Server lives in `apps/electron/electron/server/`** (covered by `tsconfig.node.json` `electron/**`). Production modules there import the foundation via `../main/boot-foundation` and DB via `../main/services/database`. **Test files live in `electron/server/__tests__/` — so from a test, the path to the main process is `../../main/...`** (two levels up), NOT `../main/...`.
 - **Env (read by `getServerConfig()`):** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_URL` (e.g. `https://hub.example.com`), `ADMIN_EMAIL` (default `rogercoxjr@gmail.com`), `SESSION_SECRET` (≥16 chars), `PORT` (default `8788`). Missing required (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`PUBLIC_URL`/`SESSION_SECRET`) → throw at startup.
 - **`allowed_users` schema:** `email TEXT PRIMARY KEY`, `role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin','member'))`, `status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','revoked'))`, `invited_by TEXT`, `created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP`. **Schema version 33 → 34.**
-- **Session cookie:** name `hidock_session`; `httpOnly: true, secure: true, sameSite: 'lax', path: '/'`; holds only `{ email }`. Key = `sha256(SESSION_SECRET)` (32 bytes).
+- **Session cookie:** name `hidock_session`; `httpOnly: true, sameSite: 'lax', path: '/'`; holds only `{ email }` (+ transient `{ oidc }` during the login round-trip). Key = `sha256(SESSION_SECRET)` (32 bytes). **`secure` is config-driven** via `AppDeps.cookieSecure` — `true` in production (behind TLS), **`false` in tests** (Vitest `app.inject` has no TLS, and a `Secure` cookie will not round-trip through inject).
 - **Auth guard re-reads `allowed_users` each request** — never trust a role cached in the cookie; revoked/missing → 401 + clear session.
-- **OIDC:** scope `openid email profile`; `redirect_uri = ${PUBLIC_URL}/auth/callback`; PKCE (state, nonce, code_verifier stashed in session between login redirect and callback). Reject if `email_verified !== true`.
-- **`openid-client` is ESM-only** — load it via dynamic `import('openid-client')` inside the real impl to avoid CJS interop issues; the real impl is NOT unit-tested (needs live Google creds) — its live verification is deferred to the user. All route/gate logic is tested with the **fake** `OidcService`.
+- **OIDC:** scope `openid email profile`; PKCE (state, nonce, code_verifier stashed in session between login redirect and callback). Reject if `email_verified !== true`. **The callback URL handed to `openid-client` is built from `PUBLIC_URL`, not from `req.host`/`req.protocol`** (which report the internal proxy address behind nginxproxymanager): `new URL(req.url, publicUrl).href`.
+- **CSRF:** state-changing admin routes require a matching `Origin` header when one is present (`requireSameOrigin` guard rejects a present-but-foreign Origin), in addition to `SameSite=lax`.
+- **Admin-route invariants:** the invite list is never hard-deleted (revoke = `status:'revoked'`, preserving an audit trail); a change that would leave **zero active admins** is rejected (409) — no admin lockout. User identifiers travel in the **request body**, never the URL path (emails contain `@`/`+`/`.`).
+- **`openid-client` is ESM-only** — load it via dynamic `import('openid-client')` inside the real impl. The real `createGoogleOidc` is NOT unit-tested (needs live Google creds); its live verification is deferred to the operator. All route/gate/CSRF logic is tested with the **fake** `OidcService`, which asserts the login-context round-trip.
 - **OUT OF SCOPE (later sub-plans):** domain REST routers (0c), WS broadcaster (0c), media endpoint (0d), renderer (0e), device sync (Phase 1), Docker (0f). Do not build them.
 - Line length 120; TypeScript strict; Vitest; branch `feat/hosted-knowledge-hub`; run commands from `apps/electron/`.
 
@@ -38,7 +40,7 @@ Run:
 ```bash
 npm install fastify @fastify/secure-session openid-client
 ```
-Expected: all three added under `dependencies`.
+Expected: all three added under `dependencies`. (`zod` is already present — do not add it.)
 
 - [ ] **Step 2: Write the failing test**
 
@@ -64,6 +66,11 @@ describe('getServerConfig', () => {
     expect(c.publicUrl).toBe('https://hub.example.com')
     expect(c.adminEmail).toBe('rogercoxjr@gmail.com') // default
     expect(c.port).toBe(8788)                          // default
+  })
+
+  it('strips a trailing slash from PUBLIC_URL', () => {
+    Object.assign(process.env, REQUIRED, { PUBLIC_URL: 'https://hub.example.com/' })
+    expect(getServerConfig().publicUrl).toBe('https://hub.example.com')
   })
 
   it('throws when a required var is missing', () => {
@@ -119,7 +126,7 @@ export function getServerConfig(): ServerConfig {
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run electron/server/__tests__/config.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 6: Commit**
 
@@ -134,6 +141,7 @@ git commit -m "feat(0b): server deps + env config module"
 
 **Files:**
 - Modify: `apps/electron/electron/main/services/database.ts` (`SCHEMA_VERSION` line 11; `SCHEMA` const ~line 13; `MIGRATIONS` registry ~line 666; add functions near the other domain functions)
+- Modify: `apps/electron/electron/main/services/__tests__/database.boot.test.ts` and `apps/electron/electron/main/__tests__/headless-foundation.test.ts` (schema-version assertion 33 → 34)
 - Test: `apps/electron/electron/main/services/__tests__/allowed-users.test.ts`
 
 **Interfaces:**
@@ -141,9 +149,10 @@ git commit -m "feat(0b): server deps + env config module"
   - `interface AllowedUser { email: string; role: 'admin' | 'member'; status: 'active' | 'revoked'; invited_by: string | null; created_at: string }`
   - `getAllowedUser(email: string): AllowedUser | undefined`
   - `listAllowedUsers(): AllowedUser[]`
+  - `countActiveAdmins(): number`
   - `upsertAllowedUser(input: { email: string; role?: 'admin' | 'member'; invitedBy?: string | null }): void`
   - `setAllowedUserStatus(email: string, status: 'active' | 'revoked'): void`
-  - `ensureBootstrapAdmin(adminEmail: string): void` (idempotent; inserts the admin as `admin`/`active` if absent)
+  - `ensureBootstrapAdmin(adminEmail: string): void` (idempotent; inserts the admin as `admin`/`active` if absent, and re-promotes/re-activates it if present)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -181,9 +190,9 @@ describe('allowed_users', () => {
     const db = await import('../database')
     db.ensureBootstrapAdmin('boss@x.com')
     db.ensureBootstrapAdmin('boss@x.com')
-    const u = db.getAllowedUser('boss@x.com')
-    expect(u).toMatchObject({ email: 'boss@x.com', role: 'admin', status: 'active' })
+    expect(db.getAllowedUser('boss@x.com')).toMatchObject({ email: 'boss@x.com', role: 'admin', status: 'active' })
     expect(db.listAllowedUsers()).toHaveLength(1)
+    expect(db.countActiveAdmins()).toBe(1)
   })
 
   it('upsert + status + lookup round-trip', async () => {
@@ -192,6 +201,16 @@ describe('allowed_users', () => {
     expect(db.getAllowedUser('m@x.com')).toMatchObject({ role: 'member', status: 'active', invited_by: 'boss@x.com' })
     db.setAllowedUserStatus('m@x.com', 'revoked')
     expect(db.getAllowedUser('m@x.com')?.status).toBe('revoked')
+  })
+
+  it('countActiveAdmins ignores members and revoked admins', async () => {
+    const db = await import('../database')
+    db.ensureBootstrapAdmin('a1@x.com')
+    db.upsertAllowedUser({ email: 'a2@x.com', role: 'admin' })
+    db.upsertAllowedUser({ email: 'm@x.com', role: 'member' })
+    expect(db.countActiveAdmins()).toBe(2)
+    db.setAllowedUserStatus('a2@x.com', 'revoked')
+    expect(db.countActiveAdmins()).toBe(1)
   })
 })
 ```
@@ -255,11 +274,17 @@ export function listAllowedUsers(): AllowedUser[] {
   return queryAll<AllowedUser>('SELECT * FROM allowed_users ORDER BY created_at ASC')
 }
 
+export function countActiveAdmins(): number {
+  return queryOne<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM allowed_users WHERE role = 'admin' AND status = 'active'"
+  )?.n ?? 0
+}
+
 export function upsertAllowedUser(input: { email: string; role?: 'admin' | 'member'; invitedBy?: string | null }): void {
   run(
     `INSERT INTO allowed_users (email, role, status, invited_by)
      VALUES (?, ?, 'active', ?)
-     ON CONFLICT(email) DO UPDATE SET role = excluded.role, invited_by = excluded.invited_by`,
+     ON CONFLICT(email) DO UPDATE SET role = excluded.role, invited_by = COALESCE(excluded.invited_by, allowed_users.invited_by)`,
     [input.email, input.role ?? 'member', input.invitedBy ?? null]
   )
 }
@@ -278,15 +303,14 @@ export function ensureBootstrapAdmin(adminEmail: string): void {
 }
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [ ] **Step 6: Update the schema-version assertions in existing tests**
 
-Run: `npx vitest run electron/main/services/__tests__/allowed-users.test.ts`
-Expected: PASS (3 tests).
+In `electron/main/services/__tests__/database.boot.test.ts` change the `toBe(33)` assertions to `toBe(34)`. In `electron/main/__tests__/headless-foundation.test.ts` change the `toBe(33)` assertion to `toBe(34)`.
 
-- [ ] **Step 7: Confirm no schema-version regressions**
+- [ ] **Step 7: Run tests to verify they pass**
 
-Run: `npx vitest run electron/main/services/__tests__/database.boot.test.ts`
-Expected: FAIL on the "schema version 33" assertion (it now reaches 34). Update that assertion in `database.boot.test.ts` from `toBe(33)` to `toBe(34)`, and update the same constant in `electron/main/__tests__/headless-foundation.test.ts`. Re-run both → PASS.
+Run: `npx vitest run electron/main/services/__tests__/allowed-users.test.ts electron/main/services/__tests__/database.boot.test.ts electron/main/__tests__/headless-foundation.test.ts`
+Expected: PASS (all green; allowed-users 4 tests).
 
 - [ ] **Step 8: Commit**
 
@@ -309,7 +333,7 @@ git commit -m "feat(0b): v34 allowed_users table + access functions"
   - `interface LoginContext { state: string; nonce: string; codeVerifier: string }`
   - `interface OidcService { beginLogin(): Promise<{ redirectUrl: string } & LoginContext>; completeLogin(currentUrl: string, ctx: LoginContext): Promise<OidcUser> }`
   - `createGoogleOidc(cfg: { clientId: string; clientSecret: string; publicUrl: string }): OidcService` (real)
-  - `createFakeOidc(result: OidcUser, opts?: { failComplete?: boolean }): OidcService` (test helper)
+  - `createFakeOidc(result: OidcUser, opts?: { failComplete?: boolean }): OidcService` (test fake — asserts the ctx passed to `completeLogin` equals the ctx returned by `beginLogin`)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -326,17 +350,24 @@ describe('createFakeOidc', () => {
     expect(r.state).toBeTruthy(); expect(r.nonce).toBeTruthy(); expect(r.codeVerifier).toBeTruthy()
   })
 
-  it('completeLogin returns the canned user', async () => {
+  it('completeLogin returns the canned user when given the issued context', async () => {
     const oidc = createFakeOidc({ email: 'a@x.com', emailVerified: true, sub: 's1' })
     const ctx = await oidc.beginLogin()
-    const u = await oidc.completeLogin('https://hub/auth/callback?code=x&state=' + ctx.state, ctx)
+    const u = await oidc.completeLogin('https://hub.example.com/auth/callback?code=x&state=' + ctx.state, ctx)
     expect(u).toEqual({ email: 'a@x.com', emailVerified: true, sub: 's1' })
   })
 
-  it('completeLogin can be made to throw', async () => {
+  it('completeLogin throws when the context does not match what was issued', async () => {
+    const oidc = createFakeOidc({ email: 'a@x.com', emailVerified: true, sub: 's1' })
+    await oidc.beginLogin()
+    await expect(oidc.completeLogin('https://hub.example.com/auth/callback',
+      { state: 'wrong', nonce: 'wrong', codeVerifier: 'wrong' })).rejects.toThrow(/context/)
+  })
+
+  it('completeLogin can be forced to fail (exchange error)', async () => {
     const oidc = createFakeOidc({ email: 'a@x.com', emailVerified: true, sub: 's1' }, { failComplete: true })
     const ctx = await oidc.beginLogin()
-    await expect(oidc.completeLogin('https://hub/auth/callback', ctx)).rejects.toThrow()
+    await expect(oidc.completeLogin('https://hub.example.com/auth/callback', ctx)).rejects.toThrow()
   })
 })
 ```
@@ -369,10 +400,10 @@ const SCOPE = 'openid email profile'
  */
 export function createGoogleOidc(cfg: { clientId: string; clientSecret: string; publicUrl: string }): OidcService {
   const redirectUri = `${cfg.publicUrl}/auth/callback`
-  let configPromise: Promise<any> | null = null
+  let configPromise: Promise<unknown> | null = null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lib = (): Promise<any> => import('openid-client')
-  const getConfig = async () => {
+  const getConfig = async (): Promise<unknown> => {
     if (!configPromise) {
       const client = await lib()
       configPromise = client.discovery(new URL(GOOGLE_ISSUER), cfg.clientId, cfg.clientSecret)
@@ -413,17 +444,23 @@ export function createGoogleOidc(cfg: { clientId: string; clientSecret: string; 
   }
 }
 
-/** Deterministic in-memory fake for route tests. */
+/**
+ * Deterministic in-memory fake for route tests. completeLogin asserts it received
+ * the exact context beginLogin issued, so a route that fails to stash/retrieve
+ * state/nonce/code_verifier across the redirect fails the test.
+ */
 export function createFakeOidc(result: OidcUser, opts: { failComplete?: boolean } = {}): OidcService {
+  let issued: LoginContext | null = null
   return {
     async beginLogin() {
-      return {
-        redirectUrl: 'https://accounts.google.com/o/oauth2/v2/auth?fake=1',
-        state: randomUUID(), nonce: randomUUID(), codeVerifier: randomUUID()
-      }
+      issued = { state: randomUUID(), nonce: randomUUID(), codeVerifier: randomUUID() }
+      return { redirectUrl: 'https://accounts.google.com/o/oauth2/v2/auth?fake=1', ...issued }
     },
-    async completeLogin() {
+    async completeLogin(_currentUrl, ctx) {
       if (opts.failComplete) throw new Error('OIDC exchange failed')
+      if (issued && (ctx.state !== issued.state || ctx.nonce !== issued.nonce || ctx.codeVerifier !== issued.codeVerifier)) {
+        throw new Error('OIDC: login context mismatch (state/nonce/verifier)')
+      }
       return result
     }
   }
@@ -433,13 +470,13 @@ export function createFakeOidc(result: OidcUser, opts: { failComplete?: boolean 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run electron/server/__tests__/oidc-fake.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add electron/server/oidc.ts electron/server/__tests__/oidc-fake.test.ts
-git commit -m "feat(0b): OidcService interface + Google impl + test fake"
+git commit -m "feat(0b): OidcService interface + Google impl + context-asserting fake"
 ```
 
 ---
@@ -448,28 +485,35 @@ git commit -m "feat(0b): OidcService interface + Google impl + test fake"
 
 **Files:**
 - Create: `apps/electron/electron/server/app.ts`
+- Create: `apps/electron/electron/server/types.d.ts`
 - Test: `apps/electron/electron/server/__tests__/app.test.ts`
 
 **Interfaces:**
 - Consumes: `OidcService` (Task 3).
-- Produces: `interface AppDeps { oidc: OidcService; sessionSecret: string; adminEmail: string }`; `buildApp(deps: AppDeps): Promise<FastifyInstance>`.
+- Produces: `interface AppDeps { oidc: OidcService; sessionSecret: string; adminEmail: string; publicUrl: string; cookieSecure: boolean }`; `buildApp(deps: AppDeps): Promise<FastifyInstance>`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `electron/server/__tests__/app.test.ts`:
 ```typescript
 import { describe, it, expect } from 'vitest'
-import { buildApp } from '../app'
+import { buildApp, AppDeps } from '../app'
 import { createFakeOidc } from '../oidc'
 
-function deps() {
-  return { oidc: createFakeOidc({ email: 'a@x.com', emailVerified: true, sub: 's' }),
-           sessionSecret: 'a-very-long-secret-value', adminEmail: 'boss@x.com' }
+export function testDeps(overrides: Partial<AppDeps> = {}): AppDeps {
+  return {
+    oidc: createFakeOidc({ email: 'a@x.com', emailVerified: true, sub: 's' }),
+    sessionSecret: 'a-very-long-secret-value',
+    adminEmail: 'boss@x.com',
+    publicUrl: 'https://hub.example.com',
+    cookieSecure: false, // inject() has no TLS — a Secure cookie would not round-trip
+    ...overrides
+  }
 }
 
 describe('buildApp', () => {
   it('serves /healthz', async () => {
-    const app = await buildApp(deps())
+    const app = await buildApp(testDeps())
     const res = await app.inject({ method: 'GET', url: '/healthz' })
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ status: 'ok' })
@@ -496,32 +540,43 @@ export interface AppDeps {
   oidc: OidcService
   sessionSecret: string
   adminEmail: string
+  publicUrl: string
+  cookieSecure: boolean
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false })
+  const app = Fastify({ logger: false, trustProxy: true })
 
   await app.register(secureSession, {
     sessionName: 'session',
     cookieName: 'hidock_session',
     key: createHash('sha256').update(deps.sessionSecret).digest(), // 32 bytes
-    cookie: { path: '/', httpOnly: true, secure: true, sameSite: 'lax' }
+    cookie: { path: '/', httpOnly: true, secure: deps.cookieSecure, sameSite: 'lax' }
   })
 
+  app.decorate('appDeps', deps)
   app.get('/healthz', async () => ({ status: 'ok' }))
 
   // Auth + admin routes are registered here in Tasks 5 and 6.
-  app.decorate('appDeps', deps)
 
   return app
 }
 ```
-Add the decorator type so TypeScript knows about `appDeps`. Create `electron/server/types.d.ts`:
+Create `electron/server/types.d.ts`:
 ```typescript
+import { preHandlerHookHandler } from 'fastify'
 import { AppDeps } from './app'
+
 declare module 'fastify' {
-  interface FastifyInstance { appDeps: AppDeps }
-  interface FastifyRequest { user?: { email: string; role: 'admin' | 'member' } }
+  interface FastifyInstance {
+    appDeps: AppDeps
+    requireAuth: preHandlerHookHandler
+    requireAdmin: preHandlerHookHandler
+    requireSameOrigin: preHandlerHookHandler
+  }
+  interface FastifyRequest {
+    user?: { email: string; role: 'admin' | 'member' }
+  }
 }
 ```
 
@@ -534,7 +589,7 @@ Expected: PASS.
 
 ```bash
 git add electron/server/app.ts electron/server/types.d.ts electron/server/__tests__/app.test.ts
-git commit -m "feat(0b): Fastify app bootstrap + healthz + secure-session"
+git commit -m "feat(0b): Fastify app bootstrap + healthz + config-driven secure-session"
 ```
 
 ---
@@ -547,8 +602,8 @@ git commit -m "feat(0b): Fastify app bootstrap + healthz + secure-session"
 - Test: `apps/electron/electron/server/__tests__/auth.test.ts`
 
 **Interfaces:**
-- Consumes: `OidcService`; `getAllowedUser` from `../main/services/database`; `AppDeps`.
-- Produces: a Fastify plugin `registerAuth(app)` adding routes `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`, `GET /api/me`; and decorators `app.requireAuth` / `app.requireAdmin` (preHandlers).
+- Consumes: `AppDeps` (`oidc`, `publicUrl`); `getAllowedUser` from `../main/services/database`.
+- Produces: `registerAuth(app)` adding `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`, `GET /api/me`; decorators `app.requireAuth`, `app.requireAdmin`, `app.requireSameOrigin`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -558,25 +613,24 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { buildApp } from '../app'
+import { createFakeOidc } from '../oidc'
+import { testDeps } from './app.test'
 
-async function setup(oidcEmail: string) {
-  const { createFakeOidc } = await import('../oidc')
-  const { buildApp } = await import('../app')
-  const db = await import('../main/services/database') // resolved relative to this test file
-  return { db, app: await buildApp({
-    oidc: createFakeOidc({ email: oidcEmail, emailVerified: true, sub: 'sub-' + oidcEmail }),
-    sessionSecret: 'a-very-long-secret-value', adminEmail: 'boss@x.com'
-  }) }
+async function makeApp(oidcEmail: string) {
+  return buildApp(testDeps({ oidc: createFakeOidc({ email: oidcEmail, emailVerified: true, sub: 'sub-' + oidcEmail }) }))
 }
 
-// Drive login → callback and return the session cookie string.
-async function login(app: any) {
+// Drive login → callback; return the callback response + the session cookie to reuse.
+async function login(app: Awaited<ReturnType<typeof buildApp>>) {
   const start = await app.inject({ method: 'GET', url: '/auth/login' })
-  const cookie = start.cookies.find((c: any) => c.name === 'hidock_session')
-  // Replay the stashed cookie into the callback (state/nonce live in the session).
-  const cb = await app.inject({ method: 'GET', url: '/auth/callback?code=x&state=y',
-    cookies: { hidock_session: cookie.value } })
-  return { cb, sessionCookie: (cb.cookies.find((c: any) => c.name === 'hidock_session') || cookie).value }
+  const startCookie = start.cookies.find((c) => c.name === 'hidock_session')!
+  const cb = await app.inject({
+    method: 'GET', url: '/auth/callback?code=x&state=ignored-by-fake',
+    cookies: { hidock_session: startCookie.value }
+  })
+  const cbCookie = cb.cookies.find((c) => c.name === 'hidock_session')
+  return { start, cb, sessionCookie: (cbCookie ?? startCookie).value }
 }
 
 describe('auth routes', () => {
@@ -585,27 +639,27 @@ describe('auth routes', () => {
     vi.resetModules()
     dir = mkdtempSync(join(tmpdir(), 'hidock-auth-'))
     process.env.HIDOCK_DATA_ROOT = dir
-    const { initializeFileStorage } = await import('../main/services/file-storage')
-    const { initializeDatabase, ensureBootstrapAdmin } = await import('../main/services/database')
+    const { initializeFileStorage } = await import('../../main/services/file-storage')
+    const { initializeDatabase, ensureBootstrapAdmin } = await import('../../main/services/database')
     await initializeFileStorage(); await initializeDatabase()
     ensureBootstrapAdmin('boss@x.com')
   })
   afterEach(async () => {
-    const { closeDatabase } = await import('../main/services/database')
+    const { closeDatabase } = await import('../../main/services/database')
     try { closeDatabase() } catch { /* ignore */ }
     rmSync(dir, { recursive: true, force: true }); delete process.env.HIDOCK_DATA_ROOT
   })
 
   it('GET /auth/login redirects to the provider', async () => {
-    const { app } = await setup('boss@x.com')
+    const app = await makeApp('boss@x.com')
     const res = await app.inject({ method: 'GET', url: '/auth/login' })
     expect(res.statusCode).toBe(302)
     expect(res.headers.location).toContain('accounts.google.com')
     await app.close()
   })
 
-  it('an allow-listed user gets a session and /api/me returns their role', async () => {
-    const { app } = await setup('boss@x.com')
+  it('an allow-listed user gets a session; /api/me returns their role', async () => {
+    const app = await makeApp('boss@x.com')
     const { sessionCookie } = await login(app)
     const me = await app.inject({ method: 'GET', url: '/api/me', cookies: { hidock_session: sessionCookie } })
     expect(me.statusCode).toBe(200)
@@ -613,24 +667,44 @@ describe('auth routes', () => {
     await app.close()
   })
 
-  it('a non-invited user is denied (403) and gets no session', async () => {
-    const { app } = await setup('stranger@x.com')
+  it('a non-invited user is denied (403) at callback', async () => {
+    const app = await makeApp('stranger@x.com')
     const { cb } = await login(app)
     expect(cb.statusCode).toBe(403)
     await app.close()
   })
 
+  it('callback with no login-in-progress session → 400', async () => {
+    const app = await makeApp('boss@x.com')
+    const cb = await app.inject({ method: 'GET', url: '/auth/callback?code=x' }) // no session cookie
+    expect(cb.statusCode).toBe(400)
+    await app.close()
+  })
+
   it('a revoked user is rejected by the guard (401)', async () => {
-    const { app, db } = await setup('boss@x.com')
+    const app = await makeApp('boss@x.com')
     const { sessionCookie } = await login(app)
-    db.setAllowedUserStatus('boss@x.com', 'revoked')
+    const { setAllowedUserStatus } = await import('../../main/services/database')
+    setAllowedUserStatus('boss@x.com', 'revoked')
     const me = await app.inject({ method: 'GET', url: '/api/me', cookies: { hidock_session: sessionCookie } })
+    expect(me.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('logout clears the session (subsequent /api/me is 401)', async () => {
+    const app = await makeApp('boss@x.com')
+    const { sessionCookie } = await login(app)
+    const out = await app.inject({ method: 'POST', url: '/auth/logout', cookies: { hidock_session: sessionCookie } })
+    expect(out.statusCode).toBe(204)
+    const cleared = out.cookies.find((c) => c.name === 'hidock_session')
+    const me = await app.inject({ method: 'GET', url: '/api/me',
+      cookies: { hidock_session: cleared ? cleared.value : '' } })
     expect(me.statusCode).toBe(401)
     await app.close()
   })
 })
 ```
-> Note on imports: this test file lives at `electron/server/__tests__/`, so `../main/...` resolves to `electron/main/...`. Verify the relative depth when writing (`../../main/...` if needed) and adjust.
+> Import-depth note: this test is at `electron/server/__tests__/`, so main-process modules are `../../main/...` (two levels up). `../app` and `../oidc` (one level up) reach the server modules. `./app.test` reuses the `testDeps` helper.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -644,8 +718,10 @@ Create `electron/server/auth.ts`:
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { getAllowedUser } from '../main/services/database'
 
+const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
+
 export async function registerAuth(app: FastifyInstance): Promise<void> {
-  const { oidc } = app.appDeps
+  const { oidc, publicUrl } = app.appDeps
 
   app.decorate('requireAuth', async (req: FastifyRequest, reply: FastifyReply) => {
     const email = req.session.get('email') as string | undefined
@@ -659,8 +735,15 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
   })
 
   app.decorate('requireAdmin', async (req: FastifyRequest, reply: FastifyReply) => {
-    // run requireAuth first via composition at the route level; here just check role
     if (!req.user || req.user.role !== 'admin') return reply.code(403).send({ error: 'forbidden' })
+  })
+
+  // CSRF defense-in-depth: a present-but-foreign Origin on a mutating request is rejected.
+  app.decorate('requireSameOrigin', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (MUTATING.has(req.method)) {
+      const origin = req.headers.origin
+      if (origin && origin !== publicUrl) return reply.code(403).send({ error: 'bad origin' })
+    }
   })
 
   app.get('/auth/login', async (req, reply) => {
@@ -672,11 +755,13 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
   app.get('/auth/callback', async (req, reply) => {
     const ctx = req.session.get('oidc') as { state: string; nonce: string; codeVerifier: string } | undefined
     if (!ctx) return reply.code(400).send({ error: 'no login in progress' })
+    // Build the callback URL from PUBLIC_URL (not req.host — that is the internal proxy address).
+    const currentUrl = new URL(req.url, publicUrl).href
     let user
     try {
-      const fullUrl = `${app.appDeps ? '' : ''}${req.protocol}://${req.host}${req.url}`
-      user = await oidc.completeLogin(fullUrl, ctx)
+      user = await oidc.completeLogin(currentUrl, ctx)
     } catch {
+      req.session.set('oidc', undefined)
       return reply.code(400).send({ error: 'oidc exchange failed' })
     }
     req.session.set('oidc', undefined)
@@ -700,32 +785,22 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
   })
 }
 ```
-Add to `types.d.ts`:
+In `app.ts`, after `app.get('/healthz', ...)` and before `return app`:
 ```typescript
-import { preHandlerHookHandler } from 'fastify'
-declare module 'fastify' {
-  interface FastifyInstance {
-    requireAuth: preHandlerHookHandler
-    requireAdmin: preHandlerHookHandler
-  }
-}
-```
-In `app.ts`, after the `app.decorate('appDeps', deps)` line and before `return app`:
-```typescript
-const { registerAuth } = await import('./auth')
-await registerAuth(app)
+  const { registerAuth } = await import('./auth')
+  await registerAuth(app)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run electron/server/__tests__/auth.test.ts`
-Expected: PASS (4 tests). If the callback URL reconstruction trips on host/proto under inject, simplify to `new URL(req.url, app.appDeps ? 'http://localhost' : 'http://localhost').href` — the fake ignores the URL, so any well-formed absolute URL is fine for tests; the real impl needs the true external URL (see Task 7 note on `trustProxy`).
+Expected: PASS (6 tests). If `@fastify/secure-session`'s installed major rejects `set(key, undefined)` for clearing, replace those two lines with the version's documented clear (e.g. omit the clear — the one-time code is already consumed — and note it); do not weaken any assertion.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add electron/server/auth.ts electron/server/app.ts electron/server/types.d.ts electron/server/__tests__/auth.test.ts
-git commit -m "feat(0b): Google OIDC login/callback/logout + auth guards + invite gate"
+git add electron/server/auth.ts electron/server/app.ts electron/server/__tests__/auth.test.ts
+git commit -m "feat(0b): OIDC login/callback/logout + auth/admin/same-origin guards + invite gate"
 ```
 
 ---
@@ -738,31 +813,29 @@ git commit -m "feat(0b): Google OIDC login/callback/logout + auth guards + invit
 - Test: `apps/electron/electron/server/__tests__/admin-users.test.ts`
 
 **Interfaces:**
-- Consumes: `requireAuth`/`requireAdmin` (Task 5); `listAllowedUsers`/`upsertAllowedUser`/`setAllowedUserStatus`/`getAllowedUser` from `../../main/services/database`.
-- Produces: `registerAdminUsers(app)` adding `GET /api/admin/users`, `POST /api/admin/users`, `PATCH /api/admin/users/:email`, `DELETE /api/admin/users/:email` (each gated by `[requireAuth, requireAdmin]`).
+- Consumes: `requireAuth`/`requireAdmin`/`requireSameOrigin` (Task 5); `listAllowedUsers`/`upsertAllowedUser`/`setAllowedUserStatus`/`getAllowedUser`/`countActiveAdmins` from `../../main/services/database`.
+- Produces: `registerAdminUsers(app)` adding `GET /api/admin/users` (list), `POST /api/admin/users` (invite; body `{email, role?}`), `PATCH /api/admin/users` (update; body `{email, role?, status?}` — covers revoke/reactivate; rejects a change that would leave zero active admins). No path params; no hard delete.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `electron/server/__tests__/admin-users.test.ts` (reuse the `login` helper pattern from `auth.test.ts`; seed two users — an admin `boss@x.com` and a member):
+Create `electron/server/__tests__/admin-users.test.ts`:
 ```typescript
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { buildApp } from '../app'
+import { createFakeOidc } from '../oidc'
+import { testDeps } from './app.test'
 
-async function build(oidcEmail: string) {
-  const { createFakeOidc } = await import('../oidc')
-  const { buildApp } = await import('../app')
-  return (await import('../app')).buildApp
-    ? buildApp({ oidc: createFakeOidc({ email: oidcEmail, emailVerified: true, sub: 's' }),
-                 sessionSecret: 'a-very-long-secret-value', adminEmail: 'boss@x.com' })
-    : Promise.reject()
+async function makeApp(oidcEmail: string) {
+  return buildApp(testDeps({ oidc: createFakeOidc({ email: oidcEmail, emailVerified: true, sub: 's' }) }))
 }
-async function loginAs(app: any) {
+async function loginAs(app: Awaited<ReturnType<typeof buildApp>>) {
   const start = await app.inject({ method: 'GET', url: '/auth/login' })
-  const c = start.cookies.find((x: any) => x.name === 'hidock_session')
+  const c = start.cookies.find((x) => x.name === 'hidock_session')!
   const cb = await app.inject({ method: 'GET', url: '/auth/callback?code=x', cookies: { hidock_session: c.value } })
-  return (cb.cookies.find((x: any) => x.name === 'hidock_session') || c).value
+  return (cb.cookies.find((x) => x.name === 'hidock_session') ?? c).value
 }
 
 describe('admin users routes', () => {
@@ -770,44 +843,69 @@ describe('admin users routes', () => {
   beforeEach(async () => {
     vi.resetModules()
     dir = mkdtempSync(join(tmpdir(), 'hidock-admin-')); process.env.HIDOCK_DATA_ROOT = dir
-    const { initializeFileStorage } = await import('../main/services/file-storage')
-    const { initializeDatabase, ensureBootstrapAdmin, upsertAllowedUser } = await import('../main/services/database')
+    const { initializeFileStorage } = await import('../../main/services/file-storage')
+    const { initializeDatabase, ensureBootstrapAdmin, upsertAllowedUser } = await import('../../main/services/database')
     await initializeFileStorage(); await initializeDatabase()
     ensureBootstrapAdmin('boss@x.com')
     upsertAllowedUser({ email: 'member@x.com', invitedBy: 'boss@x.com' })
   })
   afterEach(async () => {
-    const { closeDatabase } = await import('../main/services/database')
+    const { closeDatabase } = await import('../../main/services/database')
     try { closeDatabase() } catch { /* ignore */ }
     rmSync(dir, { recursive: true, force: true }); delete process.env.HIDOCK_DATA_ROOT
   })
 
   it('admin can list users', async () => {
-    const app = await build('boss@x.com'); const cookie = await loginAs(app)
+    const app = await makeApp('boss@x.com'); const cookie = await loginAs(app)
     const res = await app.inject({ method: 'GET', url: '/api/admin/users', cookies: { hidock_session: cookie } })
     expect(res.statusCode).toBe(200)
-    expect(res.json().users.map((u: any) => u.email)).toContain('member@x.com')
+    expect(res.json().users.map((u: { email: string }) => u.email)).toContain('member@x.com')
     await app.close()
   })
 
-  it('admin can invite, patch role, and revoke', async () => {
-    const app = await build('boss@x.com'); const cookie = await loginAs(app)
+  it('admin can invite, change role, and revoke (via PATCH status)', async () => {
+    const app = await makeApp('boss@x.com'); const cookie = await loginAs(app)
     const inv = await app.inject({ method: 'POST', url: '/api/admin/users',
       cookies: { hidock_session: cookie }, payload: { email: 'new@x.com' } })
     expect(inv.statusCode).toBe(201)
-    const patch = await app.inject({ method: 'PATCH', url: '/api/admin/users/new@x.com',
-      cookies: { hidock_session: cookie }, payload: { role: 'admin' } })
+    const patch = await app.inject({ method: 'PATCH', url: '/api/admin/users',
+      cookies: { hidock_session: cookie }, payload: { email: 'new@x.com', role: 'admin' } })
     expect(patch.statusCode).toBe(200)
-    const del = await app.inject({ method: 'DELETE', url: '/api/admin/users/new@x.com',
-      cookies: { hidock_session: cookie } })
-    expect(del.statusCode).toBe(200)
-    const { getAllowedUser } = await import('../main/services/database')
+    const revoke = await app.inject({ method: 'PATCH', url: '/api/admin/users',
+      cookies: { hidock_session: cookie }, payload: { email: 'new@x.com', status: 'revoked' } })
+    expect(revoke.statusCode).toBe(200)
+    const { getAllowedUser } = await import('../../main/services/database')
     expect(getAllowedUser('new@x.com')?.status).toBe('revoked')
   })
 
+  it('refuses to revoke the last active admin (409)', async () => {
+    const app = await makeApp('boss@x.com'); const cookie = await loginAs(app)
+    const res = await app.inject({ method: 'PATCH', url: '/api/admin/users',
+      cookies: { hidock_session: cookie }, payload: { email: 'boss@x.com', status: 'revoked' } })
+    expect(res.statusCode).toBe(409)
+    const { getAllowedUser } = await import('../../main/services/database')
+    expect(getAllowedUser('boss@x.com')?.status).toBe('active')
+  })
+
+  it('refuses to demote the last active admin to member (409)', async () => {
+    const app = await makeApp('boss@x.com'); const cookie = await loginAs(app)
+    const res = await app.inject({ method: 'PATCH', url: '/api/admin/users',
+      cookies: { hidock_session: cookie }, payload: { email: 'boss@x.com', role: 'member' } })
+    expect(res.statusCode).toBe(409)
+  })
+
   it('a member is forbidden (403)', async () => {
-    const app = await build('member@x.com'); const cookie = await loginAs(app)
+    const app = await makeApp('member@x.com'); const cookie = await loginAs(app)
     const res = await app.inject({ method: 'GET', url: '/api/admin/users', cookies: { hidock_session: cookie } })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('a mutating request with a foreign Origin is rejected (403)', async () => {
+    const app = await makeApp('boss@x.com'); const cookie = await loginAs(app)
+    const res = await app.inject({ method: 'POST', url: '/api/admin/users',
+      cookies: { hidock_session: cookie }, headers: { origin: 'https://evil.example.com' },
+      payload: { email: 'x@x.com' } })
     expect(res.statusCode).toBe(403)
     await app.close()
   })
@@ -825,57 +923,66 @@ Create `electron/server/routes/admin-users.ts`:
 ```typescript
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { listAllowedUsers, upsertAllowedUser, setAllowedUserStatus, getAllowedUser } from '../../main/services/database'
+import {
+  listAllowedUsers, upsertAllowedUser, setAllowedUserStatus, getAllowedUser, countActiveAdmins
+} from '../../main/services/database'
 
-const inviteSchema = z.object({ email: z.string().email(), role: z.enum(['admin', 'member']).optional() })
-const patchSchema = z.object({ role: z.enum(['admin', 'member']).optional(), status: z.enum(['active', 'revoked']).optional() })
+const inviteSchema = z.object({ email: z.email(), role: z.enum(['admin', 'member']).optional() })
+const patchSchema = z.object({
+  email: z.email(),
+  role: z.enum(['admin', 'member']).optional(),
+  status: z.enum(['active', 'revoked']).optional()
+})
 
 export async function registerAdminUsers(app: FastifyInstance): Promise<void> {
-  const guard = { preHandler: [app.requireAuth, app.requireAdmin] }
+  const read = { preHandler: [app.requireAuth, app.requireAdmin] }
+  const write = { preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin] }
 
-  app.get('/api/admin/users', guard, async () => ({ users: listAllowedUsers() }))
+  app.get('/api/admin/users', read, async () => ({ users: listAllowedUsers() }))
 
-  app.post('/api/admin/users', guard, async (req, reply) => {
+  app.post('/api/admin/users', write, async (req, reply) => {
     const body = inviteSchema.safeParse(req.body)
     if (!body.success) return reply.code(400).send({ error: 'invalid', details: body.error.flatten() })
     upsertAllowedUser({ email: body.data.email, role: body.data.role, invitedBy: req.user!.email })
     return reply.code(201).send({ user: getAllowedUser(body.data.email) })
   })
 
-  app.patch('/api/admin/users/:email', guard, async (req, reply) => {
-    const email = (req.params as { email: string }).email
-    if (!getAllowedUser(email)) return reply.code(404).send({ error: 'not found' })
+  app.patch('/api/admin/users', write, async (req, reply) => {
     const body = patchSchema.safeParse(req.body)
     if (!body.success) return reply.code(400).send({ error: 'invalid', details: body.error.flatten() })
-    if (body.data.role) upsertAllowedUser({ email, role: body.data.role })
-    if (body.data.status) setAllowedUserStatus(email, body.data.status)
-    return reply.send({ user: getAllowedUser(email) })
-  })
+    const current = getAllowedUser(body.data.email)
+    if (!current) return reply.code(404).send({ error: 'not found' })
 
-  app.delete('/api/admin/users/:email', guard, async (req, reply) => {
-    const email = (req.params as { email: string }).email
-    if (!getAllowedUser(email)) return reply.code(404).send({ error: 'not found' })
-    setAllowedUserStatus(email, 'revoked') // soft-delete: revoke, never hard-delete (audit trail)
-    return reply.send({ ok: true })
+    // Last-admin guard: block a change that removes the final active admin.
+    const willRemoveAdmin =
+      current.role === 'admin' && current.status === 'active' &&
+      ((body.data.role && body.data.role !== 'admin') || body.data.status === 'revoked')
+    if (willRemoveAdmin && countActiveAdmins() <= 1) {
+      return reply.code(409).send({ error: 'cannot remove the last active admin' })
+    }
+
+    if (body.data.role) upsertAllowedUser({ email: body.data.email, role: body.data.role })
+    if (body.data.status) setAllowedUserStatus(body.data.email, body.data.status)
+    return reply.send({ user: getAllowedUser(body.data.email) })
   })
 }
 ```
 In `app.ts`, after `await registerAuth(app)`:
 ```typescript
-const { registerAdminUsers } = await import('./routes/admin-users')
-await registerAdminUsers(app)
+  const { registerAdminUsers } = await import('./routes/admin-users')
+  await registerAdminUsers(app)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run electron/server/__tests__/admin-users.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add electron/server/routes/admin-users.ts electron/server/app.ts electron/server/__tests__/admin-users.test.ts
-git commit -m "feat(0b): admin user-management routes (invite/role/revoke)"
+git commit -m "feat(0b): admin user routes (invite/role/revoke) with last-admin + origin guards"
 ```
 
 ---
@@ -889,7 +996,7 @@ git commit -m "feat(0b): admin user-management routes (invite/role/revoke)"
 
 **Interfaces:**
 - Consumes: `bootFoundation` (`../main/boot-foundation`), `getServerConfig`, `createGoogleOidc`, `buildApp`, `ensureBootstrapAdmin`.
-- Produces: `startServer(): Promise<FastifyInstance>` (boots foundation, ensures admin, builds app, listens) — exported so the test can call it without `process.env.PORT` collisions by injecting port 0.
+- Produces: `startServer(): Promise<FastifyInstance>` (boots foundation, ensures admin, builds app with `cookieSecure: true`, listens on `cfg.port`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -912,7 +1019,7 @@ describe('startServer', () => {
     })
   })
   afterEach(async () => {
-    const { closeDatabase } = await import('../main/services/database')
+    const { closeDatabase } = await import('../../main/services/database')
     try { closeDatabase() } catch { /* ignore */ }
     rmSync(dir, { recursive: true, force: true })
     for (const k of ['HIDOCK_DATA_ROOT','GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET','PUBLIC_URL','SESSION_SECRET','ADMIN_EMAIL','PORT']) delete process.env[k]
@@ -923,7 +1030,7 @@ describe('startServer', () => {
     const app = await startServer()
     const res = await app.inject({ method: 'GET', url: '/healthz' })
     expect(res.statusCode).toBe(200)
-    const { getAllowedUser } = await import('../main/services/database')
+    const { getAllowedUser } = await import('../../main/services/database')
     expect(getAllowedUser('boss@x.com')?.role).toBe('admin')
     await app.close()
   })
@@ -951,23 +1058,26 @@ export async function startServer(): Promise<FastifyInstance> {
   await bootFoundation()
   ensureBootstrapAdmin(cfg.adminEmail)
   const oidc = createGoogleOidc({ clientId: cfg.googleClientId, clientSecret: cfg.googleClientSecret, publicUrl: cfg.publicUrl })
-  const app = await buildApp({ oidc, sessionSecret: cfg.sessionSecret, adminEmail: cfg.adminEmail })
+  const app = await buildApp({
+    oidc, sessionSecret: cfg.sessionSecret, adminEmail: cfg.adminEmail,
+    publicUrl: cfg.publicUrl, cookieSecure: true
+  })
   await app.listen({ port: cfg.port, host: '0.0.0.0' })
   return app
 }
 
-// Run when invoked directly (node out/server/index.js)
+// Run when invoked directly (node out/server/index.js).
 if (process.argv[1] && process.argv[1].endsWith('index.js')) {
   startServer().catch((err) => { console.error('[server] failed to start', err); process.exit(1) })
 }
 ```
-> Note: `startServer` uses the REAL `createGoogleOidc`, but the test never triggers a login (only `/healthz`), so no Google network call happens — `discovery()` is lazy. Live OAuth is verified by the operator with real creds.
+> The entry test sets all required env and `PORT=0` (ephemeral). `startServer` constructs the REAL `createGoogleOidc`, but the test only hits `/healthz` — `discovery()` is lazy, so no Google network call occurs. Live OAuth is verified by the operator with real creds. `trustProxy: true` (set in `buildApp`) lets Fastify honor `X-Forwarded-*` from nginxproxymanager.
 
 In `package.json` scripts, add:
 ```json
 "start:server": "node out/server/index.js"
 ```
-(The build that produces `out/server/` is wired in sub-plan 0f; for now `start:server` documents the entry.)
+(The build that produces `out/server/` is wired in sub-plan 0f; for now `start:server` documents the entry point — it will not run until 0f builds the server bundle.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -977,7 +1087,7 @@ Expected: PASS.
 - [ ] **Step 5: Final gate**
 
 Run: `npm run typecheck && npm run test:run`
-Expected: PASS (full suite green, including the new server tests and the v34 schema-version updates).
+Expected: PASS (full suite green, including all new server tests and the v34 schema-version updates).
 
 - [ ] **Step 6: Commit**
 
@@ -990,10 +1100,10 @@ git commit -m "feat(0b): server entry point (boot foundation + listen) + start:s
 
 ## Self-Review
 
-**Spec coverage (§5 Authentication & access control):** Google OIDC → Task 3 (real impl) + Task 5 (routes); `allowed_users` table → Task 2; bootstrap admin via `ADMIN_EMAIL` → Task 2 (`ensureBootstrapAdmin`) + Task 7 (wired at startup); OAuth callback gate (verify → look up → session or deny) → Task 5; admin-only `/api/admin/users` CRUD → Task 6; guarded WS/media — N/A this sub-plan (0c/0d); session cookie attributes → Task 4; `email_verified` check → Task 5. `/healthz` → Task 4.
+**Spec coverage (§5):** Google OIDC → Task 3 (real) + Task 5 (routes); `allowed_users` table → Task 2; bootstrap admin via `ADMIN_EMAIL` → Task 2 + Task 7; callback gate (verify → look up → session/deny) → Task 5; admin CRUD → Task 6; session cookie attributes → Task 4; `email_verified` check → Task 5; CSRF origin check → Task 5/6; `/healthz` → Task 4. Guarded WS/media are 0c/0d (out of scope).
 
-**Placeholder scan:** No TBD/TODO. The one deliberately-untested unit is the real `createGoogleOidc` (needs live Google creds) — documented as deferred-to-operator, with full real code provided (not a placeholder). The Task 5 callback-URL reconstruction has an explicit fallback note for the inject environment.
+**Antagonistic-review fixes applied:** (1) test import depth corrected to `../../main/...` throughout Tasks 5–7; (2) `cookieSecure` is config-driven, `false` in tests (`testDeps`), `true` in `startServer` — Secure-cookie-in-inject blocker removed; (3) Zod v4 `z.email()` (not `z.string().email()`); (4) callback URL built from `PUBLIC_URL` via `new URL(req.url, publicUrl)` + `trustProxy: true` — no `req.host` garbage; (5) the fake asserts the login-context round-trip + a "no login-in-progress → 400" test covers state threading; (6) `oidc` temp cleared on both success and failure paths (with a fallback note if the secure-session major rejects `undefined`); (7) last-admin guard (409) on revoke/demote + tests; (8) email travels in the request body, no path params; (9) `requireSameOrigin` guard on mutating admin routes + a foreign-Origin test; (10) `start:server` documented as 0f-dependent.
 
-**Type consistency:** `OidcService` / `OidcUser` / `LoginContext` are defined in Task 3 and consumed unchanged in Tasks 4–7. `AllowedUser` and the five DB functions defined in Task 2 are consumed with matching signatures in Tasks 5–6. `AppDeps` defined in Task 4, consumed in Tasks 5–7. Session keys `'email'` and `'oidc'` are written/read consistently across Task 5. `requireAuth`/`requireAdmin` decorated in Task 5, consumed in Task 6.
+**Placeholder scan:** none. The only deliberately-untested unit is the real `createGoogleOidc` (needs live creds) — full real code provided, deferral documented.
 
-**Risks flagged for the executor:** (1) relative import depth from `electron/server/__tests__/` to `electron/main/...` — verify `../main` vs `../../main` when writing each test; (2) `@fastify/secure-session` v8 API (`session.set/get/delete`) — if the installed major differs, adjust; (3) the real callback needs the true external URL — Task 7's real server should set Fastify `trustProxy: true` when behind NPM (note for 0f); (4) `openid-client` v6 ESM-only — loaded via dynamic import.
+**Type consistency:** `AppDeps` (now `{ oidc, sessionSecret, adminEmail, publicUrl, cookieSecure }`) defined in Task 4, consumed in Tasks 5–7 and the shared `testDeps` helper. `OidcService`/`OidcUser`/`LoginContext` from Task 3 used unchanged. `AllowedUser` + the six DB functions (incl. `countActiveAdmins`) from Task 2 consumed in Tasks 5–6. Decorators `requireAuth`/`requireAdmin`/`requireSameOrigin` declared in `types.d.ts` (Task 4), defined in Task 5, consumed in Task 6. Session keys `'email'`/`'oidc'` consistent across Task 5.
