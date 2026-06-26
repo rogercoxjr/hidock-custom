@@ -2584,7 +2584,7 @@ export interface Recording {
   on_device: number
   device_last_seen?: string
   on_local: number
-  source: 'hidock' | 'import' | 'external'
+  source: 'hidock' | 'import' | 'external' | 'upload'
   is_imported: number
   storage_tier?: 'hot' | 'warm' | 'cold' | 'archive' | null
   // Migration fields (for Phase 0 -> Phase 1 migration)
@@ -2766,8 +2766,9 @@ export function insertRecording(recording: Omit<Recording, 'created_at'>): void 
   run(
     `INSERT INTO recordings (id, filename, original_filename, file_path, file_size,
       duration_seconds, date_recorded, meeting_id, correlation_confidence,
-      correlation_method, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      correlation_method, status,
+      location, transcription_status, on_device, device_last_seen, on_local, source, is_imported)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       recording.id,
       recording.filename,
@@ -2779,7 +2780,14 @@ export function insertRecording(recording: Omit<Recording, 'created_at'>): void 
       recording.meeting_id ?? null,
       recording.correlation_confidence ?? null,
       recording.correlation_method ?? null,
-      recording.status
+      recording.status,
+      recording.location ?? 'device-only',
+      recording.transcription_status ?? 'none',
+      recording.on_device ?? 1,
+      recording.device_last_seen ?? null,
+      recording.on_local ?? 0,
+      recording.source ?? 'hidock',
+      recording.is_imported ?? 0
     ]
   )
 }

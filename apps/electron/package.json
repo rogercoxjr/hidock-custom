@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
+    "@fastify/multipart": "^10.0.0",
     "@fastify/secure-session": "^8.3.0",
     "@fastify/websocket": "^11.2.0",
     "@google/generative-ai": "^0.21.0",

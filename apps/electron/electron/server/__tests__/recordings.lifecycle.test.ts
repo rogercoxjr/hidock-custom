@@ -93,9 +93,7 @@ describe('recordings lifecycle endpoints', () => {
       description: null,
       is_recurring: 0,
       recurrence_rule: null,
-      meeting_url: null,
-      source: 'test',
-      external_id: 'ext-1'
+      meeting_url: null
     })
   })
 

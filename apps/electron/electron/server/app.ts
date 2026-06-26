@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance } from 'fastify'
 import secureSession from '@fastify/secure-session'
 import websocket from '@fastify/websocket'
+import multipart from '@fastify/multipart'
 import { createHash } from 'crypto'
 import { OidcService } from './oidc'
 // Static import (unlike auth/admin) so ws.ts + broadcaster.ts share the same module instance the tests' top-level getBroadcaster() binds to after vi.resetModules(). broadcaster.ts has no side-effect imports, so loading it at parse time is safe.
@@ -28,6 +29,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   })
   // @fastify/websocket MUST be registered before any route so it intercepts upgrades.
   await app.register(websocket)
+  // @fastify/multipart — register after websocket, before routes that need it.
+  await app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } })
 
   app.decorate('appDeps', deps)
   app.get('/healthz', async () => ({ status: 'ok' }))
