@@ -5,6 +5,7 @@ import { createHash } from 'crypto'
 import { OidcService } from './oidc'
 // Static import (unlike auth/admin) so ws.ts + broadcaster.ts share the same module instance the tests' top-level getBroadcaster() binds to after vi.resetModules(). broadcaster.ts has no side-effect imports, so loading it at parse time is safe.
 import { registerWs } from './ws'
+import { registerErrorHandler } from './routes/_errors'
 
 export interface AppDeps {
   oidc: OidcService
@@ -16,6 +17,7 @@ export interface AppDeps {
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true })
+  registerErrorHandler(app)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await app.register(secureSession as any, {
@@ -37,6 +39,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   const { registerAdminUsers } = await import('./routes/admin-users')
   await registerAdminUsers(app)
+
+  const { registerRecordings } = await import('./routes/recordings')
+  await registerRecordings(app)
 
   return app
 }
