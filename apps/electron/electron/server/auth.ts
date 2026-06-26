@@ -1,6 +1,15 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { getAllowedUser } from '../main/services/database'
 
+// session.set key types: @fastify/secure-session requires SessionData augmentation.
+// Under moduleResolution:bundler the merged type doesn't always propagate into the
+// default type parameter, so we use a minimal typed cast helper.
+type KnownSession = { email: string; oidc: { state: string; nonce: string; codeVerifier: string } }
+function sset(session: { set(k: string, v: unknown): void }, key: keyof KnownSession, val: KnownSession[keyof KnownSession] | undefined): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(session as any).set(key, val)
+}
+
 const MUTATING = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
 
 export async function registerAuth(app: FastifyInstance): Promise<void> {
@@ -31,7 +40,7 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
 
   app.get('/auth/login', async (req, reply) => {
     const { redirectUrl, state, nonce, codeVerifier } = await oidc.beginLogin()
-    req.session.set('oidc', { state, nonce, codeVerifier })
+    sset(req.session, 'oidc', { state, nonce, codeVerifier })
     return reply.redirect(redirectUrl, 302)
   })
 
@@ -44,17 +53,17 @@ export async function registerAuth(app: FastifyInstance): Promise<void> {
     try {
       user = await oidc.completeLogin(currentUrl, ctx)
     } catch {
-      req.session.set('oidc', undefined)
+      sset(req.session, 'oidc', undefined)
       return reply.code(400).send({ error: 'oidc exchange failed' })
     }
-    req.session.set('oidc', undefined)
+    sset(req.session, 'oidc', undefined)
     if (!user.emailVerified) return reply.code(403).send({ error: 'email not verified' })
     const allowed = getAllowedUser(user.email)
     if (!allowed || allowed.status !== 'active') {
       req.session.delete()
       return reply.code(403).send({ error: 'not invited — contact the administrator' })
     }
-    req.session.set('email', user.email)
+    sset(req.session, 'email', user.email)
     return reply.redirect('/', 302)
   })
 

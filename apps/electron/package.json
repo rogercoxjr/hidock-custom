@@ -22,7 +22,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
-    "test:performance": "vitest run src/__tests__/performance"
+    "test:performance": "vitest run src/__tests__/performance",
+    "start:server": "node out/server/index.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

@@ -14,7 +14,8 @@ export interface AppDeps {
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true })
 
-  await app.register(secureSession, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await app.register(secureSession as any, {
     sessionName: 'session',
     cookieName: 'hidock_session',
     key: createHash('sha256').update(deps.sessionSecret).digest(), // 32 bytes

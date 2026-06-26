@@ -39,10 +39,10 @@ async function boot() {
 }
 
 describe('v30 voice-library phase-2C schema', () => {
-  it('schema_version is at current head (33)', async () => {
+  it('schema_version is at current head (34)', async () => {
     const { queryOne } = await boot()
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    expect(ver?.version).toBe(34)
   })
 
   it('diarization_runs table exists with the expected columns', async () => {

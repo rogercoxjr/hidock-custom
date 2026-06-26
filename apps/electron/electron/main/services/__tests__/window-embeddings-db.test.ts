@@ -43,7 +43,7 @@ describe('recording_window_embeddings schema (v32)', () => {
     expect(idx.length).toBe(1)
 
     const ver = dbi.prepare('SELECT MAX(version) as v FROM schema_version').get() as { v: number }
-    expect(ver.v).toBe(33)
+    expect(ver.v).toBe(34)
   })
 
   // The fresh-init test above takes the `currentVersion === 0` branch (database.ts),
@@ -83,12 +83,12 @@ describe('recording_window_embeddings schema (v32)', () => {
     ).all()
     expect(idx.length).toBe(1)
     const ver2 = db2.getDatabase().prepare('SELECT MAX(version) as v FROM schema_version').get() as { v: number }
-    expect(ver2.v).toBe(33)
+    expect(ver2.v).toBe(34)
   })
 
-  // Structural self-heal: an EXISTING v32 DB that somehow lost the table (corruption/restore) must
+  // Structural self-heal: an EXISTING DB that somehow lost the table (corruption/restore) must
   // be repaired by the Phase-4 canonical-SCHEMA re-apply on the next boot — migrations are SKIPPED
-  // here because currentVersion (33) === SCHEMA_VERSION (33), so this proves the table+index live in
+  // here because currentVersion (34) === SCHEMA_VERSION (34), so this proves the table+index live in
   // the canonical SCHEMA and not ONLY in the migration. If the CREATE INDEX were misplaced into a
   // Phase-1-only path, this test would catch it. *(improvement-medium "structural-repair path".)*
   it('Phase 4 structural repair recreates the table+index on a current-version DB missing it', async () => {
@@ -98,9 +98,9 @@ describe('recording_window_embeddings schema (v32)', () => {
     await db.initializeDatabase()
     const dbi = db.getDatabase()
     const ver3 = dbi.prepare('SELECT MAX(version) as v FROM schema_version').get() as { v: number }
-    expect(ver3.v).toBe(33)
+    expect(ver3.v).toBe(34)
 
-    // Drop the table but leave the version at 33 (no migration will run on re-init).
+    // Drop the table but leave the version at 34 (no migration will run on re-init).
     dbi.exec('DROP TABLE IF EXISTS recording_window_embeddings')
     db.closeDatabase()
 

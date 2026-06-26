@@ -45,10 +45,10 @@ async function boot() {
 }
 
 describe('v31 — fresh boot (relaxed category column)', () => {
-  it('schema_version is 31 (now advances to 33 as current head)', async () => {
+  it('schema_version is 31 (now advances to 34 as current head)', async () => {
     const { queryOne } = await boot()
     const ver = queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    expect(ver?.version).toBe(34)
   })
 
   it('knowledge_captures.category has NO CHECK (a user-defined label is storable)', async () => {
@@ -132,9 +132,9 @@ describe('v31 — genuine upgrade path (CHECK-drop rebuild)', () => {
     const db2 = await import('../database')
     await db2.initializeDatabase()
 
-    // --- Assert: version bumped (to current head, which is now 33) ---
+    // --- Assert: version bumped (to current head, which is now 34) ---
     const ver = db2.queryOne<{ version: number }>('SELECT MAX(version) AS version FROM schema_version')
-    expect(ver?.version).toBe(33)
+    expect(ver?.version).toBe(34)
 
     // --- Assert: CHECK is gone ---
     const createSql = db2.queryOne<{ sql: string }>(
