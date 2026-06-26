@@ -40,7 +40,7 @@ describe('WebSocket broadcaster', () => {
 
   it('rejects an unauthenticated upgrade (401)', async () => {
     const app = await makeApp('boss@x.com'); await app.ready()
-    await expect(app.injectWS('/ws')).rejects.toBeTruthy() // upgrade refused before open
+    await expect(app.injectWS('/ws')).rejects.toThrow(/401/)
     await app.close()
   })
 
