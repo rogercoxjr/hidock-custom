@@ -70,5 +70,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerProjects } = await import('./routes/projects')
   await registerProjects(app)
 
+  const { registerRag } = await import('./routes/rag')
+  await registerRag(app)
+
   return app
 }
