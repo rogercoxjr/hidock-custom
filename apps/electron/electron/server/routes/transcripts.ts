@@ -33,6 +33,7 @@ import {
   getRecordingById,
   getQueueItems,
   updateQueueItem,
+  updateRecordingTranscriptionStatus,
   addToQueue,
   isSummaryStale,
   getRecordingSpeakers,
@@ -44,7 +45,8 @@ import {
   deleteWindowEmbeddingsForRecording,
   expireSuggestionsForRecording,
   rependFailedItems,
-  setTranscriptTemplateOverride
+  setTranscriptTemplateOverride,
+  queryOne
 } from '../../main/services/database'
 import {
   toCsv,
@@ -107,7 +109,7 @@ const resummarizeBody = z.object({
 })
 
 const patchQueueBody = z.object({
-  status: z.string(),
+  status: z.enum(['pending', 'processing', 'completed', 'failed', 'cancelled', 'parked']),
   errorMessage: z.string().optional()
 })
 
@@ -292,7 +294,15 @@ export async function registerTranscripts(app: FastifyInstance): Promise<void> {
         expireSuggestionsForRecording(id)
       }
 
+      // Preflight: reject when no provider key is configured (mirrors recordings:addToQueue).
+      const configCheck = validateTranscriptionConfig()
+      if (!configCheck.ok) {
+        throw new BadRequestError('Transcription API key not configured. Please add your API key in Settings.')
+      }
+
       const queueItemId = addToQueue(id)
+      // Mirror recordings:addToQueue: update recording row immediately so polling clients see 'queued'.
+      updateRecordingTranscriptionStatus(id, 'queued')
       // Fire-and-forget — do NOT await (returns 200 immediately)
       processQueueManually().catch((err: unknown) => {
         console.error('[transcribe] processQueueManually error:', err)
@@ -363,6 +373,9 @@ export async function registerTranscripts(app: FastifyInstance): Promise<void> {
       const rec = getRecordingById(id)
       if (!rec) throw new NotFoundError('recording not found')
       addToQueue(id)
+      // Mirror transcription:retry IPC handler: update recording row immediately so
+      // polling clients see 'pending' rather than the prior stale status.
+      updateRecordingTranscriptionStatus(id, 'pending')
       processQueueManually().catch((err: unknown) => {
         console.error('[transcription/retry] processQueueManually error:', err)
       })
@@ -386,6 +399,8 @@ export async function registerTranscripts(app: FastifyInstance): Promise<void> {
     { preHandler: [app.requireAuth, app.requireSameOrigin] },
     async (req) => {
       const { id } = req.params as { id: string }
+      const existing = queryOne<{ id: string }>('SELECT id FROM transcription_queue WHERE id = ?', [id])
+      if (!existing) throw new NotFoundError('queue item not found')
       const body = patchQueueBody.parse(req.body)
       updateQueueItem(id, body.status, body.errorMessage)
       return { ok: true }
