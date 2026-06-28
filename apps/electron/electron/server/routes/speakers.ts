@@ -19,8 +19,14 @@ import {
   dismissSuggestion as dbDismissSuggestion,
   type SpeakerSuggestion
 } from '../../main/services/database'
-import { captureVoiceprint, embedRecordingLabels } from '../../main/services/voiceprint-service'
-import { runMatcher, type MatcherResult } from '../../main/services/voiceprint/speaker-matcher'
+// voiceprint-service + speaker-matcher are imported DYNAMICALLY inside the
+// handlers below (not statically) so the hosted server bundle doesn't pull their
+// transitive `electron` imports (utilityProcess embedding worker, app.getAppPath)
+// into the plain-Node boot graph. esbuild splits them into a lazy chunk; under
+// plain Node the dynamic import rejects (electron absent) and voiceprint
+// capture/matching degrades gracefully — a Phase-2 feature unavailable in hosted
+// mode. The type is import-type-only (erased at build).
+import type { MatcherResult } from '../../main/services/voiceprint/speaker-matcher'
 import type { Turn } from '../../main/services/asr/asr-provider'
 import { NotFoundError, BadRequestError } from './_errors'
 
@@ -128,6 +134,8 @@ function getSuggestionsSequence(recordingId: string): Promise<MatcherResult> {
   const existing = getSuggestionsInFlight.get(recordingId)
   if (existing) return existing
   const p = (async (): Promise<MatcherResult> => {
+    const { embedRecordingLabels } = await import('../../main/services/voiceprint-service')
+    const { runMatcher } = await import('../../main/services/voiceprint/speaker-matcher')
     await embedRecordingLabels(recordingId)
     return (await runMatcher(recordingId)) as MatcherResult
   })()
@@ -150,9 +158,14 @@ function scheduleCaptureAndNotify(
   void priorContactId
   void purgedCount
   setImmediate(() => {
-    captureVoiceprint(recordingId, fileLabel, contactId, createdFrom).catch((e) =>
-      console.warn(`[Voiceprint] capture error (${recordingId}/${fileLabel}): ${(e as Error).message}`)
-    )
+    void (async () => {
+      try {
+        const { captureVoiceprint } = await import('../../main/services/voiceprint-service')
+        await captureVoiceprint(recordingId, fileLabel, contactId, createdFrom)
+      } catch (e) {
+        console.warn(`[Voiceprint] capture error (${recordingId}/${fileLabel}): ${(e as Error).message}`)
+      }
+    })()
   })
 }
 
