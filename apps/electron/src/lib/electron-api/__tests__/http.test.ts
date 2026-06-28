@@ -38,7 +38,7 @@ describe('http transport', () => {
 
     const result = await post('/api/x', { b: 2 })
 
-    expect(result).toEqual({ ok: false, status: 400, error: 'bad' })
+    expect(result).toEqual({ ok: false, status: 400, error: 'bad', data: { error: 'bad' } })
 
     const fetchCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]
     const [url, init] = fetchCall
@@ -74,6 +74,19 @@ describe('http transport', () => {
     const result = await get('/api/x')
 
     expect(result).toEqual({ ok: false, status: 0, error: 'Network failure' })
+  })
+
+  it('4xx body details survive on error result — { ok:false, error, data.details }', async () => {
+    const body = { error: 'invalid', details: { fieldErrors: { name: ['Required'] } } }
+    vi.stubGlobal('fetch', makeFetchMock(400, body, false))
+
+    const result = await post('/api/x', { name: '' })
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(400)
+    expect(result.error).toBe('invalid')
+    // parsed body must be reachable so group adapters can read result.data.details
+    expect((result.data as typeof body).details).toEqual({ fieldErrors: { name: ['Required'] } })
   })
 
   it('PATCH/PUT/DEL are exported and send the correct method', async () => {

@@ -173,7 +173,38 @@ describe('WsClient', () => {
   })
 
   // -------------------------------------------------------------------------
-  // 5. Malformed JSON frame — does not throw
+  // 5. connect() during backoff window — clears pending reconnect timer so
+  //    only ONE socket opens, not two
+  // -------------------------------------------------------------------------
+  it('connect() during backoff window cancels the pending timer and opens exactly one new socket', async () => {
+    const client = new WsClient()
+    client.subscribe('test', vi.fn())
+    await Promise.resolve()
+
+    const ws1 = FakeWS.instances[0]
+    expect(ws1).toBeDefined()
+
+    // Trigger disconnect to schedule a reconnect timer (backoff = 1 s)
+    ws1.triggerClose()
+    expect(FakeWS.instances).toHaveLength(1) // no second socket yet
+
+    // Call connect() manually before the timer fires — should clear the timer
+    // and open immediately, resulting in exactly one new socket total.
+    client.connect()
+    await Promise.resolve()
+
+    expect(FakeWS.instances).toHaveLength(2) // one new socket opened by connect()
+
+    // Now advance past the original backoff window — the cleared timer must NOT
+    // fire a third socket.
+    vi.advanceTimersByTime(5_000)
+    await Promise.resolve()
+
+    expect(FakeWS.instances).toHaveLength(2) // still only 2 — timer was cancelled
+  })
+
+  // -------------------------------------------------------------------------
+  // 6. Malformed JSON frame — does not throw
   // -------------------------------------------------------------------------
   it('does not throw on malformed JSON frames', async () => {
     const client = new WsClient()

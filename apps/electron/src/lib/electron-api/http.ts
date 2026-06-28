@@ -81,9 +81,12 @@ async function request(method: string, path: string, body?: unknown): Promise<Ht
       }
     }
 
-    return response.ok
-      ? { ok: true, status, data }
-      : { ok: false, status, error: errorMessage }
+    if (response.ok) {
+      return { ok: true, status, data }
+    }
+    const errResult: HttpResult = { ok: false, status, error: errorMessage }
+    if (data !== undefined) errResult.data = data
+    return errResult
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     return { ok: false, status: 0, error: message }

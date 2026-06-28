@@ -69,6 +69,12 @@ export class WsClient {
   /** Explicitly open (or re-open) the socket. */
   connect(): void {
     this._closed = false
+    // Clear any pending reconnect timer so a manual connect() during a backoff
+    // window doesn't spawn a second concurrent socket when the timer fires.
+    if (this._reconnectTimer !== null) {
+      clearTimeout(this._reconnectTimer)
+      this._reconnectTimer = null
+    }
     if (this._socket === null) {
       this._open()
     }
