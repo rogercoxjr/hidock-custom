@@ -308,6 +308,8 @@ export interface ElectronAPI {
     isSummaryStale: (recordingId: string) => Promise<boolean>
     /** P4: Re-pend all provider-terminal failures (spec §7.3). */
     retryAllFailed: () => Promise<{ success: boolean; count: number }>
+    /** Task 5b: Paginated variant for the virtualized Library — returns {items,total}. */
+    getPage: (opts: { limit?: number; offset?: number; status?: string }) => Promise<{ items: any[]; total: number }>
   }
 
   // Database - Transcripts

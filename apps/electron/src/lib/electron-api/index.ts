@@ -15,6 +15,10 @@
 import type { ElectronAPI } from './types'
 import { WsClient } from './ws'
 import { makeEventsGroup } from './groups/events'
+import { makeRecordingsGroup } from './groups/recordings'
+import { makeTranscriptsGroup } from './groups/transcripts'
+import { makeQueueGroup } from './groups/queue'
+import { http as httpTransport } from './http'
 
 export type { ElectronAPI } from './types'
 export { http } from './http'
@@ -63,6 +67,13 @@ export function installRestApi(): ElectronAPI {
     integrity: { ...eventsGroup.integrity },
     migration: { ...eventsGroup.migration },
     downloadService: { ...eventsGroup.downloadService },
+  })
+
+  // --- Task 5: recordings / transcripts / queue groups ---
+  Object.assign(api, {
+    recordings: makeRecordingsGroup({ http: httpTransport }),
+    transcripts: makeTranscriptsGroup({ http: httpTransport }),
+    queue: makeQueueGroup({ http: httpTransport }),
   })
 
   // Assign to window so all existing call sites (`window.electronAPI.<group>.<method>`)
