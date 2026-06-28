@@ -61,5 +61,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerMeetings } = await import('./routes/meetings')
   await registerMeetings(app)
 
+  const { registerCalendar } = await import('./routes/calendar')
+  await registerCalendar(app)
+
   return app
 }
