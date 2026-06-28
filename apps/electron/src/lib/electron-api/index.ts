@@ -25,6 +25,13 @@ import { makeKnowledgeGroup } from './groups/knowledge'
 import { makeSyncedFilesGroup } from './groups/syncedFiles'
 import { makeChatGroup } from './groups/chat'
 import { makeCalendarGroup } from './groups/calendar'
+import { makeRagGroup } from './groups/rag'
+import { makeAssistantGroup } from './groups/assistant'
+import { makeActionablesGroup } from './groups/actionables'
+import { makeOutputsGroup } from './groups/outputs'
+import { makeSummarizationGroup } from './groups/summarization'
+import { makeSummarizationTemplatesGroup } from './groups/summarizationTemplates'
+import { makeQualityGroup } from './groups/quality'
 import { http as httpTransport } from './http'
 
 export type { ElectronAPI } from './types'
@@ -92,6 +99,17 @@ export function installRestApi(): ElectronAPI {
     syncedFiles: makeSyncedFilesGroup({ http: httpTransport }),
     chat: makeChatGroup({ http: httpTransport }),
     calendar: makeCalendarGroup({ http: httpTransport }),
+  })
+
+  // --- Task 7 (ai-outputs): rag / assistant / actionables / outputs / summarization / summarizationTemplates / quality ---
+  Object.assign(api, {
+    rag: makeRagGroup({ http: httpTransport }),
+    assistant: makeAssistantGroup({ http: httpTransport }),
+    actionables: makeActionablesGroup({ http: httpTransport }),
+    outputs: makeOutputsGroup({ http: httpTransport }),
+    summarization: makeSummarizationGroup({ http: httpTransport }),
+    summarizationTemplates: makeSummarizationTemplatesGroup({ http: httpTransport }),
+    quality: makeQualityGroup({ http: httpTransport }),
   })
 
   // Assign to window so all existing call sites (`window.electronAPI.<group>.<method>`)
