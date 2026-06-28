@@ -13,6 +13,8 @@
  */
 
 import type { ElectronAPI } from './types'
+import { WsClient } from './ws'
+import { makeEventsGroup } from './groups/events'
 
 export type { ElectronAPI } from './types'
 export { http } from './http'
@@ -36,6 +38,32 @@ export function installRestApi(): ElectronAPI {
   //   Object.assign(api, makeContactsGroup(http))
   //   …
   const api = {} as ElectronAPI
+
+  // Shared WebSocket client (singleton per SDK instance).
+  const wsClient = new WsClient()
+
+  // --- Task 4: events group (all on* / onProgress / onStateUpdate methods) ---
+  const eventsGroup = makeEventsGroup({ wsClient })
+  // Spread top-level on* keys onto the api root.
+  Object.assign(api, {
+    onDomainEvent: eventsGroup.onDomainEvent,
+    onRecordingAdded: eventsGroup.onRecordingAdded,
+    onTranscriptionStarted: eventsGroup.onTranscriptionStarted,
+    onTranscriptionProgress: eventsGroup.onTranscriptionProgress,
+    onTranscriptionCompleted: eventsGroup.onTranscriptionCompleted,
+    onTranscriptionFailed: eventsGroup.onTranscriptionFailed,
+    onTranscriptionCancelled: eventsGroup.onTranscriptionCancelled,
+    onTranscriptionAllCancelled: eventsGroup.onTranscriptionAllCancelled,
+    onSecurityWarning: eventsGroup.onSecurityWarning,
+    onActivityLogEntry: eventsGroup.onActivityLogEntry,
+    onVoiceprintCaptured: eventsGroup.onVoiceprintCaptured,
+    // Nested group partials (merged shallowly; later REST group tasks fill the rest
+    // of these namespaces — event methods are seeded here first so they're present
+    // even before other groups are composed).
+    integrity: { ...eventsGroup.integrity },
+    migration: { ...eventsGroup.migration },
+    downloadService: { ...eventsGroup.downloadService },
+  })
 
   // Assign to window so all existing call sites (`window.electronAPI.<group>.<method>`)
   // pick up the REST SDK without modification.
