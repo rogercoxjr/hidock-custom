@@ -124,5 +124,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerMedia } = await import('./routes/media')
   await registerMedia(app)
 
+  // Static SPA + history fallback — MUST be last so /api, /ws, /healthz, auth win.
+  const { registerStatic } = await import('./static')
+  await registerStatic(app)
+
   return app
 }
