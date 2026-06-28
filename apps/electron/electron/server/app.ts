@@ -109,5 +109,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerIntegrity } = await import('./routes/integrity')
   await registerIntegrity(app)
 
+  const { registerAppInfo } = await import('./routes/app-info')
+  await registerAppInfo(app)
+
   return app
 }
