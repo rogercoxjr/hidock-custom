@@ -18,6 +18,13 @@ import { makeEventsGroup } from './groups/events'
 import { makeRecordingsGroup } from './groups/recordings'
 import { makeTranscriptsGroup } from './groups/transcripts'
 import { makeQueueGroup } from './groups/queue'
+import { makeMeetingsGroup } from './groups/meetings'
+import { makeContactsGroup } from './groups/contacts'
+import { makeProjectsGroup } from './groups/projects'
+import { makeKnowledgeGroup } from './groups/knowledge'
+import { makeSyncedFilesGroup } from './groups/syncedFiles'
+import { makeChatGroup } from './groups/chat'
+import { makeCalendarGroup } from './groups/calendar'
 import { http as httpTransport } from './http'
 
 export type { ElectronAPI } from './types'
@@ -74,6 +81,17 @@ export function installRestApi(): ElectronAPI {
     recordings: makeRecordingsGroup({ http: httpTransport }),
     transcripts: makeTranscriptsGroup({ http: httpTransport }),
     queue: makeQueueGroup({ http: httpTransport }),
+  })
+
+  // --- Task 6 (people-time): meetings / contacts / projects / knowledge / syncedFiles / chat / calendar ---
+  Object.assign(api, {
+    meetings: makeMeetingsGroup({ http: httpTransport }),
+    contacts: makeContactsGroup({ http: httpTransport }),
+    projects: makeProjectsGroup({ http: httpTransport }),
+    knowledge: makeKnowledgeGroup({ http: httpTransport }),
+    syncedFiles: makeSyncedFilesGroup({ http: httpTransport }),
+    chat: makeChatGroup({ http: httpTransport }),
+    calendar: makeCalendarGroup({ http: httpTransport }),
   })
 
   // Assign to window so all existing call sites (`window.electronAPI.<group>.<method>`)
