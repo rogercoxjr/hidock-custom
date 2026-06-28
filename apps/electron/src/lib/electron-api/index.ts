@@ -42,6 +42,7 @@ import { makeAppInfoGroup } from './groups/appInfo'
 import { makeDeviceCacheGroup } from './groups/deviceCache'
 import { makeStoragePolicyGroup } from './groups/storagePolicy'
 import { makeMigrationGroup } from './groups/migration'
+import { makeDeviceGroup } from './groups/device'
 import { http as httpTransport } from './http'
 
 export type { ElectronAPI } from './types'
@@ -141,6 +142,13 @@ export function installRestApi(): ElectronAPI {
 
   // app group: seed restart (no-op) + info (RAW-THROW).
   Object.assign(api, { app: makeAppInfoGroup({ http: httpTransport }) })
+
+  // --- Task 9: device stubs (PHASE-1 — no REST endpoints) ---
+  // jensen is a new namespace; downloadService.onStateUpdate is already seeded by the
+  // events group so we merge the remaining 18 method stubs into that partial object.
+  const deviceGroup = makeDeviceGroup()
+  Object.assign(api, { jensen: deviceGroup.jensen })
+  Object.assign(api.downloadService, deviceGroup.downloadService)
 
   // Assign to window so all existing call sites (`window.electronAPI.<group>.<method>`)
   // pick up the REST SDK without modification.
