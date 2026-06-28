@@ -32,6 +32,16 @@ import { makeOutputsGroup } from './groups/outputs'
 import { makeSummarizationGroup } from './groups/summarization'
 import { makeSummarizationTemplatesGroup } from './groups/summarizationTemplates'
 import { makeQualityGroup } from './groups/quality'
+import { makeStorageGroup } from './groups/storage'
+import { makeConfigGroup } from './groups/config'
+import { makeVoiceprintsGroup } from './groups/voiceprints'
+import { makeSpeakersGroup } from './groups/speakers'
+import { makeDiarizationGroup } from './groups/diarization'
+import { makeIntegrityGroup } from './groups/integrity'
+import { makeAppInfoGroup } from './groups/appInfo'
+import { makeDeviceCacheGroup } from './groups/deviceCache'
+import { makeStoragePolicyGroup } from './groups/storagePolicy'
+import { makeMigrationGroup } from './groups/migration'
 import { http as httpTransport } from './http'
 
 export type { ElectronAPI } from './types'
@@ -111,6 +121,26 @@ export function installRestApi(): ElectronAPI {
     summarizationTemplates: makeSummarizationTemplatesGroup({ http: httpTransport }),
     quality: makeQualityGroup({ http: httpTransport }),
   })
+
+  // --- Task 8 (infra-voice): storage / config / voiceprints / speakers / diarization /
+  //     integrity / app / deviceCache / storagePolicy / migration ---
+  Object.assign(api, {
+    storage: makeStorageGroup({ http: httpTransport }),
+    config: makeConfigGroup({ http: httpTransport }),
+    voiceprints: makeVoiceprintsGroup({ http: httpTransport }),
+    speakers: makeSpeakersGroup({ http: httpTransport }),
+    diarization: makeDiarizationGroup({ http: httpTransport }),
+    deviceCache: makeDeviceCacheGroup({ http: httpTransport }),
+    storagePolicy: makeStoragePolicyGroup({ http: httpTransport }),
+  })
+
+  // Merge infra REST methods into the partially-seeded namespaces from the events group.
+  // Object.assign(api.integrity, ...) preserves the onProgress event already set.
+  Object.assign(api.integrity, makeIntegrityGroup({ http: httpTransport }))
+  Object.assign(api.migration, makeMigrationGroup({ http: httpTransport }))
+
+  // app group: seed restart (no-op) + info (RAW-THROW).
+  Object.assign(api, { app: makeAppInfoGroup({ http: httpTransport }) })
 
   // Assign to window so all existing call sites (`window.electronAPI.<group>.<method>`)
   // pick up the REST SDK without modification.
