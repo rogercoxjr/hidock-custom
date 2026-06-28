@@ -63,7 +63,7 @@ import {
   stopTranscriptionProcessor,
   getTranscriptionStatus
 } from '../../main/services/transcription'
-import { validateTranscriptionConfig } from '../../main/ipc/recording-handlers'
+import { validateTranscriptionConfig } from '../../main/services/transcription-config'
 import { NotFoundError, BadRequestError } from './_errors'
 import type { Turn } from '../../main/services/asr/asr-provider'
 

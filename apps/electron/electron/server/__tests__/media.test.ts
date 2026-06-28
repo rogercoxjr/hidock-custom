@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs'
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { buildApp } from '../app'
@@ -27,7 +27,7 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>) {
 /** Write a small deterministic binary file so we can verify byte ranges. */
 function writeTestAudio(dir: string, filename: string): { filePath: string; content: Buffer } {
   const recordingsDir = join(dir, 'recordings')
-  if (!require('fs').existsSync(recordingsDir)) {
+  if (!existsSync(recordingsDir)) {
     mkdirSync(recordingsDir, { recursive: true })
   }
   // 100 bytes: 0x00, 0x01, 0x02, … 0x63
@@ -227,7 +227,7 @@ describe('media endpoints', () => {
     // Ensure the file contents were NOT streamed
     expect(res.body).not.toContain('should not be served')
     // Cleanup the temp file
-    try { require('fs').unlinkSync(secretPath) } catch { /* ignore */ }
+    try { unlinkSync(secretPath) } catch { /* ignore */ }
     await app.close()
   })
 

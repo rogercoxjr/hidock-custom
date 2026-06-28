@@ -16,18 +16,21 @@ import { join, basename } from 'path'
 // ---------------------------------------------------------------------------
 // Hoisted controllable state + constants — must exist before vi.mock factories.
 // ---------------------------------------------------------------------------
-const { shared, FAKE_FFMPEG_PATH, FAKE_FFMPEG_UNPACKED, ASR_TMP } = vi.hoisted(() => {
+const { shared, FAKE_FFMPEG_PATH, FAKE_FFMPEG_ASAR, FAKE_FFMPEG_UNPACKED, ASR_TMP } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const _os = require('os') as typeof import('os')
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const _path = require('path') as typeof import('path')
 
-  const FAKE_FFMPEG_PATH = '/fake/app.asar/node_modules/ffmpeg-static/ffmpeg'
+  // The default fake path is a plain node_modules path (no asar) — the shape
+  // ffmpeg-static yields in Electron dev AND in the hosted plain-Node server.
+  const FAKE_FFMPEG_PATH = '/fake/node_modules/ffmpeg-static/ffmpeg'
+  // A packaged-Electron path lives inside app.asar and must be rewritten.
+  const FAKE_FFMPEG_ASAR = '/fake/app.asar/node_modules/ffmpeg-static/ffmpeg'
   const FAKE_FFMPEG_UNPACKED = '/fake/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg'
   const ASR_TMP = _path.join(_os.tmpdir(), 'hidock-asr')
 
   const shared = {
-    isPackaged: false as boolean,
     execFileReject: null as null | { message: string; stderr: string },
     transcodeSize: 10 * 1024 * 1024 as number, // 10 MB by default
     segmentFiles: [] as string[],
@@ -36,23 +39,14 @@ const { shared, FAKE_FFMPEG_PATH, FAKE_FFMPEG_UNPACKED, ASR_TMP } = vi.hoisted((
     callOrder: [] as string[]
   }
 
-  return { shared, FAKE_FFMPEG_PATH, FAKE_FFMPEG_UNPACKED, ASR_TMP }
+  return { shared, FAKE_FFMPEG_PATH, FAKE_FFMPEG_ASAR, FAKE_FFMPEG_UNPACKED, ASR_TMP }
 })
 
 // ---------------------------------------------------------------------------
-// Mock: electron — isPackaged controlled via shared.isPackaged
-// ---------------------------------------------------------------------------
-vi.mock('electron', () => ({
-  app: new Proxy({}, {
-    get: (_target: Record<string, unknown>, prop: string | symbol) => {
-      if (prop === 'isPackaged') return shared.isPackaged
-      return undefined
-    }
-  })
-}))
-
-// ---------------------------------------------------------------------------
-// Mock: ffmpeg-static — return the controllable fake path
+// Mock: ffmpeg-static — return the controllable fake path.
+// NOTE: resolveFfmpegPath is now runtime-neutral (no 'electron' import); the
+// asar-rewrite decision is driven by whether the resolved path contains
+// 'app.asar', and an FFMPEG_PATH env override takes precedence.
 // ---------------------------------------------------------------------------
 vi.mock('ffmpeg-static', () => ({
   default: FAKE_FFMPEG_PATH
@@ -127,7 +121,7 @@ import { rmSync } from 'fs'
 // Reset shared state before each test
 // ---------------------------------------------------------------------------
 beforeEach(() => {
-  shared.isPackaged = false
+  delete process.env.FFMPEG_PATH
   shared.execFileReject = null
   shared.transcodeSize = 10 * 1024 * 1024
   shared.segmentFiles = []
@@ -142,36 +136,41 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('resolveFfmpegPath()', () => {
-  it('1a. unpackaged: returns the raw ffmpeg-static path', () => {
-    shared.isPackaged = false
+  it('1a. non-asar path (Electron dev / hosted server): returns the raw ffmpeg-static path', () => {
+    // Default mock yields a plain node_modules path (no app.asar) → verbatim.
     expect(resolveFfmpegPath()).toBe(FAKE_FFMPEG_PATH)
   })
 
-  it('1b. packaged: replaces app.asar with app.asar.unpacked', () => {
-    shared.isPackaged = true
-    expect(resolveFfmpegPath()).toBe(FAKE_FFMPEG_UNPACKED)
+  it('1b. packaged Electron (app.asar path): rewrites app.asar → app.asar.unpacked', async () => {
+    // The `ffmpegStaticPath` binding is captured at module load, so swapping the
+    // resolved path requires resetModules + doMock + a fresh dynamic import.
+    vi.resetModules()
+    vi.doMock('ffmpeg-static', () => ({ default: FAKE_FFMPEG_ASAR }))
+    try {
+      const { resolveFfmpegPath: resolveAsar } = await import('../asr/audio-normalize')
+      expect(resolveAsar()).toBe(FAKE_FFMPEG_UNPACKED)
+    } finally {
+      vi.doUnmock('ffmpeg-static')
+      vi.resetModules()
+    }
+  })
+
+  it('1c. FFMPEG_PATH override always wins, regardless of ffmpeg-static', () => {
+    process.env.FFMPEG_PATH = '/usr/bin/ffmpeg'
+    expect(resolveFfmpegPath()).toBe('/usr/bin/ffmpeg')
   })
 
   it('2. throws a clear error when ffmpeg-static resolves null (plan Step 4 test 2)', async () => {
     // The `ffmpegStaticPath` import binding is captured at module load, so the
     // null case requires re-mocking ffmpeg-static + resetting modules and a
-    // dynamic re-import to exercise the throw branch (audio-normalize.ts:18-20).
+    // dynamic re-import to exercise the throw branch.
     vi.resetModules()
     vi.doMock('ffmpeg-static', () => ({ default: null }))
-    // Re-stub electron (the only boundary resolveFfmpegPath touches) so the
-    // fresh module graph reads app.isPackaged without pulling real electron.
-    vi.doMock('electron', () => ({
-      app: new Proxy({}, {
-        get: (_t: Record<string, unknown>, prop: string | symbol) =>
-          prop === 'isPackaged' ? shared.isPackaged : undefined
-      })
-    }))
     try {
       const { resolveFfmpegPath: resolveNull } = await import('../asr/audio-normalize')
       expect(() => resolveNull()).toThrow(/ffmpeg binary not found .*ffmpeg-static resolved to null/)
     } finally {
       vi.doUnmock('ffmpeg-static')
-      vi.doUnmock('electron')
       vi.resetModules()
     }
   })

@@ -1,6 +1,5 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { app } from 'electron'
 import { mkdirSync, rmSync, statSync, readdirSync, statfsSync } from 'fs'
 import { join, basename } from 'path'
 import { tmpdir } from 'os'
@@ -12,15 +11,25 @@ const ASR_TMP = join(tmpdir(), 'hidock-asr')
 const MAX_UPLOAD_BYTES = 24 * 1024 * 1024 // 24 MB guard under OpenAI's 25 MB limit (spec §5.1)
 const SEGMENT_SECONDS = 600
 
-/** ffmpeg-static resolves inside app.asar in packaged builds; binaries cannot
- *  execute from the archive — rewrite to app.asar.unpacked (spec §5.1/§9). */
+/** Resolve the ffmpeg binary, runtime-neutral across Electron and plain Node.
+ *  - An explicit FFMPEG_PATH env override always wins (the hosted Docker image
+ *    can point at a system/bundled ffmpeg).
+ *  - In a packaged Electron build, ffmpeg-static resolves inside app.asar;
+ *    binaries can't execute from the archive, so rewrite to app.asar.unpacked.
+ *  - In Electron dev and in the hosted plain-Node server there is no asar, so
+ *    the static path is returned verbatim.
+ *  Deliberately imports no 'electron' module so this loads under plain Node
+ *  (the hosted server image), where electron isn't installed (spec §5.1/§9). */
 export function resolveFfmpegPath(): string {
+  const override = process.env.FFMPEG_PATH
+  if (override) return override
   if (!ffmpegStaticPath) {
     throw new Error('ffmpeg binary not found (ffmpeg-static resolved to null). Reinstall: npm install ffmpeg-static')
   }
-  return app.isPackaged
-    ? String(ffmpegStaticPath).replace('app.asar', 'app.asar.unpacked')
-    : String(ffmpegStaticPath)
+  const resolved = String(ffmpegStaticPath)
+  return resolved.includes('app.asar')
+    ? resolved.replace('app.asar', 'app.asar.unpacked')
+    : resolved
 }
 
 /** Always-transcode (spec §5.1): EVERY Whisper input is normalized to 16 kHz

@@ -1,4 +1,7 @@
-import { ipcMain } from 'electron'
+// NOTE: 'electron' is NOT imported at module scope. This file's *Impl exports are
+// reachable from the hosted server's import graph, where electron isn't installed;
+// a static import would crash boot under plain Node. ipcMain is lazy-required inside
+// registerMigrationHandlers(), which only ever runs in the Electron main process.
 import { getBroadcaster } from '../services/broadcaster'
 import { getDatabase, runInTransaction } from '../services/database'
 import { readFileSync } from 'fs'
@@ -826,6 +829,8 @@ export async function getMigrationStatusImpl(): Promise<MigrationStatus> {
 // ============================================================================
 
 export function registerMigrationHandlers(): void {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { ipcMain } = require('electron') as typeof import('electron')
   // Get cleanup preview
   ipcMain.handle('migration:previewCleanup', async () => {
     try {
