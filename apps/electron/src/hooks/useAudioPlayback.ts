@@ -10,7 +10,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useUIStore } from '@/store/useUIStore'
 import { toast } from '@/components/ui/toaster'
 import { parseError, getErrorMessage } from '@/features/library/utils/errorHandling'
-import { generateWaveformData, decodeAudioData, getAudioMimeType, getMediaUrl } from '@/utils/audioUtils'
+import { generateWaveformData, decodeAudioArrayBuffer, getMediaUrl } from '@/utils/audioUtils'
 import { shouldLogQa } from '@/services/qa-monitor'
 
 export function useAudioPlayback() {
@@ -208,7 +208,7 @@ export function useAudioPlayback() {
 
   // ---- Waveform-Only Load ----
 
-  const loadWaveformOnly = useCallback(async (recordingId: string, filePath: string) => {
+  const loadWaveformOnly = useCallback(async (recordingId: string, _filePath: string) => {
     if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Loading waveform only: ${recordingId}`)
 
     // Cancel any in-flight waveform loading
@@ -228,24 +228,33 @@ export function useAudioPlayback() {
         return
       }
 
-      const response = await window.electronAPI.storage.readRecording(filePath)
-
-      if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to read audio file')
-      }
-
-      const base64 = response.data
-      const fileSizeBytes = Math.ceil((base64.length * 3) / 4)
-
+      // Fetch the audio bytes from the hosted REST media route — the same
+      // id-based URL the <audio> element streams from. Replaces the
+      // Electron-only storage.readRecording IPC, which is unavailable in
+      // hosted browser mode.
       const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
-      if (fileSizeBytes > MAX_FILE_SIZE) {
-        throw new Error(`File too large (${Math.round(fileSizeBytes / (1024 * 1024))}MB). Maximum size is 100MB.`)
+      const response = await fetch(getMediaUrl(recordingId), { signal })
+
+      if (!response.ok) {
+        throw new Error(`Failed to read audio file (HTTP ${response.status})`)
       }
+
+      // Bail before downloading the whole body when the server reports an
+      // oversized file; waveform decode would otherwise hold it all in memory.
+      const declaredSize = Number(response.headers.get('content-length') ?? 0)
+      if (declaredSize > MAX_FILE_SIZE) {
+        throw new Error(`File too large (${Math.round(declaredSize / (1024 * 1024))}MB). Maximum size is 100MB.`)
+      }
+
+      const arrayBuffer = await response.arrayBuffer()
 
       if (signal.aborted) return
 
-      const mimeType = getAudioMimeType(filePath)
-      const audioBuffer = await decodeAudioData(base64, mimeType)
+      if (arrayBuffer.byteLength > MAX_FILE_SIZE) {
+        throw new Error(`File too large (${Math.round(arrayBuffer.byteLength / (1024 * 1024))}MB). Maximum size is 100MB.`)
+      }
+
+      const audioBuffer = await decodeAudioArrayBuffer(arrayBuffer)
 
       if (signal.aborted) return
 

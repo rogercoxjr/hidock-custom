@@ -53,6 +53,30 @@ export async function generateWaveformData(
 }
 
 /**
+ * Decode raw audio bytes (ArrayBuffer) into an AudioBuffer.
+ *
+ * Used when audio is fetched over HTTP (e.g. the hosted
+ * `GET /api/recordings/:id/media` route), where the response body is already
+ * binary and no base64 round-trip is needed.
+ *
+ * @param arrayBuffer - Raw audio file bytes
+ * @returns Decoded AudioBuffer
+ */
+export async function decodeAudioArrayBuffer(arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
+  // Use singleton audio context instead of creating new one
+  const audioContext = getAudioContext()
+
+  // Ensure AudioContext is active (it may start in 'suspended' state
+  // if created without a user gesture, causing decodeAudioData to hang)
+  if (audioContext.state === 'suspended') {
+    await audioContext.resume()
+  }
+
+  // Decode audio data
+  return await audioContext.decodeAudioData(arrayBuffer)
+}
+
+/**
  * Decode base64-encoded audio data into an AudioBuffer
  *
  * @param base64Data - Base64-encoded audio file content
@@ -63,15 +87,6 @@ export async function decodeAudioData(
   base64Data: string,
   _mimeType: string
 ): Promise<AudioBuffer> {
-  // Use singleton audio context instead of creating new one
-  const audioContext = getAudioContext()
-
-  // Ensure AudioContext is active (it may start in 'suspended' state
-  // if created without a user gesture, causing decodeAudioData to hang)
-  if (audioContext.state === 'suspended') {
-    await audioContext.resume()
-  }
-
   // Decode base64 to binary
   const binaryData = atob(base64Data)
   const arrayBuffer = new ArrayBuffer(binaryData.length)
@@ -81,8 +96,7 @@ export async function decodeAudioData(
     uint8Array[i] = binaryData.charCodeAt(i)
   }
 
-  // Decode audio data
-  return await audioContext.decodeAudioData(arrayBuffer)
+  return await decodeAudioArrayBuffer(arrayBuffer)
 }
 
 /**
