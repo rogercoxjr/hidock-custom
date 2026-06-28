@@ -23,12 +23,14 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "test:performance": "vitest run src/__tests__/performance",
-    "start:server": "node out/server/index.js"
+    "start:server": "node out/server/index.js",
+    "build:server": "node scripts/build-server.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@fastify/multipart": "^10.0.0",
     "@fastify/secure-session": "^8.3.0",
+    "@fastify/static": "^9.1.3",
     "@fastify/websocket": "^11.2.0",
     "@google/generative-ai": "^0.21.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -99,6 +101,7 @@
     "electron": "^39.2.7",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
+    "esbuild": "^0.28.1",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^7.1.1",
