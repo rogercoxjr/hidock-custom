@@ -486,16 +486,19 @@ export function Chat() {
 
     const filename = sanitizeFilename(activeConversation.title || 'conversation') + '.md'
 
+    // outputs.saveToFile is DROPPED in hosted mode — use browser-native anchor download.
     try {
-      const result = await window.electronAPI.outputs.saveToFile(markdown, filename)
-      if (result.success) {
-        toast.success('Conversation exported', result.data)
-      } else {
-        toast.error('Export failed', result.error?.message || 'Unknown error')
-      }
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Conversation exported', filename)
     } catch (error) {
       console.error('Export error:', error)
-      toast.error('Export failed', 'Could not save file')
+      toast.error('Export failed', 'Could not download file')
     }
   }, [activeConversation, messages])
 

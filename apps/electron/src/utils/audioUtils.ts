@@ -86,15 +86,16 @@ export async function decodeAudioData(
 }
 
 /**
- * Build the streaming URL for a local recording. The Electron main process
- * registers the `hidock-media` scheme and serves the file with Range support,
+ * Build the streaming URL for a recording via the hosted REST API.
+ * The server serves the file at GET /api/recordings/:id/media with Range support,
  * so the <audio> element streams instead of loading the whole (often 300+ MB)
- * file into memory. Mirrors buildMediaUrl in electron/main/services/media-protocol.ts.
+ * file into memory. Keyed on recording ID, not file path.
  *
- * @param filePath - Absolute path to the recording file
+ * @param recordingId - The database ID of the recording
  */
-export function getMediaUrl(filePath: string): string {
-  return `hidock-media://media/?p=${encodeURIComponent(filePath)}`
+export function getMediaUrl(recordingId: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return `${origin}/api/recordings/${recordingId}/media`
 }
 
 /**

@@ -162,15 +162,12 @@ export function Actionables() {
   }, [])
 
   // C-ACT-M05: Show toast feedback for copy to clipboard actions
+  // outputs.copyToClipboard is DROPPED in hosted mode — use browser-native clipboard API.
   const copyToClipboard = async (text?: string) => {
     if (!text) return
     try {
-      const result = await window.electronAPI.outputs.copyToClipboard(text)
-      if (result.success) {
-        toast.success('Copied', 'Content copied to clipboard')
-      } else {
-        toast.error('Copy failed', result.error.message || 'Failed to copy to clipboard')
-      }
+      await navigator.clipboard.writeText(text)
+      toast.success('Copied', 'Content copied to clipboard')
     } catch (error: any) {
       toast.error('Copy failed', error?.message || 'Failed to copy to clipboard')
     }

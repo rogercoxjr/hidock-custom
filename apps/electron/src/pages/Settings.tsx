@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Save, FolderOpen, RefreshCw, AlertCircle, Eye, EyeOff, Shield, Trash2 } from 'lucide-react'
+import { Save, RefreshCw, AlertCircle, Eye, EyeOff, Shield, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -516,10 +516,6 @@ export function Settings() {
     } catch (error) {
       toast.error('Connection Failed', error instanceof Error ? error.message : 'Unknown error')
     }
-  }
-
-  const handleOpenFolder = async (folder: 'recordings' | 'transcripts' | 'data') => {
-    await window.electronAPI.storage.openFolder(folder)
   }
 
   // Voice Library privacy toggles (Phase 2) — save-on-toggle
@@ -1397,9 +1393,6 @@ export function Settings() {
                           {storageInfo.recordingsPath}
                         </p>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => handleOpenFolder('recordings')}>
-                        <FolderOpen className="h-4 w-4" />
-                      </Button>
                     </div>
                     <div className="flex items-center justify-between rounded-md bg-surface-sunken p-2">
                       <div className="min-w-0 flex-1">
@@ -1408,9 +1401,6 @@ export function Settings() {
                           {storageInfo.transcriptsPath}
                         </p>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => handleOpenFolder('transcripts')}>
-                        <FolderOpen className="h-4 w-4" />
-                      </Button>
                     </div>
                     <div className="flex items-center justify-between rounded-md bg-surface-sunken p-2">
                       <div className="min-w-0 flex-1">
@@ -1419,9 +1409,6 @@ export function Settings() {
                           {storageInfo.dataPath}
                         </p>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => handleOpenFolder('data')}>
-                        <FolderOpen className="h-4 w-4" />
-                      </Button>
                     </div>
                   </div>
                 </>

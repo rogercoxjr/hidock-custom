@@ -202,17 +202,18 @@ export function Library() {
     let failed = 0
     for (const file of audioFiles) {
       try {
-        // file.path is available in Electron renderer (non-sandboxed)
-        const filePath = (file as any).path
-        if (!filePath) {
-          failed++
-          continue
-        }
-        const result = await window.electronAPI.recordings.addExternalByPath(filePath)
-        if (result.success) {
+        const formData = new FormData()
+        formData.append('file', file)
+        const response = await fetch('/api/recordings/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        })
+        if (response.ok) {
           imported++
         } else {
-          console.error('Failed to import:', file.name, result.error)
+          const body = await response.json().catch(() => ({}))
+          console.error('Failed to import:', file.name, body.error)
           failed++
         }
       } catch (err) {
@@ -488,8 +489,36 @@ export function Library() {
     toggleTranscriptExpansion(id)
   }, [toggleTranscriptExpansion])
 
-  const openRecordingsFolder = async () => {
-    await window.electronAPI.storage.openFolder('recordings')
+  // Browser-native file picker — uploads the selected audio file to the server.
+  // Replaces the DROPPED recordings.addExternal() Electron OS-picker path.
+  const handleAddRecording = async () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.mp3,.m4a,.wav,.ogg,.flac,.webm,.hda,audio/*'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const formData = new FormData()
+      formData.append('file', file)
+      try {
+        const response = await fetch('/api/recordings/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData,
+        })
+        if (response.ok) {
+          await refresh(false)
+          toast.success('File Imported', `Imported "${file.name}"`)
+        } else {
+          const body = await response.json().catch(() => ({}))
+          toast.error('Import Failed', body.error || 'Could not import file')
+        }
+      } catch (err) {
+        console.error('Failed to import recording:', err)
+        toast.error('Import Failed', err instanceof Error ? err.message : 'Could not import file')
+      }
+    }
+    input.click()
   }
 
   const handleDownload = useCallback(
@@ -500,25 +529,13 @@ export function Library() {
     [deviceConnected, queueDownload]
   )
 
-  const handleAddRecording = async () => {
-    try {
-      const result = await window.electronAPI.recordings.addExternal()
-      if (result.success) {
-        await refresh(false)
-      } else if (result.error && result.error !== 'No file selected') {
-        console.error('Failed to import recording:', result.error)
-      }
-    } catch (e) {
-      console.error('Failed to import recording:', e)
-    }
-  }
-
   const handleAskAssistant = useCallback(
     (recording: UnifiedRecording) => {
       navigate('/assistant', { state: { contextId: recording.knowledgeCaptureId || recording.id } })
     },
     [navigate]
   )
+
 
   const handleGenerateOutput = useCallback(
     (recording: UnifiedRecording) => {
@@ -915,7 +932,6 @@ export function Library() {
         bulkProgress={bulkProgress}
         failedCount={failedTranscriptions.length}
         onAddRecording={handleAddRecording}
-        onOpenFolder={openRecordingsFolder}
         onBulkDownload={handleBulkDownload}
         onBulkProcess={handleBulkProcess}
         onRefresh={() => refresh(true)}

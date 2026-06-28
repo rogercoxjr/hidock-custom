@@ -25,7 +25,7 @@ class MockAudioContext {
 // Set up the global mock before importing
 vi.stubGlobal('AudioContext', MockAudioContext)
 
-import { decodeAudioData, generateWaveformData, formatTimestamp, formatFileSize, getAudioMimeType } from '../audioUtils'
+import { decodeAudioData, generateWaveformData, formatTimestamp, formatFileSize, getAudioMimeType, getMediaUrl } from '../audioUtils'
 
 describe('audioUtils', () => {
   beforeEach(() => {
@@ -126,6 +126,23 @@ describe('audioUtils', () => {
     it('should handle full file paths', () => {
       expect(getAudioMimeType('/path/to/recording.mp3')).toBe('audio/mpeg')
       expect(getAudioMimeType('C:\\Users\\data\\recording.hda')).toBe('audio/mpeg')
+    })
+  })
+
+  describe('getMediaUrl', () => {
+    it('should build a REST media URL keyed on recording ID', () => {
+      const url = getMediaUrl('rec-abc-123')
+      // The URL uses window.location.origin as the base; in jsdom test environments
+      // the port may vary. Assert the path shape rather than the exact origin.
+      expect(url).toMatch(/\/api\/recordings\/rec-abc-123\/media$/)
+      expect(url).toMatch(/^http/)
+    })
+
+    it('should not contain a file path or ?p= query param', () => {
+      const url = getMediaUrl('some-id')
+      expect(url).not.toContain('?p=')
+      expect(url).not.toContain('hidock-media')
+      expect(url).toContain('/api/recordings/some-id/media')
     })
   })
 

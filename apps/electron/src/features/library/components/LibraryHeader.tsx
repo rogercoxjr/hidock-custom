@@ -1,4 +1,4 @@
-import { Plus, FolderOpen, Download, Zap, RefreshCw, LayoutGrid, List } from 'lucide-react'
+import { Plus, Download, Zap, RefreshCw, LayoutGrid, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Eyebrow } from '@/components/harbor/Eyebrow'
 import { SegmentedToggle } from '@/components/ui/segmented-toggle'
@@ -23,7 +23,6 @@ interface LibraryHeaderProps {
   /** P4: count of failed transcription queue rows (chip only shows when > 0) */
   failedCount: number
   onAddRecording: () => void
-  onOpenFolder: () => void
   onBulkDownload: () => void
   onBulkProcess: () => void
   onRefresh: () => void
@@ -43,7 +42,6 @@ export function LibraryHeader({
   bulkProgress,
   failedCount,
   onAddRecording,
-  onOpenFolder,
   onBulkDownload,
   onBulkProcess,
   onRefresh,
@@ -81,11 +79,6 @@ export function LibraryHeader({
       <div className="flex-1" />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onOpenFolder}>
-          <FolderOpen className="h-4 w-4 mr-2" />
-          Open Folder
-        </Button>
-
         {/* Bulk Download */}
         {bulkCounts.deviceOnly > 0 && (
           <Button

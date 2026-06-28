@@ -133,11 +133,11 @@ export function useAudioPlayback() {
         if (superseded()) return // a newer play/stop took over; don't commit
         audioRef.current = audio
 
-        // Stream the recording via the custom `hidock-media` protocol instead of
-        // loading the whole (often 300+ MB) file as base64 over IPC. The <audio>
-        // element fetches only the bytes it needs and seeking issues HTTP Range
-        // requests, so playback starts near-instantly and never blocks the UI.
-        const mediaUrl = getMediaUrl(filePath)
+        // Stream the recording via the hosted REST API instead of the Electron
+        // `hidock-media` custom protocol. The server route GET /api/recordings/:id/media
+        // serves the file with Range support, so the <audio> element streams and
+        // never loads the whole (often 300+ MB) file into memory.
+        const mediaUrl = getMediaUrl(recordingId)
         if (shouldLogQa()) console.log(`[QA-MONITOR][Operation] Setting audio src (stream): ${mediaUrl}`)
         audio.src = mediaUrl
 
