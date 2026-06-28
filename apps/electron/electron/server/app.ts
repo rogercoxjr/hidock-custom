@@ -85,5 +85,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerSummarization } = await import('./routes/summarization')
   await registerSummarization(app)
 
+  const { registerSummarizationTemplates } = await import('./routes/summarization-templates')
+  await registerSummarizationTemplates(app)
+
   return app
 }
