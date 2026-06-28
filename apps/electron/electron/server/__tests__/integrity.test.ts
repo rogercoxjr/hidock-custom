@@ -150,6 +150,68 @@ describe('integrity REST endpoints', () => {
     await app.close()
   })
 
+  it('POST /api/integrity/purge-missing-files as non-admin returns 403', async () => {
+    const app = await makeMemberApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/integrity/purge-missing-files',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('POST /api/integrity/cleanup-wrongly-named as non-admin returns 403', async () => {
+    const app = await makeMemberApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/integrity/cleanup-wrongly-named',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('POST /api/integrity/repair-all as non-admin returns 403', async () => {
+    const app = await makeMemberApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/integrity/repair-all',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('POST /api/integrity/run-startup-checks as non-admin returns 403', async () => {
+    const app = await makeMemberApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/integrity/run-startup-checks',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('POST /api/integrity/repair-issue as non-admin returns 403', async () => {
+    const app = await makeMemberApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/integrity/repair-issue',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json' },
+      payload: { issueId: 'some-issue-id' }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
   // ── GET /api/integrity/report ──────────────────────────────────────────
 
   it('GET /api/integrity/report returns null before any scan', async () => {

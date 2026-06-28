@@ -316,6 +316,20 @@ describe('speakers REST endpoints', () => {
     await app.close()
   })
 
+  it('POST /api/recordings/:id/speakers/merge with foreign origin returns 403', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/recordings/rec-1/speakers/merge',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example.com' },
+      payload: { fromLabel: 'A', toLabel: 'B' }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
   it('POST /api/recordings/:id/speakers/merge rewrites turns and roster', async () => {
     const app = await makeApp()
     const cookie = await login(app)
@@ -348,6 +362,120 @@ describe('speakers REST endpoints', () => {
     const speakers: string[] = body.turns.map((t: { speaker: string }) => t.speaker)
     expect(speakers.every((s) => s === 'B')).toBe(true)
 
+    await app.close()
+  })
+
+  // -------------------------------------------------------------------------
+  // POST reassign
+  // -------------------------------------------------------------------------
+
+  it('POST /api/recordings/:id/speakers/reassign without auth returns 401', async () => {
+    const app = await makeApp()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/recordings/rec-1/speakers/reassign',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        sourceLabel: 'A',
+        anchorIndex: 0,
+        anchorStartMs: 0,
+        scope: 'one',
+        target: { kind: 'existingLabel', label: 'B' }
+      }
+    })
+    expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('POST /api/recordings/:id/speakers/reassign with foreign origin returns 403', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/recordings/rec-1/speakers/reassign',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example.com' },
+      payload: {
+        sourceLabel: 'A',
+        anchorIndex: 0,
+        anchorStartMs: 0,
+        scope: 'one',
+        target: { kind: 'existingLabel', label: 'B' }
+      }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('POST /api/recordings/:id/speakers/reassign (one + existingLabel) rewrites only anchor turn', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+
+    // Seed a transcript with turns
+    const { upsertTranscriptStage1 } = await import('../../main/services/database')
+    upsertTranscriptStage1({
+      recording_id: 'rec-1',
+      full_text: 'Hello World Bye',
+      transcription_provider: 'test',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 1000, text: 'Hello' },
+        { speaker: 'A', startMs: 1000, endMs: 2000, text: 'World' },
+        { speaker: 'A', startMs: 2000, endMs: 3000, text: 'Bye' }
+      ]
+    })
+
+    // Reassign only turn at anchorIndex=1 (startMs=1000) from A → B (existingLabel)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/recordings/rec-1/speakers/reassign',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        sourceLabel: 'A',
+        anchorIndex: 1,
+        anchorStartMs: 1000,
+        scope: 'one',
+        target: { kind: 'existingLabel', label: 'B' }
+      }
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(body.targetLabel).toBe('B')
+    // scope=one → only 1 turn reassigned
+    expect(body.rewrittenCount).toBe(1)
+    await app.close()
+  })
+
+  it('POST /api/recordings/:id/speakers/reassign (one + existingLabel) rejects stale anchor', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+
+    const { upsertTranscriptStage1 } = await import('../../main/services/database')
+    upsertTranscriptStage1({
+      recording_id: 'rec-1',
+      full_text: 'Hello World',
+      transcription_provider: 'test',
+      turns: [
+        { speaker: 'A', startMs: 0, endMs: 1000, text: 'Hello' },
+        { speaker: 'A', startMs: 1000, endMs: 2000, text: 'World' }
+      ]
+    })
+
+    // Provide a wrong anchorStartMs → stale-anchor guard fires
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/recordings/rec-1/speakers/reassign',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        sourceLabel: 'A',
+        anchorIndex: 0,
+        anchorStartMs: 9999, // wrong — actual is 0
+        scope: 'one',
+        target: { kind: 'existingLabel', label: 'B' }
+      }
+    })
+    expect(res.statusCode).toBe(400)
     await app.close()
   })
 

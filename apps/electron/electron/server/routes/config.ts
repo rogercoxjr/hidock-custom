@@ -16,7 +16,7 @@ const patchBody = z.record(z.string(), z.unknown())
 export async function registerConfig(app: FastifyInstance): Promise<void> {
   // GET /api/config          → full AppConfig
   // GET /api/config?key=foo  → AppConfig[key]
-  app.get('/api/config', { preHandler: [app.requireAuth] }, async (req) => {
+  app.get('/api/config', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req) => {
     const q = keyQ.parse(req.query)
     const cfg = getConfig()
     if (q.key !== undefined) {

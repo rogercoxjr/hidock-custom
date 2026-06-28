@@ -13,6 +13,12 @@ async function makeApp() {
   )
 }
 
+async function makeMemberApp() {
+  return buildApp(
+    testDeps({ oidc: createFakeOidc({ email: 'member@x.com', emailVerified: true, sub: 'sub-member' }) })
+  )
+}
+
 async function login(app: Awaited<ReturnType<typeof buildApp>>) {
   const start = await app.inject({ method: 'GET', url: '/auth/login' })
   const startCookie = start.cookies.find((c) => c.name === 'hidock_session')!
@@ -42,6 +48,7 @@ describe('voiceprints REST endpoints', () => {
     const {
       initializeDatabase,
       ensureBootstrapAdmin,
+      upsertAllowedUser,
       upsertContact,
       insertRecording,
       insertVoiceprint
@@ -50,6 +57,7 @@ describe('voiceprints REST endpoints', () => {
     await initializeFileStorage()
     await initializeDatabase()
     ensureBootstrapAdmin('boss@x.com')
+    upsertAllowedUser({ email: 'member@x.com', role: 'member', invitedBy: 'boss@x.com' })
 
     // Seed a contact
     upsertContact({
@@ -364,6 +372,19 @@ describe('voiceprints REST endpoints', () => {
     await app.close()
   })
 
+  it('DELETE /api/voiceprints?contactId= with foreign origin returns 403', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/voiceprints?contactId=${CONTACT_ID}`,
+      cookies: { hidock_session: cookie },
+      headers: { origin: 'https://evil.example.com' }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
   it('DELETE /api/voiceprints?contactId= deletes all prints for a contact', async () => {
     const app = await makeApp()
     const cookie = await login(app)
@@ -391,6 +412,31 @@ describe('voiceprints REST endpoints', () => {
   // ----------------------------------------------------------------
   // DELETE /api/voiceprints (no params) — global clear
   // ----------------------------------------------------------------
+
+  it('DELETE /api/voiceprints (no params) with foreign origin returns 403', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/voiceprints`,
+      cookies: { hidock_session: cookie },
+      headers: { origin: 'https://evil.example.com' }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('DELETE /api/voiceprints (no params) as non-admin returns 403', async () => {
+    const app = await makeMemberApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/voiceprints`,
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
 
   it('DELETE /api/voiceprints (no params) clears all voiceprints', async () => {
     const app = await makeApp()

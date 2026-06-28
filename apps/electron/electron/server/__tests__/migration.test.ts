@@ -110,6 +110,44 @@ describe('migration endpoints', () => {
     await app.close()
   })
 
+  it('POST /api/migration/run-v11 without auth returns 401', async () => {
+    const app = await makeAdminApp()
+    const res = await app.inject({ method: 'POST', url: '/api/migration/run-v11' })
+    expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('POST /api/migration/run-v11 as non-admin returns 403', async () => {
+    const app = await makeNonAdminApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/migration/run-v11',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
+  it('POST /api/migration/rollback-v11 without auth returns 401', async () => {
+    const app = await makeAdminApp()
+    const res = await app.inject({ method: 'POST', url: '/api/migration/rollback-v11' })
+    expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('POST /api/migration/rollback-v11 as non-admin returns 403', async () => {
+    const app = await makeNonAdminApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/migration/rollback-v11',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
   // --- Authenticated + admin: real DB assertions ---
 
   it('GET /api/migration/status returns counts for empty DB', async () => {

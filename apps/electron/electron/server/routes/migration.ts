@@ -49,7 +49,7 @@ export async function registerMigration(app: FastifyInstance): Promise<void> {
     { preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin] },
     async () => {
       const result = await migrateToV11Impl()
-      if (!result.success && result.errors.some((e) => e.includes('already in progress'))) {
+      if (!result.success && result.code === 'LOCK_CONFLICT') {
         throw new ConflictError('migration already in progress')
       }
       return result
@@ -64,7 +64,7 @@ export async function registerMigration(app: FastifyInstance): Promise<void> {
     { preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin] },
     async () => {
       const result = await rollbackV11MigrationImpl()
-      if (!result.success && result.errors.some((e) => e.includes('in progress'))) {
+      if (!result.success && result.code === 'LOCK_CONFLICT') {
         throw new ConflictError('migration in progress, cannot rollback')
       }
       return result

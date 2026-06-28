@@ -71,6 +71,18 @@ describe('config REST endpoints', () => {
     await app.close()
   })
 
+  it('GET /api/config as non-admin returns 403', async () => {
+    const app = await makeAppMember()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/config',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await app.close()
+  })
+
   it('GET /api/config returns full AppConfig object', async () => {
     const app = await makeApp()
     const cookie = await login(app)

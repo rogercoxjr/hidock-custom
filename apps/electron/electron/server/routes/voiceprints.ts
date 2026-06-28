@@ -131,14 +131,14 @@ export async function registerVoiceprints(app: FastifyInstance): Promise<void> {
    */
   app.delete(
     '/api/voiceprints',
-    { preHandler: [app.requireAuth, app.requireSameOrigin] },
+    { preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin] },
     async (req) => {
       const { contactId } = req.query as { contactId?: string }
       if (contactId !== undefined && contactId !== '') {
         const deleted = deleteVoiceprintsByContactId(contactId)
         return { deleted }
       }
-      // No contactId → global clear
+      // No contactId → global clear (requireAdmin guards this destructive path)
       const deleted = deleteAllVoiceprints()
       return { deleted }
     }

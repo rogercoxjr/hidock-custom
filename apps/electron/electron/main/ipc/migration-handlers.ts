@@ -451,14 +451,15 @@ export async function runPreMigrationCleanupImpl(): Promise<CleanupResult> {
 // P1 #011: V11 Migration with Transaction Safety
 // ============================================================================
 
-export async function migrateToV11Impl(): Promise<MigrationResult> {
+export async function migrateToV11Impl(): Promise<MigrationResult & { code?: string }> {
   // P1 #009: Acquire migration lock
   if (!migrationLock.acquire()) {
     return {
       success: false,
       capturesCreated: 0,
       errors: ['Migration already in progress'],
-      verified: false
+      verified: false,
+      code: 'LOCK_CONFLICT'
     }
   }
 
@@ -705,12 +706,13 @@ export async function migrateToV11Impl(): Promise<MigrationResult> {
 // Rollback Migration
 // ============================================================================
 
-export async function rollbackV11MigrationImpl(): Promise<{ success: boolean; errors: string[] }> {
+export async function rollbackV11MigrationImpl(): Promise<{ success: boolean; errors: string[]; code?: string }> {
   // P1 #009: Acquire migration lock
   if (!migrationLock.acquire()) {
     return {
       success: false,
-      errors: ['Migration in progress, cannot rollback']
+      errors: ['Migration in progress, cannot rollback'],
+      code: 'LOCK_CONFLICT'
     }
   }
 
