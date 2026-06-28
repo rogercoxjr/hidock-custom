@@ -196,4 +196,74 @@ describe('media endpoints', () => {
     expect(res.headers['content-range']).toBe('bytes */100')
     await app.close()
   })
+
+  it('returns 403 for a recording whose file_path is outside the allowed directory', async () => {
+    const { insertRecording } = await import('../../main/services/database')
+    // Write a file outside the HIDOCK_DATA_ROOT tree so the path exists on disk
+    // but fails the isRecordingPathAllowed() guard.
+    const secretPath = join(tmpdir(), `hidock-secret-${Date.now()}.txt`)
+    writeFileSync(secretPath, 'should not be served')
+    insertRecording({
+      id: 'rec-hostile-path',
+      filename: 'secret.txt',
+      file_path: secretPath,
+      date_recorded: '2024-01-03T10:00:00Z',
+      status: 'ready',
+      location: 'local-only',
+      transcription_status: 'none',
+      on_device: 0,
+      on_local: 1,
+      source: 'hidock',
+      is_imported: 0
+    })
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/recordings/rec-hostile-path/media',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
+    // Ensure the file contents were NOT streamed
+    expect(res.body).not.toContain('should not be served')
+    // Cleanup the temp file
+    try { require('fs').unlinkSync(secretPath) } catch { /* ignore */ }
+    await app.close()
+  })
+
+  it('returns 206 with correct byte slice for a suffix range (bytes=-N)', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    // bytes=-50 should return the last 50 bytes (bytes 50–99)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/recordings/rec-with-file/media',
+      headers: { range: 'bytes=-50' },
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(206)
+    expect(res.headers['content-range']).toBe('bytes 50-99/100')
+    expect(Number(res.headers['content-length'])).toBe(50)
+    expect(res.rawPayload.length).toBe(50)
+    // First byte of the slice should be 50
+    expect(res.rawPayload[0]).toBe(50)
+    // Last byte of the slice should be 99
+    expect(res.rawPayload[49]).toBe(99)
+    await app.close()
+  })
+
+  it('returns 200 for a syntactically invalid Range header', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/recordings/rec-with-file/media',
+      headers: { range: 'bytes=garbage' },
+      cookies: { hidock_session: cookie }
+    })
+    // RFC 7233: server may ignore an unparseable Range and return 200
+    expect(res.statusCode).toBe(200)
+    expect(res.rawPayload.length).toBe(100)
+    await app.close()
+  })
 })

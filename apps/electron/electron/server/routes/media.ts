@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { createReadStream, statSync } from 'fs'
 import { getRecordingById } from '../../main/services/database'
 import { isRecordingPathAllowed } from '../../main/services/file-storage'
-import { NotFoundError, BadRequestError } from './_errors'
+import { NotFoundError, ForbiddenError } from './_errors'
 
 /**
  * Determine the MIME type from a file extension.
@@ -53,7 +53,7 @@ export async function registerMedia(app: FastifyInstance): Promise<void> {
     if (!filePath) throw new NotFoundError('recording file not available')
 
     if (!isRecordingPathAllowed(filePath)) {
-      throw new BadRequestError('file path not allowed')
+      throw new ForbiddenError('file path not allowed')
     }
 
     let size: number
@@ -68,27 +68,42 @@ export async function registerMedia(app: FastifyInstance): Promise<void> {
 
     if (rangeHeader) {
       const match = /bytes=(\d*)-(\d*)/.exec(rangeHeader)
-      let start = match && match[1] ? parseInt(match[1], 10) : 0
-      let end = match && match[2] ? parseInt(match[2], 10) : size - 1
-      if (Number.isNaN(start)) start = 0
-      if (Number.isNaN(end) || end >= size) end = size - 1
 
-      if (start > end || start >= size) {
-        return reply
-          .code(416)
-          .header('Content-Range', `bytes */${size}`)
-          .send({ error: 'Range Not Satisfiable' })
+      // Syntactically invalid Range header — fall through to the 200 path below.
+      if (match) {
+        let start: number
+        let end: number
+
+        if (!match[1] && match[2]) {
+          // Suffix range: bytes=-N  →  last N bytes
+          const suffixLen = parseInt(match[2], 10)
+          start = size - suffixLen
+          end = size - 1
+          if (start < 0) start = 0
+        } else {
+          start = match[1] ? parseInt(match[1], 10) : 0
+          end = match[2] ? parseInt(match[2], 10) : size - 1
+          if (Number.isNaN(start)) start = 0
+          if (Number.isNaN(end) || end >= size) end = size - 1
+        }
+
+        if (start > end || start >= size) {
+          return reply
+            .code(416)
+            .header('Content-Range', `bytes */${size}`)
+            .send({ error: 'Range Not Satisfiable' })
+        }
+
+        const length = end - start + 1
+        reply
+          .code(206)
+          .header('Content-Type', contentType)
+          .header('Content-Length', String(length))
+          .header('Content-Range', `bytes ${start}-${end}/${size}`)
+          .header('Accept-Ranges', 'bytes')
+
+        return reply.send(createReadStream(filePath, { start, end }))
       }
-
-      const length = end - start + 1
-      reply
-        .code(206)
-        .header('Content-Type', contentType)
-        .header('Content-Length', String(length))
-        .header('Content-Range', `bytes ${start}-${end}/${size}`)
-        .header('Accept-Ranges', 'bytes')
-
-      return reply.send(createReadStream(filePath, { start, end }))
     }
 
     // No Range header → full stream
