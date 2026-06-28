@@ -327,7 +327,7 @@ function verifyMigration(): VerificationResult {
 // Cleanup Preview
 // ============================================================================
 
-async function generateCleanupPreviewImpl(): Promise<CleanupPreview> {
+export async function generateCleanupPreviewImpl(): Promise<CleanupPreview> {
   const db = getDatabase()
   const orphanedTranscripts: Array<{ id: string; recording_id: string }> = []
   const duplicateRecordings: Array<{ id: string; filename: string; count: number }> = []
@@ -384,7 +384,7 @@ async function generateCleanupPreviewImpl(): Promise<CleanupPreview> {
 // Pre-Migration Cleanup
 // ============================================================================
 
-async function runPreMigrationCleanupImpl(): Promise<CleanupResult> {
+export async function runPreMigrationCleanupImpl(): Promise<CleanupResult> {
   const db = getDatabase()
   const result: CleanupResult = {
     success: true,
@@ -705,7 +705,7 @@ export async function migrateToV11Impl(): Promise<MigrationResult> {
 // Rollback Migration
 // ============================================================================
 
-async function rollbackV11MigrationImpl(): Promise<{ success: boolean; errors: string[] }> {
+export async function rollbackV11MigrationImpl(): Promise<{ success: boolean; errors: string[] }> {
   // P1 #009: Acquire migration lock
   if (!migrationLock.acquire()) {
     return {
@@ -779,7 +779,7 @@ async function rollbackV11MigrationImpl(): Promise<{ success: boolean; errors: s
 // Get Migration Status
 // ============================================================================
 
-async function getMigrationStatusImpl(): Promise<MigrationStatus> {
+export async function getMigrationStatusImpl(): Promise<MigrationStatus> {
   const db = getDatabase()
   const status: MigrationStatus = {
     pending: 0,
