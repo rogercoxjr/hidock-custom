@@ -94,5 +94,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerStorage } = await import('./routes/storage')
   await registerStorage(app)
 
+  const { registerConfig } = await import('./routes/config')
+  await registerConfig(app)
+
   return app
 }
