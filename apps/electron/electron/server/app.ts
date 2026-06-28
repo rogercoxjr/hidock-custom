@@ -103,5 +103,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerSpeakers } = await import('./routes/speakers')
   await registerSpeakers(app)
 
+  const { registerDiarization } = await import('./routes/diarization')
+  await registerDiarization(app)
+
   return app
 }
