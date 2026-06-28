@@ -58,5 +58,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerChat } = await import('./routes/chat')
   await registerChat(app)
 
+  const { registerMeetings } = await import('./routes/meetings')
+  await registerMeetings(app)
+
   return app
 }
