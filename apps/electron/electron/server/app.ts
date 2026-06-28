@@ -49,5 +49,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerTranscripts } = await import('./routes/transcripts')
   await registerTranscripts(app)
 
+  const { registerKnowledge } = await import('./routes/knowledge')
+  await registerKnowledge(app)
+
   return app
 }
