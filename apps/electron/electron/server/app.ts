@@ -55,5 +55,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerSyncedFiles } = await import('./routes/synced-files')
   await registerSyncedFiles(app)
 
+  const { registerChat } = await import('./routes/chat')
+  await registerChat(app)
+
   return app
 }
