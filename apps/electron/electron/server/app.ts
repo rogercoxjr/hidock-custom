@@ -112,5 +112,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerAppInfo } = await import('./routes/app-info')
   await registerAppInfo(app)
 
+  const { registerDeviceCache } = await import('./routes/device-cache')
+  await registerDeviceCache(app)
+
   return app
 }
