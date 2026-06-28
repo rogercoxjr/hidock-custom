@@ -159,7 +159,7 @@ beforeEach(() => {
     value: {
       knowledge: { update: vi.fn().mockResolvedValue({ success: true }) },
       recordings: { selectMeeting: vi.fn().mockResolvedValue({ success: true }) },
-      storage: { openFile: vi.fn(), revealInFolder: vi.fn() },
+      storage: { getInfo: vi.fn() },
       speakers: { getForRecording: mockGetForRecording, getSuggestions: mockGetSuggestions },
       transcripts: { getByRecordingId: mockGetByRecordingId },
     },

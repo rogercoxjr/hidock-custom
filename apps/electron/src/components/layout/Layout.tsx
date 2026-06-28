@@ -14,7 +14,6 @@ import {
   Anchor,
   ChevronLeft,
   ChevronRight,
-  RotateCcw,
   Terminal,
   ChevronDown,
   ChevronUp
@@ -220,15 +219,15 @@ export function Layout({ children }: LayoutProps) {
         {/* Brand / collapse */}
         <div
           className={cn(
-            'flex items-center gap-2.5 px-4 pb-3 pt-4 titlebar-drag-region',
+            'flex items-center gap-2.5 px-4 pb-3 pt-4',
             !sidebarOpen && 'justify-center px-0'
           )}
         >
-          <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-brand-navy text-white titlebar-no-drag">
+          <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-brand-navy text-white">
             <Anchor className="h-5 w-5" />
           </div>
           {sidebarOpen && (
-            <div className="min-w-0 flex-1 leading-tight titlebar-no-drag">
+            <div className="min-w-0 flex-1 leading-tight">
               <div className="font-display text-[19px] font-semibold tracking-[-0.01em] text-ink">HiDock</div>
               <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-accent-2">calm from the noise</div>
             </div>
@@ -236,7 +235,7 @@ export function Layout({ children }: LayoutProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0 titlebar-no-drag text-ink-muted hover:text-ink"
+            className="h-8 w-8 shrink-0 text-ink-muted hover:text-ink"
             onClick={toggleSidebar}
           >
             {sidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -420,30 +419,15 @@ export function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Dev Tools */}
-        {isDevMode && (
+        {isDevMode && sidebarOpen && (
           <div className="space-y-2 border-t border-border p-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                'w-full gap-2 bg-surface-sunken text-ink hover:bg-surface-hover',
-                !sidebarOpen && 'justify-center px-0'
-              )}
-              onClick={() => window.electronAPI?.app?.restart()}
-              title="Restart App"
-            >
-              <RotateCcw className="h-4 w-4" />
-              {sidebarOpen && <span>Restart</span>}
-            </Button>
-            {sidebarOpen && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-ink-muted">QA Logs</span>
-                <Switch
-                  checked={qaLogsEnabled}
-                  onCheckedChange={setQaLogsEnabled}
-                />
-              </div>
-            )}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-muted">QA Logs</span>
+              <Switch
+                checked={qaLogsEnabled}
+                onCheckedChange={setQaLogsEnabled}
+              />
+            </div>
           </div>
         )}
       </aside>

@@ -179,9 +179,8 @@ vi.mock('@tanstack/react-virtual', () => ({
 global.window.electronAPI = {
   transcripts: { getByRecordingIds: vi.fn().mockResolvedValue({}) },
   meetings: { getByIds: vi.fn().mockResolvedValue({}) },
-  storage: { openFolder: vi.fn() },
+  storage: { getInfo: vi.fn() },
   recordings: {
-    addExternal: vi.fn(),
     delete: vi.fn(),
     updateStatus: vi.fn()
   },

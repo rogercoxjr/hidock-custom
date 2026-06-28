@@ -42,7 +42,7 @@ const mockGetAll = vi.fn().mockResolvedValue([
   }
 ])
 
-const mockCopyToClipboard = vi.fn().mockResolvedValue({ success: true })
+const mockClipboardWriteText = vi.fn().mockResolvedValue(undefined)
 const mockGetByActionableId = vi.fn().mockResolvedValue({
   success: true,
   data: { content: 'Generated content', templateId: 'meeting_minutes', generatedAt: new Date().toISOString() }
@@ -50,6 +50,12 @@ const mockGetByActionableId = vi.fn().mockResolvedValue({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // outputs.copyToClipboard is DROPPED; clipboard now uses navigator.clipboard.writeText
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: mockClipboardWriteText },
+    writable: true,
+    configurable: true,
+  })
   global.window.electronAPI = {
     actionables: {
       getAll: mockGetAll,
@@ -58,7 +64,6 @@ beforeEach(() => {
     },
     outputs: {
       generate: vi.fn().mockResolvedValue({ success: true, data: { content: 'Test', templateId: 'meeting_minutes', generatedAt: new Date().toISOString() } }),
-      copyToClipboard: mockCopyToClipboard,
       getByActionableId: mockGetByActionableId
     }
   } as any
@@ -122,11 +127,12 @@ describe('Actionables Page', () => {
     expect(processingButton.closest('button')).toBeDisabled()
   })
 
-  // C-ACT-M05: Test copy to clipboard shows toast feedback
-  it('should call copyToClipboard API correctly', async () => {
-    // This is a unit test for the clipboard flow
-    // The copyToClipboard function uses toast for success/failure
-    expect(mockCopyToClipboard).not.toHaveBeenCalled()
+  // C-ACT-M05: copyToClipboard now uses navigator.clipboard.writeText (DROPPED Electron API)
+  it('navigator.clipboard.writeText is available (clipboard mock wired correctly)', async () => {
+    // Smoke-check that the browser-native clipboard is callable (the component
+    // no longer touches window.electronAPI.outputs.copyToClipboard).
+    await navigator.clipboard.writeText('test')
+    expect(mockClipboardWriteText).toHaveBeenCalledWith('test')
   })
 
   // C-ACT-M07: Error banner is positioned as a floating bar and only shows on generation error

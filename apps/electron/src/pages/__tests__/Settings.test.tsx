@@ -104,7 +104,6 @@ global.window.electronAPI = {
         recordingsCount: 5
       }
     }),
-    openFolder: vi.fn()
   }
 } as any
 

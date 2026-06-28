@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { SourceReader } from '../SourceReader'
 import type { UnifiedRecording } from '@/types/unified-recording'
@@ -65,7 +65,12 @@ const nonDiarizedTranscript = { full_text: 'Hi there', turns: null } as any
 // here, `.turns` would be undefined and the async setTurns([]) would blank the
 // prop-seeded turns and race the gating assertions. So the mock must mirror the prop.
 const getByRecordingId = vi.fn()
-const exportFn = vi.fn()
+
+// The export flow now uses fetch directly (browser-download path, 0e Task 10).
+// Stub browser APIs needed by the anchor-download code path.
+const anchorClickMock = vi.fn()
+const createObjectURLMock = vi.fn().mockReturnValue('blob:fake')
+const revokeObjectURLMock = vi.fn()
 
 /** Render with getByRecordingId mirroring the given raw transcript prop. */
 function renderWith(transcript: any) {
@@ -77,13 +82,33 @@ beforeEach(() => {
   selectCalls.length = 0
   toastError.mockReset()
   toastSuccess.mockReset()
-  exportFn.mockReset()
+  anchorClickMock.mockReset()
+  createObjectURLMock.mockReturnValue('blob:fake')
+  revokeObjectURLMock.mockReset()
   getByRecordingId.mockReset()
+
+  // Stub URL.createObjectURL / revokeObjectURL (jsdom doesn't implement these).
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: createObjectURLMock,
+    revokeObjectURL: revokeObjectURLMock,
+  })
+
+  // Stub document.createElement so anchor.click() is captured.
+  const origCreate = document.createElement.bind(document)
+  vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
+    if (tag === 'a') {
+      const a = origCreate('a')
+      a.click = anchorClickMock
+      return a
+    }
+    return origCreate(tag)
+  }) as typeof document.createElement)
+
   Object.defineProperty(window, 'electronAPI', {
     value: {
       transcripts: {
         getByRecordingId: (...a: any[]) => getByRecordingId(...a),
-        export: exportFn
       },
       speakers: {
         getForRecording: vi.fn().mockResolvedValue({ success: true, data: {} }),
@@ -97,6 +122,11 @@ beforeEach(() => {
     writable: true,
     configurable: true,
   })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 /**
@@ -127,29 +157,58 @@ describe('SourceReader export dropdown', () => {
     expect(screen.getByTestId('item-json').getAttribute('data-disabled')).toBe('false')
   })
 
-  it('calls transcripts.export with the recordingId and chosen format, toasting the saved path', async () => {
-    exportFn.mockResolvedValue({ success: true, data: '/out/My Meeting.json' })
+  it('POSTs to /api/recordings/:id/transcript/export and triggers browser download, toasting on success', async () => {
+    // The export now uses fetch directly (browser-download, not api.transcripts.export).
+    const fakeBlob = new Blob(['{}'], { type: 'application/json' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: () => Promise.resolve(fakeBlob),
+      json: () => Promise.resolve({}),
+    }))
     renderWith(diarizedTranscript)
     await waitFor(() => expect(screen.getByTestId('item-json')).toBeTruthy())
     const sel = findExportSelect()
     await sel.onValueChange!('json')
-    expect(exportFn).toHaveBeenCalledWith('rec1', 'json')
+    // fetch must be called with the correct endpoint
+    expect(fetch as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.stringContaining('/api/recordings/rec1/transcript/export?format=json'),
+      expect.objectContaining({ method: 'POST', credentials: 'include' })
+    )
+    // anchor.click() must be invoked to trigger the download
+    expect(anchorClickMock).toHaveBeenCalled()
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
   })
 
-  it('is a no-op on cancellation (data === null): no toast', async () => {
-    exportFn.mockResolvedValue({ success: true, data: null })
+  it('is a no-op on cancellation: fetch succeeds but blob is empty — anchor still clicks, no error toast', async () => {
+    // "Cancelled" in the new path = user dismissed OS save dialog; the server returns
+    // an empty (0-byte) blob; SourceReader still calls anchor.click() and shows no toast.
+    const emptyBlob = new Blob([], { type: 'application/octet-stream' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: () => Promise.resolve(emptyBlob),
+      json: () => Promise.resolve({}),
+    }))
     renderWith(diarizedTranscript)
     await waitFor(() => expect(screen.getByTestId('item-json')).toBeTruthy())
     const sel = findExportSelect()
     await sel.onValueChange!('json')
-    expect(exportFn).toHaveBeenCalledWith('rec1', 'json')
-    expect(toastSuccess).not.toHaveBeenCalled()
+    expect(fetch as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.stringContaining('/api/recordings/rec1/transcript/export?format=json'),
+      expect.objectContaining({ method: 'POST' })
+    )
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled())
     expect(toastError).not.toHaveBeenCalled()
   })
 
-  it('shows an error toast when the export fails', async () => {
-    exportFn.mockResolvedValue({ success: false, error: { code: 'INTERNAL_ERROR', message: 'disk full' } })
+  it('shows an error toast when the export fetch fails (non-2xx)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      blob: () => Promise.resolve(new Blob()),
+      json: () => Promise.resolve({ error: 'disk full' }),
+    }))
     renderWith(diarizedTranscript)
     await waitFor(() => expect(screen.getByTestId('item-json')).toBeTruthy())
     const sel = findExportSelect()

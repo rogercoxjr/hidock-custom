@@ -17,7 +17,7 @@ import type { Turn } from '../types/turns'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { UnifiedRecording, hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 import { Transcript, Meeting, parseJsonArray } from '@/types'
-import { Calendar, Download, Trash2, Wand2, RefreshCw, Play, Square, Pencil, Check, Edit2, Link, X, ExternalLink, FolderOpen, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { Calendar, Download, Trash2, Wand2, RefreshCw, Play, Square, Pencil, Check, Edit2, Link, X, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -671,30 +671,7 @@ export function SourceReader({
           )
         )}
 
-        {hasLocalPath(recording) && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.electronAPI?.storage.openFile(recording.localPath)}
-              className="gap-2"
-              title="Open in default application"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.electronAPI?.storage.revealInFolder(recording.localPath)}
-              className="gap-2"
-              title="Show in file explorer"
-            >
-              <FolderOpen className="h-4 w-4" />
-              Reveal
-            </Button>
-          </>
-        )}
+        {/* storage.openFile / revealInFolder — DROPPED in hosted mode (no server filesystem access) */}
 
         {!meeting && !isDeviceOnly(recording) && (
           <Button
@@ -772,16 +749,26 @@ export function SourceReader({
         {transcript?.full_text && recordingId && (
           <Select
             onValueChange={async (format) => {
-              const api = window.electronAPI
-              if (!api?.transcripts?.export) return
               try {
-                const res = await api.transcripts.export(recordingId, format as 'csv' | 'srt' | 'json')
-                if (!res.success) {
-                  toast.error('Export failed', res.error.message)
-                } else if (res.data) {
-                  toast.success('Transcript exported', `Saved to ${res.data}`)
+                const response = await fetch(
+                  `/api/recordings/${recordingId}/transcript/export?format=${encodeURIComponent(format)}`,
+                  { method: 'POST', credentials: 'include' }
+                )
+                if (!response.ok) {
+                  const body = await response.json().catch(() => ({}))
+                  toast.error('Export failed', body.error || `HTTP ${response.status}`)
+                  return
                 }
-                // res.data === null → user cancelled the save dialog; no-op.
+                const blob = await response.blob()
+                const ext = format === 'json' ? 'json' : format === 'csv' ? 'csv' : 'srt'
+                const filename = `transcript-${recordingId}.${ext}`
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = filename
+                a.click()
+                URL.revokeObjectURL(url)
+                toast.success('Transcript exported', `Downloaded as ${filename}`)
               } catch (err) {
                 toast.error('Export failed', err instanceof Error ? err.message : String(err))
               }

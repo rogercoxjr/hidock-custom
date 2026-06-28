@@ -177,9 +177,8 @@ vi.mock('@/features/library/hooks', () => ({
 global.window.electronAPI = {
   transcripts: { getByRecordingIds: vi.fn().mockResolvedValue({}) },
   meetings: { getByIds: vi.fn().mockResolvedValue({}) },
-  storage: { openFolder: vi.fn() },
+  storage: { getInfo: vi.fn() },
   recordings: {
-    addExternal: vi.fn(),
     delete: vi.fn(),
     updateStatus: vi.fn(),
     retryAllFailed: vi.fn().mockResolvedValue({ success: true, count: 0 })
@@ -452,7 +451,7 @@ describe('Library', () => {
       await waitFor(() => {
         // Header action buttons should be present
         expect(screen.getByText(/add capture/i)).toBeInTheDocument()
-        expect(screen.getByText(/open folder/i)).toBeInTheDocument()
+        // 'Open Folder' is DROPPED in hosted mode (storage.openFolder removed)
         expect(screen.getByText(/refresh/i)).toBeInTheDocument()
       })
     })

@@ -10,6 +10,12 @@
 
 ---
 
+## ⚠️ Pre-execution corrections (controller, 2026-06-27) — these OVERRIDE the text below
+1. **Branch:** the REST API + media are MERGED to `main` (@2e79284b). Execute on `feat/hosted-hub-0e-renderer` (off main) — NOT `feat/hosted-knowledge-hub`.
+2. **No custom same-origin write header.** Verified: `requireSameOrigin` (`auth.ts:37`) checks the **`Origin` header vs `PUBLIC_URL`** and allows a missing Origin. Browsers send `Origin` automatically on same-origin writes, so it passes with no action. `http.ts` needs **`credentials: 'include'` only** — do NOT invent/set an `X-Requested-With` header; the http test asserts `credentials:'include'` on writes, not a custom header. (Supersedes Task 1 Step 1/3 + Risk 5.)
+3. **0d media URL is recording-ID-based.** Verified: the route is **`GET /api/recordings/:id/media`** (`media.ts:46`; resolves `file_path` server-side). `getMediaUrl` must return `${origin}/api/recordings/${recordingId}/media` keyed on the **recording id** — NOT a `?p=<filePath>` form. Adapt call sites to pass the recording id (available on the recording row alongside the path). (Supersedes Task 10 Step 1 + the media bullet.)
+4. **Device groups (Risk 7) = no-op stubs** satisfying `ElectronAPI`, rejecting/returning safe defaults with a `'device path is Phase 1'` marker; `on*` return a no-op unsubscribe. Phase-1 WebUSB lands later. (Resolves Risk 7 / Task 9 → option a.)
+
 ## Global Constraints & Decisions
 
 - **`window.electronAPI` is replaced, not patched.** A new `installRestApi()` (in `src/lib/electron-api/index.ts`) builds the full `ElectronAPI` object and assigns it to `window.electronAPI` (and exports it for direct import). The `ElectronAPI` interface itself (the contract the renderer's 41 files compile against) is **lifted unchanged** from `electron/preload/index.ts` into `src/lib/electron-api/types.ts` so the renderer's existing type-checking is the first guardrail. **Every method signature stays byte-identical**; only the implementation body changes from `callIPC(channel, …)` to `http.<verb>(url, body)`.
