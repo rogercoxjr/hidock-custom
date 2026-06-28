@@ -1,1 +1,6 @@
 apps/electron/out/
+
+# Docker compose bind-mount data dir (operator runtime state — never commit)
+data/
+# Smoke-test data roots
+.hidock-data-smoke/

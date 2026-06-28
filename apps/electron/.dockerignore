@@ -1,0 +1,35 @@
+# Build outputs (regenerated inside the image)
+out
+dist
+release
+
+# Dependencies (reinstalled per-stage with the right ABI)
+node_modules
+**/node_modules
+
+# Local runtime state — must NEVER enter the image (lives on the /data volume)
+.hidock-data
+.hidock-data-smoke
+
+# Large model binaries — fetched into the image in a controlled step, not via COPY .
+resources/models/*.onnx
+
+# Dev / VCS / editor noise
+.git
+.vscode
+.idea
+*.log
+coverage
+.eslintcache
+
+# Tests are not needed in the image
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+
+# Electron desktop packaging config (irrelevant to the server image)
+electron-builder.yml
+build
+
+# Local env (never bake secrets into the image)
+.env
