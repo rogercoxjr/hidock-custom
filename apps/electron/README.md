@@ -89,6 +89,27 @@ npm run build:mac    # macOS
 npm run build:linux  # Linux
 ```
 
+## Self-hosting (Docker, single container)
+
+The hub can run headless as one container serving the SPA + REST/WS API on one
+port, behind a reverse proxy (device sync stays in the browser via WebUSB). See:
+
+- `Dockerfile` — multi-stage build (SPA + server bundle + runtime-ABI native deps)
+- `docker-compose.yml` + `.env.example` — local/operator run contract
+- `docs/DEPLOY-UNRAID.md` — Unraid appdata mapping + container template
+- `docs/DEPLOY-NPM.md` — nginxproxymanager TLS, WebSocket passthrough, OAuth
+
+```bash
+npm run build         # SPA  -> out/renderer
+npm run build:server  # API  -> out/server (esbuild, boot-safety audited)
+```
+
+Required env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `PUBLIC_URL`,
+`SESSION_SECRET` (see `.env.example`). State persists to the `/data` volume.
+
+> The real `docker build`, Unraid deploy, and live Google OAuth are operator
+> steps (need a Docker host, the Unraid box, a domain, and a Google project).
+
 ## Architecture
 
 ### Current Architecture (Recording-Focused)
