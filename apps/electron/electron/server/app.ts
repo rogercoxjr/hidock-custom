@@ -76,5 +76,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerAssistant } = await import('./routes/assistant')
   await registerAssistant(app)
 
+  const { registerActionables } = await import('./routes/actionables')
+  await registerActionables(app)
+
   return app
 }
