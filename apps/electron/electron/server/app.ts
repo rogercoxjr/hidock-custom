@@ -118,5 +118,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerMigration } = await import('./routes/migration')
   await registerMigration(app)
 
+  const { registerStoragePolicy } = await import('./routes/storage-policy')
+  await registerStoragePolicy(app)
+
   return app
 }
