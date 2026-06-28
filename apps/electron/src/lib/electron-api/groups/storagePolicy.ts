@@ -34,9 +34,16 @@ export function makeStoragePolicyGroup({ http }: StoragePolicyDeps) {
     async getCleanupSuggestions(
       minAgeOverride?: Partial<Record<'hot' | 'warm' | 'cold' | 'archive', number>>,
     ): Promise<any> {
-      const r = await http.post('/api/storage-policy/cleanup-suggestions', {
-        minAgeOverride,
-      })
+      // CONTRACTS.md specifies GET /api/storage-policy/cleanup-suggestions.
+      // Pass minAgeOverride as JSON-encoded query param so GET semantics are preserved.
+      const params = new URLSearchParams()
+      if (minAgeOverride !== undefined) {
+        params.set('minAgeOverride', JSON.stringify(minAgeOverride))
+      }
+      const qs = params.toString()
+      const r = await http.get(
+        `/api/storage-policy/cleanup-suggestions${qs ? `?${qs}` : ''}`,
+      )
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }

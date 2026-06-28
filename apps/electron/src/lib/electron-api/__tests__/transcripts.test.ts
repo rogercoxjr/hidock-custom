@@ -103,11 +103,13 @@ describe('makeTranscriptsGroup', () => {
     expect((result as any).data).toEqual({ recordingId: 'r1' })
   })
 
-  it('updateTurns 4xx → {success:false,error}', async () => {
+  it('updateTurns 4xx → {success:false,error:{message}} (error is object per CONTRACTS §error-detail)', async () => {
     http.patch.mockResolvedValueOnce(err4xx(400, 'validation error'))
     const result = await grp.updateTurns({ recordingId: 'r1', turns: [] })
     expect(result.success).toBe(false)
-    expect(typeof (result as any).error).toBe('string')
+    // Must match export() pattern — error is an object with .message, not a bare string
+    expect(typeof (result as any).error?.message).toBe('string')
+    expect((result as any).error.message).toBe('validation error')
   })
 
   // -------------------------------------------------------------------------

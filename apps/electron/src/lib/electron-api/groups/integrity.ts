@@ -114,12 +114,14 @@ export function makeIntegrityGroup({ http }: IntegrityDeps) {
           },
         ]
       }
-      return r.data as Array<{
-        issueId: string
-        success: boolean
-        action: string
-        error?: string
-      }>
+      // Guard against non-array server responses; wrap single objects so the
+      // caller (setRepairResults) always receives an array.
+      const raw = r.data
+      const results: Array<{ issueId: string; success: boolean; action: string; error?: string }> =
+        Array.isArray(raw)
+          ? (raw as Array<{ issueId: string; success: boolean; action: string; error?: string }>)
+          : [raw as { issueId: string; success: boolean; action: string; error?: string }]
+      return results
     },
 
     // -------------------------------------------------------------------------

@@ -4,9 +4,9 @@
  * Per CONTRACTS.md (Speakers table) all methods are RESULT.
  *
  * ERROR-OBJECT SYNTHESIS (CONTRACTS §error-detail):
- *   `speakers.reassignTurns` call site reads `res?.error?.message` (object), so
- *   for that method we synthesise `error: { message: r.error, details }`.
- *   All other speaker methods read `res.success` only; plain string error suffices.
+ *   All RESULT methods synthesise `error: { message, details? }` via errObj()
+ *   so any call site can safely write `res?.error?.message` without guarding
+ *   against a bare string.
  */
 
 import type { Http } from '../http'
@@ -42,7 +42,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
         body,
       )
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return {
         success: true,
@@ -62,7 +62,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
       const { recordingId, ...body } = request
       const r = await http.post(`/api/recordings/${recordingId}/speakers/merge`, body)
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return {
         success: true,
@@ -80,7 +80,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
         `/api/recordings/${recordingId}/speakers/${encodeURIComponent(fileLabel)}`,
       )
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return { success: true, data: undefined }
     },
@@ -94,7 +94,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
     ): Promise<Result<Record<string, { contactId: string; contactName: string }>>> {
       const r = await http.get(`/api/recordings/${recordingId}/speakers`)
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return {
         success: true,
@@ -109,7 +109,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
     async getSuggestions(recordingId: string): Promise<Result<SuggestionView[]>> {
       const r = await http.get(`/api/recordings/${recordingId}/speaker-suggestions`)
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return { success: true, data: r.data as SuggestionView[] }
     },
@@ -149,7 +149,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
     async dismissSuggestion(id: string): Promise<Result<{ id: string }>> {
       const r = await http.post(`/api/speaker-suggestions/${id}/dismiss`)
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return { success: true, data: r.data as { id: string } }
     },
@@ -161,7 +161,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
     async acceptSuggestion(id: string): Promise<Result<{ id: string }>> {
       const r = await http.post(`/api/speaker-suggestions/${id}/accept`)
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return { success: true, data: r.data as { id: string } }
     },
@@ -181,7 +181,7 @@ export function makeSpeakersGroup({ http }: SpeakersDeps) {
         `/api/recordings/${recordingId}/speakers/${encodeURIComponent(fileLabel)}/set-self`,
       )
       if (!r.ok) {
-        return { success: false, error: r.error as any }
+        return { success: false, error: errObj(r) as any }
       }
       return {
         success: true,

@@ -30,12 +30,14 @@ function makeHttp() {
     patch: vi.fn(),
     put: vi.fn(),
     del: vi.fn(),
+    postForm: vi.fn(),
   } as unknown as Http & {
     get: ReturnType<typeof vi.fn>
     post: ReturnType<typeof vi.fn>
     patch: ReturnType<typeof vi.fn>
     put: ReturnType<typeof vi.fn>
     del: ReturnType<typeof vi.fn>
+    postForm: ReturnType<typeof vi.fn>
   }
 }
 
@@ -106,9 +108,10 @@ describe('makeStorageGroup', () => {
     expect(result).toBe(false)
   })
 
-  // DROPPED: saveRecording → throws
-  it('saveRecording → throws (dropped)', async () => {
-    await expect(grp.saveRecording('test.wav', [1, 2, 3])).rejects.toThrow()
+  // DROPPED: saveRecording → '' (CONTRACTS: DROPPED resolves safe default, never throws)
+  it('saveRecording → empty string (dropped)', async () => {
+    const result = await grp.saveRecording('test.wav', [1, 2, 3])
+    expect(typeof result).toBe('string')
   })
 })
 
@@ -328,10 +331,11 @@ describe('makeSpeakersGroup', () => {
     expect(result.success).toBe(true)
   })
 
-  it('assign 4xx → {success:false}', async () => {
+  it('assign 4xx → {success:false, error:{message}}', async () => {
     http.put.mockResolvedValueOnce(err4xx(400, 'Bad'))
     const result = await grp.assign({ recordingId: 'r1', fileLabel: 'SPEAKER_00', contactId: 'c1' })
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 
   // RESULT: merge
@@ -347,7 +351,7 @@ describe('makeSpeakersGroup', () => {
     expect(result.success).toBe(true)
   })
 
-  it('merge 4xx → {success:false}', async () => {
+  it('merge 4xx → {success:false, error:{message}}', async () => {
     http.post.mockResolvedValueOnce(err4xx(400, 'Bad'))
     const result = await grp.merge({
       recordingId: 'r1',
@@ -355,6 +359,7 @@ describe('makeSpeakersGroup', () => {
       toLabel: 'SPEAKER_01',
     })
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 
   // RESULT: unassign
@@ -364,10 +369,11 @@ describe('makeSpeakersGroup', () => {
     expect(result.success).toBe(true)
   })
 
-  it('unassign 4xx → {success:false}', async () => {
+  it('unassign 4xx → {success:false, error:{message}}', async () => {
     http.del.mockResolvedValueOnce(err4xx(404, 'Not Found'))
     const result = await grp.unassign({ recordingId: 'r1', fileLabel: 'SPEAKER_00' })
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 
   // RESULT: getForRecording
@@ -381,10 +387,11 @@ describe('makeSpeakersGroup', () => {
     expect((result as any).data['SPEAKER_00'].contactId).toBe('c1')
   })
 
-  it('getForRecording 4xx → {success:false}', async () => {
+  it('getForRecording 4xx → {success:false, error:{message}}', async () => {
     http.get.mockResolvedValueOnce(err4xx(404, 'Not Found'))
     const result = await grp.getForRecording('x')
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 
   // RESULT: getSuggestions
@@ -405,10 +412,11 @@ describe('makeSpeakersGroup', () => {
     expect((result as any).data[0].id).toBe('s1')
   })
 
-  it('getSuggestions 4xx → {success:false}', async () => {
+  it('getSuggestions 4xx → {success:false, error:{message}}', async () => {
     http.get.mockResolvedValueOnce(err4xx(500, 'Error'))
     const result = await grp.getSuggestions('r1')
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 
   // RESULT: reassignTurns — reads res?.error?.message (error obj synthesis)
@@ -454,10 +462,11 @@ describe('makeSpeakersGroup', () => {
     expect((result as any).data.id).toBe('s1')
   })
 
-  it('dismissSuggestion 4xx → {success:false}', async () => {
+  it('dismissSuggestion 4xx → {success:false, error:{message}}', async () => {
     http.post.mockResolvedValueOnce(err4xx(404, 'Not Found'))
     const result = await grp.dismissSuggestion('x')
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 
   // RESULT: acceptSuggestion
@@ -468,10 +477,11 @@ describe('makeSpeakersGroup', () => {
     expect((result as any).data.id).toBe('s1')
   })
 
-  it('acceptSuggestion 4xx → {success:false}', async () => {
+  it('acceptSuggestion 4xx → {success:false, error:{message}}', async () => {
     http.post.mockResolvedValueOnce(err4xx(400, 'Bad'))
     const result = await grp.acceptSuggestion('x')
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 
   // RESULT: setSelf
@@ -484,10 +494,11 @@ describe('makeSpeakersGroup', () => {
     expect((result as any).data.selfAssigned).toBe(true)
   })
 
-  it('setSelf 4xx → {success:false}', async () => {
+  it('setSelf 4xx → {success:false, error:{message}}', async () => {
     http.post.mockResolvedValueOnce(err4xx(400, 'Bad'))
     const result = await grp.setSelf({ recordingId: 'r1', fileLabel: 'SPEAKER_00' })
     expect(result.success).toBe(false)
+    expect(typeof (result as any).error?.message).toBe('string')
   })
 })
 
@@ -761,9 +772,11 @@ describe('makeDeviceCacheGroup', () => {
     expect(result).toBeUndefined()
   })
 
-  it('saveAll 4xx → throws', async () => {
+  it('saveAll 4xx → resolves void silently (VOID must not throw)', async () => {
+    // CONTRACTS: VOID methods must never throw; failed PUT logs a warning and returns.
     http.put.mockResolvedValueOnce(err4xx(500, 'Error'))
-    await expect(grp.saveAll([])).rejects.toThrow('Error')
+    const result = await grp.saveAll([])
+    expect(result).toBeUndefined()
   })
 
   // VOID: clear
@@ -773,9 +786,11 @@ describe('makeDeviceCacheGroup', () => {
     expect(result).toBeUndefined()
   })
 
-  it('clear 4xx → throws', async () => {
+  it('clear 4xx → resolves void silently (VOID must not throw)', async () => {
+    // CONTRACTS: VOID methods must never throw; failed DELETE logs a warning and returns.
     http.del.mockResolvedValueOnce(err4xx(500, 'Error'))
-    await expect(grp.clear()).rejects.toThrow('Error')
+    const result = await grp.clear()
+    expect(result).toBeUndefined()
   })
 })
 
@@ -803,14 +818,14 @@ describe('makeStoragePolicyGroup', () => {
     await expect(grp.getByTier('hot')).rejects.toThrow('Error')
   })
 
-  it('getCleanupSuggestions 2xx → bare any', async () => {
-    http.post.mockResolvedValueOnce(ok2xx([{ recordingId: 'r1', tier: 'cold' }]))
+  it('getCleanupSuggestions 2xx → bare any (uses GET per CONTRACTS)', async () => {
+    http.get.mockResolvedValueOnce(ok2xx([{ recordingId: 'r1', tier: 'cold' }]))
     const result = await grp.getCleanupSuggestions()
     expect(Array.isArray(result)).toBe(true)
   })
 
   it('getCleanupSuggestions 4xx → throws', async () => {
-    http.post.mockResolvedValueOnce(err4xx(500, 'Error'))
+    http.get.mockResolvedValueOnce(err4xx(500, 'Error'))
     await expect(grp.getCleanupSuggestions()).rejects.toThrow('Error')
   })
 

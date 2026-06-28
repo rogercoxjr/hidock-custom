@@ -24,12 +24,14 @@ function makeHttp() {
     patch: vi.fn(),
     put: vi.fn(),
     del: vi.fn(),
+    postForm: vi.fn(),
   } as unknown as Http & {
     get: ReturnType<typeof vi.fn>
     post: ReturnType<typeof vi.fn>
     patch: ReturnType<typeof vi.fn>
     put: ReturnType<typeof vi.fn>
     del: ReturnType<typeof vi.fn>
+    postForm: ReturnType<typeof vi.fn>
   }
 }
 
@@ -280,6 +282,25 @@ describe('makeRecordingsGroup', () => {
   })
 
   // -------------------------------------------------------------------------
+  // INLINE: addExternalByPath — uses http.postForm transport
+  // -------------------------------------------------------------------------
+
+  it('addExternalByPath 2xx → {success:true, recording}', async () => {
+    const rec = { id: 'r1', filename: 'test.wav' }
+    ;(http as any).postForm.mockResolvedValueOnce({ ok: true, status: 200, data: { recording: rec } })
+    const result = await grp.addExternalByPath('/some/path/test.wav')
+    expect(result.success).toBe(true)
+    expect(result.recording).toEqual(rec)
+  })
+
+  it('addExternalByPath 4xx → {success:false, error}', async () => {
+    ;(http as any).postForm.mockResolvedValueOnce({ ok: false, status: 422, error: 'Upload failed' })
+    const result = await grp.addExternalByPath('/some/path/test.wav')
+    expect(result.success).toBe(false)
+    expect(typeof result.error).toBe('string')
+  })
+
+  // -------------------------------------------------------------------------
   // STRING|FALSE: transcribe
   // -------------------------------------------------------------------------
 
@@ -307,6 +328,19 @@ describe('makeRecordingsGroup', () => {
 
   it('addToQueue 4xx → false', async () => {
     http.post.mockResolvedValueOnce(err4xx(400, 'error'))
+    const result = await grp.addToQueue('r1')
+    expect(result).toBe(false)
+  })
+
+  it('transcribe 2xx unexpected body shape (no id/queueItemId) → false', async () => {
+    // Server returns a different shape — id extraction fails silently but with a warning
+    http.post.mockResolvedValueOnce(ok2xx({ queueId: 'qi-999' }))
+    const result = await grp.transcribe('r1')
+    expect(result).toBe(false)
+  })
+
+  it('addToQueue 2xx unexpected body shape → false', async () => {
+    http.post.mockResolvedValueOnce(ok2xx('bare-string-body'))
     const result = await grp.addToQueue('r1')
     expect(result).toBe(false)
   })

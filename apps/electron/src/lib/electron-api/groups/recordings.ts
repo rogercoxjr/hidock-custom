@@ -109,7 +109,7 @@ export function makeRecordingsGroup({ http }: RecordingsDeps) {
     },
 
     async getTranscriptionQueue(): Promise<any[]> {
-      const r = await http.get('/api/queue?status=')
+      const r = await http.get('/api/queue')
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
@@ -202,25 +202,9 @@ export function makeRecordingsGroup({ http }: RecordingsDeps) {
       const formData = new FormData()
       formData.append('path', filePath)
 
-      let r: Awaited<ReturnType<Http['post']>>
-      try {
-        // http.post serialises to JSON; for multipart we fall back to raw fetch.
-        const base =
-          (import.meta as Record<string, any>).env?.VITE_API_BASE_URL?.replace(/\/$/, '') ??
-          (typeof window !== 'undefined' ? window.location.origin : '')
-        const resp = await fetch(`${base}/api/recordings/upload`, {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
-        })
-        const data = await resp.json().catch(() => ({}))
-        r = { ok: resp.ok, status: resp.status, data, error: resp.ok ? undefined : (data?.error ?? `HTTP ${resp.status}`) }
-      } catch (err: unknown) {
-        return {
-          success: false,
-          error: err instanceof Error ? err.message : String(err),
-        }
-      }
+      // Use http.postForm so the 401 onUnauthorized hook fires and same-origin
+      // enforcement applies — raw fetch is no longer used here.
+      const r = await http.postForm('/api/recordings/upload', formData)
 
       if (!r.ok) {
         return { success: false, error: r.error }
@@ -296,7 +280,11 @@ export function makeRecordingsGroup({ http }: RecordingsDeps) {
         return false
       }
       const id = (r.data as any)?.id ?? (r.data as any)?.queueItemId
-      return typeof id === 'string' ? id : false
+      if (typeof id !== 'string') {
+        console.warn('[recordings.transcribe] 2xx response missing id/queueItemId — actual body:', r.data)
+        return false
+      }
+      return id
     },
 
     async addToQueue(recordingId: string): Promise<string | false> {
@@ -305,7 +293,11 @@ export function makeRecordingsGroup({ http }: RecordingsDeps) {
         return false
       }
       const id = (r.data as any)?.id ?? (r.data as any)?.queueItemId
-      return typeof id === 'string' ? id : false
+      if (typeof id !== 'string') {
+        console.warn('[recordings.addToQueue] 2xx response missing id/queueItemId — actual body:', r.data)
+        return false
+      }
+      return id
     },
 
     // -------------------------------------------------------------------------

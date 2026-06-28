@@ -58,7 +58,9 @@ export function makeStorageGroup({ http }: StorageDeps) {
       _data: number[],
       _recordingDateIso?: string,
     ): Promise<string> {
-      throw new Error('saveRecording is not available in browser mode')
+      // DROPPED — no server-side desktop; CONTRACTS says DROPPED methods resolve
+      // safe defaults and never throw. Return sentinel empty string.
+      return ''
     },
   }
 }

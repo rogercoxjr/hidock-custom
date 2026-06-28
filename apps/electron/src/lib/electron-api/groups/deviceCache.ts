@@ -35,7 +35,7 @@ export function makeDeviceCacheGroup({ http }: DeviceCacheDeps) {
     async saveAll(files: any[]): Promise<void> {
       const r = await http.put('/api/device-cache', files)
       if (!r.ok) {
-        throw new Error(r.error ?? `HTTP ${r.status}`)
+        console.warn('[deviceCache.saveAll] PUT /api/device-cache failed:', r.error ?? `HTTP ${r.status}`)
       }
     },
 
@@ -46,7 +46,7 @@ export function makeDeviceCacheGroup({ http }: DeviceCacheDeps) {
     async clear(): Promise<void> {
       const r = await http.del('/api/device-cache')
       if (!r.ok) {
-        throw new Error(r.error ?? `HTTP ${r.status}`)
+        console.warn('[deviceCache.clear] DELETE /api/device-cache failed:', r.error ?? `HTTP ${r.status}`)
       }
     },
   }

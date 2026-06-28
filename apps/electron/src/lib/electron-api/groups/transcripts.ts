@@ -60,9 +60,10 @@ export function makeTranscriptsGroup({ http }: TranscriptsDeps) {
         { turns: request.turns },
       )
       if (!r.ok) {
+        const details = (r.data as any)?.details
         return {
           success: false,
-          error: r.error ?? `HTTP ${r.status}`,
+          error: { message: r.error ?? `HTTP ${r.status}`, ...(details ? { details } : {}) } as any,
         } as unknown as Result<{ recordingId: string }>
       }
       return { success: true, data: r.data as { recordingId: string } }

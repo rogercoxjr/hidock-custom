@@ -113,6 +113,56 @@ export function del(path: string, body?: unknown): Promise<HttpResult> {
   return request('DELETE', path, body)
 }
 
+/**
+ * postForm — multipart/form-data POST that routes through the same transport
+ * (credentials, 401 hook, normalised HttpResult) as JSON methods.
+ *
+ * Does NOT set Content-Type — the browser auto-sets it with the correct
+ * multipart boundary when given a FormData body.
+ */
+export async function postForm(path: string, body: FormData): Promise<HttpResult> {
+  const url = `${baseUrl()}${path}`
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body,
+    })
+    const { status } = response
+
+    if (status === 401) {
+      _onUnauthorized?.()
+    }
+
+    let data: unknown
+    let errorMessage: string | undefined
+
+    try {
+      const parsed = await response.json()
+      if (response.ok) {
+        data = parsed
+      } else {
+        errorMessage = typeof parsed?.error === 'string' ? parsed.error : JSON.stringify(parsed)
+        data = parsed
+      }
+    } catch {
+      if (!response.ok) {
+        errorMessage = `HTTP ${status}`
+      }
+    }
+
+    if (response.ok) {
+      return { ok: true, status, data }
+    }
+    const errResult: HttpResult = { ok: false, status, error: errorMessage }
+    if (data !== undefined) errResult.data = data
+    return errResult
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, status: 0, error: message }
+  }
+}
+
 /** Grouped export consumed by group factories. */
-export const http = { get, post, patch, put, del } as const
+export const http = { get, post, patch, put, del, postForm } as const
 export type Http = typeof http

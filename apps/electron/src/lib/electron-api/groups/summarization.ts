@@ -21,46 +21,40 @@ export interface SummarizationDeps {
 export function makeSummarizationGroup({ http }: SummarizationDeps) {
   return {
     // -------------------------------------------------------------------------
-    // INLINE: {success, models?, error?}
+    // INLINE: {success, models?, error?, details?}
     // -------------------------------------------------------------------------
 
     async listModels(
       apiKey?: string,
-    ): Promise<{ success: boolean; models?: string[]; error?: string }> {
+    ): Promise<{ success: boolean; models?: string[]; error?: string; details?: unknown }> {
       const params = new URLSearchParams()
       if (apiKey !== undefined) params.set('apiKey', apiKey)
       const qs = params.toString()
       const r = await http.get(`/api/summarization/models${qs ? `?${qs}` : ''}`)
       if (!r.ok) {
-        // Surface Zod details in the error string when present.
+        // Return Zod details as structured data so callers can do field-level display.
         const details = (r.data as any)?.details
-        const errorMsg = details
-          ? `${r.error ?? 'Unknown error'}: ${JSON.stringify(details)}`
-          : (r.error ?? 'Unknown error')
-        return { success: false, error: errorMsg }
+        return { success: false, error: r.error ?? 'Unknown error', ...(details !== undefined ? { details } : {}) }
       }
       const body = r.data as any
       return { success: true, models: body?.models ?? body }
     },
 
     // -------------------------------------------------------------------------
-    // INLINE: {success, error?}
+    // INLINE: {success, error?, details?}
     // -------------------------------------------------------------------------
 
     async testConnection(
       apiKey?: string,
       model?: string,
-    ): Promise<{ success: boolean; error?: string }> {
+    ): Promise<{ success: boolean; error?: string; details?: unknown }> {
       const body: Record<string, unknown> = {}
       if (apiKey !== undefined) body.apiKey = apiKey
       if (model !== undefined) body.model = model
       const r = await http.post('/api/summarization/test-connection', body)
       if (!r.ok) {
         const details = (r.data as any)?.details
-        const errorMsg = details
-          ? `${r.error ?? 'Unknown error'}: ${JSON.stringify(details)}`
-          : (r.error ?? 'Unknown error')
-        return { success: false, error: errorMsg }
+        return { success: false, error: r.error ?? 'Unknown error', ...(details !== undefined ? { details } : {}) }
       }
       return { success: true }
     },
