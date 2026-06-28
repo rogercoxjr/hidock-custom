@@ -93,8 +93,8 @@ export async function registerMeetings(app: FastifyInstance): Promise<void> {
     if (body.subject !== undefined) updates.subject = body.subject
     if (body.start_time !== undefined) updates.start_time = body.start_time
     if (body.end_time !== undefined) updates.end_time = body.end_time
-    if (body.location !== undefined) updates.location = body.location ?? undefined
-    if (body.description !== undefined) updates.description = body.description ?? undefined
+    if (body.location !== undefined) updates.location = body.location
+    if (body.description !== undefined) updates.description = body.description
 
     updateMeeting(id, updates)
     return getMeetingById(id)

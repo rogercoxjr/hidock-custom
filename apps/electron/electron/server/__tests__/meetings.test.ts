@@ -305,6 +305,22 @@ describe('meetings REST endpoints', () => {
     await app.close()
   })
 
+  it('PATCH /api/meetings/:id with null location clears the field', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+
+    // meet-1 has location 'Room A' — clear it by sending null
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/meetings/meet-1',
+      payload: { location: null },
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().location).toBeNull()
+    await app.close()
+  })
+
   it('PATCH /api/meetings/:id without same-origin returns 403', async () => {
     const app = await makeApp()
     const cookie = await login(app)

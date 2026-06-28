@@ -67,6 +67,19 @@ describe('knowledge endpoints', () => {
     delete process.env.HIDOCK_DATA_ROOT
   })
 
+  // Seed a soft-deleted capture that must never appear in any read path
+  // (shared across all soft-delete tests below)
+  const DELETED_ID = 'kc-deleted'
+
+  beforeEach(async () => {
+    const { run } = await import('../../main/services/database')
+    run(
+      `INSERT INTO knowledge_captures (id, title, summary, category, status, quality_rating, storage_tier, captured_at, deleted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [DELETED_ID, 'Deleted', 'Should not appear', 'meeting', 'ready', 'valuable', 'hot', '2024-01-04T10:00:00Z', '2024-01-05T00:00:00Z']
+    )
+  })
+
   // --- GET /api/knowledge (list) ---
 
   it('GET /api/knowledge without auth returns 401', async () => {
@@ -213,6 +226,53 @@ describe('knowledge endpoints', () => {
       payload: { ids: [] }
     })
     expect(res.statusCode).toBe(400)
+    await app.close()
+  })
+
+  // --- Soft-delete filtering ---
+
+  it('GET /api/knowledge list excludes soft-deleted captures', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/knowledge',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(200)
+    const json = res.json()
+    // total should be 3 (not 4) and deleted record must not appear
+    expect(json.total).toBe(3)
+    expect(json.items.every((i: { id: string }) => i.id !== DELETED_ID)).toBe(true)
+    await app.close()
+  })
+
+  it('GET /api/knowledge/:id returns 404 for soft-deleted capture', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/knowledge/${DELETED_ID}`,
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(404)
+    await app.close()
+  })
+
+  it('POST /api/knowledge/by-ids excludes soft-deleted captures', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/knowledge/by-ids',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json' },
+      payload: { ids: ['kc-1', DELETED_ID] }
+    })
+    expect(res.statusCode).toBe(200)
+    const json = res.json()
+    expect(json).toHaveLength(1)
+    expect(json[0].id).toBe('kc-1')
     await app.close()
   })
 

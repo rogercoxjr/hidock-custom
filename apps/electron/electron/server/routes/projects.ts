@@ -128,6 +128,10 @@ export async function registerProjects(app: FastifyInstance): Promise<void> {
     { preHandler: [app.requireAuth, app.requireSameOrigin] },
     async (req) => {
       const { meetingId, projectId } = req.params as { meetingId: string; projectId: string }
+      const meeting = getMeetingById(meetingId)
+      if (!meeting) throw new NotFoundError('meeting not found')
+      const project = getProjectById(projectId)
+      if (!project) throw new NotFoundError('project not found')
       untagMeetingFromProject(meetingId, projectId)
       return { ok: true }
     }

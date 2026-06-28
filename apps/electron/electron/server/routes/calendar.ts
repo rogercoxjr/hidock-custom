@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getConfig, updateConfig } from '../../main/services/config'
 import { syncCalendar, getLastSyncTime } from '../../main/services/calendar-sync'
 import { clearAllMeetings } from '../../main/services/database'
-import { BadRequestError } from './_errors'
+import { BadRequestError, UnprocessableEntityError } from './_errors'
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
   // PATCH /api/calendar/settings — update icsUrl, syncEnabled, and/or syncIntervalMinutes
   app.patch(
     '/api/calendar/settings',
-    { preHandler: [app.requireAuth, app.requireSameOrigin] },
+    { preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin] },
     async (req) => {
       const body = patchSettingsBody.parse(req.body)
       const updates: Partial<ReturnType<typeof getConfig>['calendar']> = {}
@@ -53,7 +53,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
   // POST /api/calendar/sync[?clear=1]
   // ?clear=1 wipes all meetings first then syncs (equivalent to calendar:clear-and-sync).
   // Without ?clear=1 it does an incremental sync (equivalent to calendar:sync).
-  app.post('/api/calendar/sync', { preHandler: [app.requireAuth, app.requireSameOrigin] }, async (req) => {
+  app.post('/api/calendar/sync', { preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin] }, async (req) => {
     const q = syncQ.parse(req.query)
     const config = getConfig()
 
@@ -61,11 +61,12 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       throw new BadRequestError('No calendar URL configured')
     }
 
-    if (q.clear === 1) {
-      clearAllMeetings()
+    let result: Awaited<ReturnType<typeof syncCalendar>>
+    try {
+      result = await syncCalendar(config.calendar.icsUrl)
+    } catch (err) {
+      throw new UnprocessableEntityError(err instanceof Error ? err.message : 'sync failed')
     }
-
-    const result = await syncCalendar(config.calendar.icsUrl)
 
     if (!result || typeof result.success !== 'boolean') {
       throw new BadRequestError('Sync returned an invalid result')
@@ -75,7 +76,13 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       // Surface the error to the caller so the renderer can display it.
       // A failed sync is a 422 (the request was well-formed but the remote rejected it);
       // we return the structured result rather than converting it into a generic 400.
-      return { ...result }
+      throw new UnprocessableEntityError(result.error ?? 'sync failed')
+    }
+
+    // Only wipe meetings after a confirmed successful sync so the DB is never
+    // left empty on a partial failure.
+    if (q.clear === 1) {
+      clearAllMeetings()
     }
 
     return result

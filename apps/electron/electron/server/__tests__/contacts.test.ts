@@ -348,6 +348,19 @@ describe('contacts REST endpoints', () => {
     await app.close()
   })
 
+  it('GET /api/meetings/:id/contacts returns 404 for unknown meeting', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/meetings/no-such-meeting/contacts',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(404)
+    await app.close()
+  })
+
   // ─── Self ─────────────────────────────────────────────────────────────────────
 
   it('GET /api/contacts/self returns null when no self set', async () => {

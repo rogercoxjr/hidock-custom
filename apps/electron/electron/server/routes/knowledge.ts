@@ -57,7 +57,7 @@ export async function registerKnowledge(app: FastifyInstance): Promise<void> {
     const q = listQ.parse(req.query)
 
     let sql = `SELECT ${KNOWLEDGE_CAPTURE_COLUMNS} FROM knowledge_captures`
-    const conditions: string[] = []
+    const conditions: string[] = ['deleted_at IS NULL']
     const params: (string | number)[] = []
 
     if (q.status) {
@@ -73,12 +73,10 @@ export async function registerKnowledge(app: FastifyInstance): Promise<void> {
       params.push(q.category)
     }
 
-    if (conditions.length > 0) {
-      sql += ` WHERE ${conditions.join(' AND ')}`
-    }
+    sql += ` WHERE ${conditions.join(' AND ')}`
 
     // Count total before pagination
-    const countSql = `SELECT COUNT(*) as total FROM knowledge_captures${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`
+    const countSql = `SELECT COUNT(*) as total FROM knowledge_captures WHERE ${conditions.join(' AND ')}`
     const countRow = queryOne<{ total: number }>(countSql, params)
     const total = countRow?.total ?? 0
 
@@ -95,7 +93,7 @@ export async function registerKnowledge(app: FastifyInstance): Promise<void> {
     const { ids } = byIdsBody.parse(req.body)
     const placeholders = ids.map(() => '?').join(',')
     const rows = queryAll<Record<string, unknown>>(
-      `SELECT ${KNOWLEDGE_CAPTURE_COLUMNS} FROM knowledge_captures WHERE id IN (${placeholders})`,
+      `SELECT ${KNOWLEDGE_CAPTURE_COLUMNS} FROM knowledge_captures WHERE id IN (${placeholders}) AND deleted_at IS NULL`,
       ids
     )
     return rows.map(mapRow)
@@ -105,7 +103,7 @@ export async function registerKnowledge(app: FastifyInstance): Promise<void> {
   app.get('/api/knowledge/:id', { preHandler: [app.requireAuth] }, async (req) => {
     const { id } = req.params as { id: string }
     const row = queryOne<Record<string, unknown>>(
-      `SELECT ${KNOWLEDGE_CAPTURE_COLUMNS} FROM knowledge_captures WHERE id = ?`,
+      `SELECT ${KNOWLEDGE_CAPTURE_COLUMNS} FROM knowledge_captures WHERE id = ? AND deleted_at IS NULL`,
       [id]
     )
     if (!row) throw new NotFoundError('knowledge capture not found')

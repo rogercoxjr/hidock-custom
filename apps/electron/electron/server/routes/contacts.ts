@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import {
   getContacts,
   getContactById,
+  getMeetingById,
   getMeetingsForContact,
   getContactsForMeeting,
   upsertContact,
@@ -190,6 +191,8 @@ export async function registerContacts(app: FastifyInstance): Promise<void> {
   // (contacts:getForMeeting — nested under meetings for REST resource model)
   app.get('/api/meetings/:id/contacts', { preHandler: [app.requireAuth] }, async (req) => {
     const { id } = req.params as { id: string }
+    const meeting = getMeetingById(id)
+    if (!meeting) throw new NotFoundError('meeting not found')
     const contacts = getContactsForMeeting(id)
     return contacts.map(mapContact)
   })

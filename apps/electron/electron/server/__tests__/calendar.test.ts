@@ -324,4 +324,82 @@ describe('calendar REST endpoints', () => {
     expect(mockSync).toHaveBeenCalledOnce()
     await app.close()
   })
+
+  it('POST /api/calendar/sync returns 422 when syncCalendar returns success:false', async () => {
+    vi.doMock('../../main/services/calendar-sync', async (importOriginal) => {
+      const mod = await importOriginal<typeof import('../../main/services/calendar-sync')>()
+      return {
+        ...mod,
+        syncCalendar: vi.fn().mockResolvedValue({ success: false, meetingsCount: 0, error: 'fetch failed' })
+      }
+    })
+
+    const { updateConfig } = await import('../../main/services/config')
+    await updateConfig('calendar', { icsUrl: 'https://calendar.example.com/feed.ics' })
+
+    const app = await makeApp()
+    const cookie = await login(app)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/calendar/sync',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(422)
+    await app.close()
+  })
+
+  it('PATCH /api/calendar/settings as non-admin returns 403', async () => {
+    const { upsertAllowedUser } = await import('../../main/services/database')
+    upsertAllowedUser({ email: 'member@x.com', role: 'member', invitedBy: 'boss@x.com' })
+
+    const memberApp = await buildApp(
+      testDeps({ oidc: createFakeOidc({ email: 'member@x.com', emailVerified: true, sub: 'sub-member' }) })
+    )
+
+    const start = await memberApp.inject({ method: 'GET', url: '/auth/login' })
+    const startCookie = start.cookies.find((c) => c.name === 'hidock_session')!
+    const cb = await memberApp.inject({
+      method: 'GET',
+      url: '/auth/callback?code=x&state=ignored-by-fake',
+      cookies: { hidock_session: startCookie.value }
+    })
+    const memberCookie = (cb.cookies.find((c) => c.name === 'hidock_session') ?? startCookie).value
+
+    const res = await memberApp.inject({
+      method: 'PATCH',
+      url: '/api/calendar/settings',
+      cookies: { hidock_session: memberCookie },
+      headers: { 'content-type': 'application/json' },
+      payload: { syncEnabled: false }
+    })
+    expect(res.statusCode).toBe(403)
+    await memberApp.close()
+  })
+
+  it('POST /api/calendar/sync as non-admin returns 403', async () => {
+    const { upsertAllowedUser } = await import('../../main/services/database')
+    upsertAllowedUser({ email: 'member@x.com', role: 'member', invitedBy: 'boss@x.com' })
+
+    const memberApp = await buildApp(
+      testDeps({ oidc: createFakeOidc({ email: 'member@x.com', emailVerified: true, sub: 'sub-member' }) })
+    )
+
+    const start = await memberApp.inject({ method: 'GET', url: '/auth/login' })
+    const startCookie = start.cookies.find((c) => c.name === 'hidock_session')!
+    const cb = await memberApp.inject({
+      method: 'GET',
+      url: '/auth/callback?code=x&state=ignored-by-fake',
+      cookies: { hidock_session: startCookie.value }
+    })
+    const memberCookie = (cb.cookies.find((c) => c.name === 'hidock_session') ?? startCookie).value
+
+    const res = await memberApp.inject({
+      method: 'POST',
+      url: '/api/calendar/sync',
+      cookies: { hidock_session: memberCookie }
+    })
+    expect(res.statusCode).toBe(403)
+    await memberApp.close()
+  })
 })

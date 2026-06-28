@@ -441,6 +441,30 @@ describe('projects REST endpoints', () => {
     await app.close()
   })
 
+  it('DELETE /api/meetings/:meetingId/projects/:projectId returns 404 for unknown meeting', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/meetings/no-such-meeting/projects/proj-1',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(404)
+    await app.close()
+  })
+
+  it('DELETE /api/meetings/:meetingId/projects/:projectId returns 404 for unknown project', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/meetings/meet-1/projects/no-such-project',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(404)
+    await app.close()
+  })
+
   // ─── Projects for meeting ─────────────────────────────────────────────────────
 
   it('GET /api/meetings/:meetingId/projects returns tagged projects', async () => {
