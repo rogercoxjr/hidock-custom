@@ -36,6 +36,13 @@ const createBody = z.object({
 
 const patchBody = createBody.partial()
 
+// Zod schema for the optional edit overlay accepted by
+// POST /api/recordings/:id/accept-suggested-template.
+// All fields are optional (the suggested template supplies defaults) but must
+// satisfy the same bounds as createBody when present — ensures structured 400
+// errors with field-level detail instead of bubbling up from createTemplate().
+const acceptSuggestedEditBody = createBody.partial()
+
 // ---------------------------------------------------------------------------
 // Rate limiter for previewSelection — 5/min globally (spec §5.1)
 // ---------------------------------------------------------------------------
@@ -183,7 +190,12 @@ export async function registerSummarizationTemplates(app: FastifyInstance): Prom
     { preHandler: [app.requireAuth, app.requireSameOrigin] },
     async (req, reply) => {
       const { id: recordingId } = req.params as { id: string }
-      const edits = req.body as Record<string, unknown> | undefined
+
+      // Parse + validate the optional edit overlay up-front.  All fields are
+      // optional (the suggested template provides defaults), but any supplied field
+      // must satisfy the same bounds as createBody — produces a structured 400 with
+      // field-level Zod detail instead of bubbling up from createTemplate().
+      const editObj = acceptSuggestedEditBody.parse(req.body ?? {})
 
       // §8.3 transcript-existence guard
       const existingTranscript = getTranscriptByRecordingId(recordingId)
@@ -203,8 +215,6 @@ export async function registerSummarizationTemplates(app: FastifyInstance): Prom
         throw new BadRequestError('Could not parse suggested template JSON')
       }
 
-      const editObj = edits && typeof edits === 'object' && !Array.isArray(edits) ? edits : {}
-
       const mergedInput = {
         name: typeof editObj.name === 'string'
           ? editObj.name
@@ -220,7 +230,7 @@ export async function registerSummarizationTemplates(app: FastifyInstance): Prom
               ? suggestedPayload.guidance
               : '',
         exampleTriggers: Array.isArray(editObj.exampleTriggers)
-          ? (editObj.exampleTriggers as unknown[]).filter((t): t is string => typeof t === 'string')
+          ? editObj.exampleTriggers.filter((t): t is string => typeof t === 'string')
           : Array.isArray(suggestedPayload.exampleTriggers)
             ? (suggestedPayload.exampleTriggers as unknown[]).filter((t): t is string => typeof t === 'string')
             : []

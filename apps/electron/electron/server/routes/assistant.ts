@@ -69,10 +69,16 @@ export async function registerAssistant(app: FastifyInstance): Promise<void> {
   app.get('/api/assistant/conversations', { preHandler: [app.requireAuth] }, async (req) => {
     const q = listConvQ.parse(req.query)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = queryAll<any>(`SELECT ${CONVERSATION_COLUMNS} FROM conversations ORDER BY updated_at DESC`)
+    const totalRow = queryOne<any>('SELECT COUNT(*) AS cnt FROM conversations')
+    const total = (totalRow?.cnt as number) ?? 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = queryAll<any>(
+      `SELECT ${CONVERSATION_COLUMNS} FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+      [q.limit, q.offset]
+    )
     return {
-      items: rows.slice(q.offset, q.offset + q.limit).map(mapToConversation),
-      total: rows.length
+      items: rows.map(mapToConversation),
+      total
     }
   })
 

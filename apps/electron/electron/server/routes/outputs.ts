@@ -82,10 +82,17 @@ export async function registerOutputs(app: FastifyInstance): Promise<void> {
     try {
       result = await generator.generate(body)
     } catch (err) {
+      // Map to sanitised user-facing strings — forwarding err.message verbatim
+      // could leak internal paths, model names, or partial data to the caller.
+      // Log the raw error server-side for diagnostics.
       if (err instanceof Error) {
-        if (err.message.includes('not available')) throw new BadRequestError(err.message)
+        if (err.message.includes('not available')) {
+          console.error('[outputs:generate] service not available:', err)
+          throw new BadRequestError('Output generation is not available — check AI provider configuration')
+        }
         if (err.message.includes('not found') || err.message.includes('No transcripts')) {
-          throw new NotFoundError(err.message)
+          console.error('[outputs:generate] content not found:', err)
+          throw new NotFoundError('No content found for the specified context')
         }
       }
       throw err

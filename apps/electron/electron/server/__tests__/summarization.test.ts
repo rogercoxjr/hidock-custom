@@ -10,8 +10,8 @@
  *   - success paths
  *
  * Covered routes:
- *   GET  /api/summarization/models           — 401 (unauth), 200 success
- *   POST /api/summarization/test-connection  — 401, 403 (foreign origin), 200, 400 (key rejected)
+ *   GET  /api/summarization/models           — 401 (unauth), 403 (non-admin), 200 success; fetch URL verified
+ *   POST /api/summarization/test-connection  — 401, 403 (foreign origin), 403 (non-admin), 200, 400 (key rejected); fetch URL verified
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
@@ -21,6 +21,19 @@ import { join } from 'path'
 import { buildApp } from '../app'
 import { createFakeOidc } from '../oidc'
 import { testDeps } from './app.test'
+
+// Helper: log in as a non-admin member (used to assert 403 on admin-only routes)
+async function loginAsMember(app: Awaited<ReturnType<typeof buildApp>>) {
+  const start = await app.inject({ method: 'GET', url: '/auth/login' })
+  const startCookie = start.cookies.find((c) => c.name === 'hidock_session')!
+  const cb = await app.inject({
+    method: 'GET',
+    url: '/auth/callback?code=x&state=ignored-by-fake',
+    cookies: { hidock_session: startCookie.value }
+  })
+  const cbCookie = cb.cookies.find((c) => c.name === 'hidock_session')
+  return (cbCookie ?? startCookie).value
+}
 
 // ---------------------------------------------------------------------------
 // Mock config so tests don't need a real config file on disk
@@ -46,6 +59,13 @@ vi.mock('../../main/services/config', async (importOriginal) => {
 async function makeApp() {
   return buildApp(
     testDeps({ oidc: createFakeOidc({ email: 'boss@x.com', emailVerified: true, sub: 'sub-boss' }) })
+  )
+}
+
+// Non-admin member app — used to verify admin-only routes return 403
+async function makeMemberApp() {
+  return buildApp(
+    testDeps({ oidc: createFakeOidc({ email: 'member@x.com', emailVerified: true, sub: 'sub-member' }) })
   )
 }
 
@@ -87,10 +107,12 @@ describe('summarization REST router', () => {
     dir = mkdtempSync(join(tmpdir(), 'hidock-summ-'))
     process.env.HIDOCK_DATA_ROOT = dir
     const { initializeFileStorage } = await import('../../main/services/file-storage')
-    const { initializeDatabase, ensureBootstrapAdmin } = await import('../../main/services/database')
+    const { initializeDatabase, ensureBootstrapAdmin, upsertAllowedUser } = await import('../../main/services/database')
     await initializeFileStorage()
     await initializeDatabase()
     ensureBootstrapAdmin('boss@x.com')
+    // Seed a non-admin member for admin-guard tests
+    upsertAllowedUser({ email: 'member@x.com', invitedBy: 'boss@x.com' })
   })
 
   afterEach(async () => {
@@ -138,7 +160,7 @@ describe('summarization REST router', () => {
     await app.close()
   })
 
-  it('GET /api/summarization/models with ?apiKey uses it instead of saved key', async () => {
+  it('GET /api/summarization/models uses saved config key (no ?apiKey= param accepted)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       mockResponse(200, { models: [{ name: 'model-x' }] })
     )
@@ -148,11 +170,45 @@ describe('summarization REST router', () => {
     const cookie = await login(app)
     await app.inject({
       method: 'GET',
-      url: '/api/summarization/models?apiKey=inline-key',
+      url: '/api/summarization/models',
       cookies: { hidock_session: cookie }
     })
     const calledHeaders = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>
-    expect(calledHeaders['Authorization']).toBe('Bearer inline-key')
+    // Must use the saved config key — ?apiKey= query param was removed to prevent
+    // API key exposure in server logs and browser history.
+    expect(calledHeaders['Authorization']).toBe('Bearer saved-key')
+    await app.close()
+  })
+
+  it('GET /api/summarization/models fetch targets api.ollama.com (not ollama.com)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockResponse(200, { models: [] })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const app = await makeApp()
+    const cookie = await login(app)
+    await app.inject({
+      method: 'GET',
+      url: '/api/summarization/models',
+      cookies: { hidock_session: cookie }
+    })
+    const calledUrl = fetchMock.mock.calls[0][0] as string
+    expect(calledUrl).toBe('https://api.ollama.com/api/tags')
+    await app.close()
+  })
+
+  it('GET /api/summarization/models with non-admin user returns 403', async () => {
+    vi.stubGlobal('fetch', vi.fn()) // should not be called
+
+    const app = await makeMemberApp()
+    const cookie = await loginAsMember(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/summarization/models',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(403)
     await app.close()
   })
 
@@ -303,6 +359,42 @@ describe('summarization REST router', () => {
     const calledHeaders = (fetchMock.mock.calls[0][1] as RequestInit).headers as Record<string, string>
     expect(calledHeaders['Authorization']).toBe('Bearer inline-api-key')
     expect(calledBody.model).toBe('inline-model')
+    await app.close()
+  })
+
+  it('POST /api/summarization/test-connection fetch targets api.ollama.com (not ollama.com)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockResponse(200, { message: { content: 'pong' } })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const app = await makeApp()
+    const cookie = await login(app)
+    await app.inject({
+      method: 'POST',
+      url: '/api/summarization/test-connection',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json' },
+      payload: {}
+    })
+    const calledUrl = fetchMock.mock.calls[0][0] as string
+    expect(calledUrl).toBe('https://api.ollama.com/api/chat')
+    await app.close()
+  })
+
+  it('POST /api/summarization/test-connection with non-admin user returns 403', async () => {
+    vi.stubGlobal('fetch', vi.fn()) // should not be called
+
+    const app = await makeMemberApp()
+    const cookie = await loginAsMember(app)
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/summarization/test-connection',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json' },
+      payload: {}
+    })
+    expect(res.statusCode).toBe(403)
     await app.close()
   })
 })

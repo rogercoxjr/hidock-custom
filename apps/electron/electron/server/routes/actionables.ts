@@ -1,7 +1,16 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { queryAll, run } from '../../main/services/database'
+import { queryAll, queryOne, run } from '../../main/services/database'
 import { NotFoundError, BadRequestError } from './_errors'
+
+// ---------------------------------------------------------------------------
+// Explicit column list used in every SELECT to match mapRow's keys
+// (prevents silent breakage when new columns are added, mirrors B-CHAT-007)
+// ---------------------------------------------------------------------------
+const ACTIONABLE_COLUMNS =
+  'id, type, title, description, source_knowledge_id, source_action_item_id, ' +
+  'suggested_template, suggested_recipients, status, confidence, artifact_id, ' +
+  'generated_at, shared_at, created_at, updated_at'
 
 // ---------------------------------------------------------------------------
 // Shared row→camelCase mapper (mirrors the IPC handler's mapToActionable)
@@ -40,13 +49,15 @@ function mapRow(row: Record<string, unknown>) {
 // Validation schemas
 // ---------------------------------------------------------------------------
 
+const VALID_STATUSES = ['pending', 'in_progress', 'generated', 'shared', 'dismissed'] as const
+
 const listQ = z.object({
-  status: z.string().optional(),
+  // Restrict to known enum values so unknown strings return 400 instead of a
+  // vacuous 200 empty list (e.g. ?status=DROP TABLE would silently 200 otherwise).
+  status: z.enum(VALID_STATUSES).optional(),
   limit: z.coerce.number().int().positive().max(1000).default(200),
   offset: z.coerce.number().int().min(0).default(0)
 })
-
-const VALID_STATUSES = ['pending', 'in_progress', 'generated', 'shared', 'dismissed'] as const
 
 const validTransitions: Record<string, string[]> = {
   pending: ['in_progress', 'generated', 'dismissed'],
@@ -69,19 +80,27 @@ export async function registerActionables(app: FastifyInstance): Promise<void> {
   app.get('/api/actionables', { preHandler: [app.requireAuth] }, async (req) => {
     const q = listQ.parse(req.query)
 
-    let sql = 'SELECT * FROM actionables'
-    const params: unknown[] = []
+    // Use SQL-level COUNT + LIMIT/OFFSET instead of fetching all rows into JS
+    // memory and slicing (mirrors the best practice from B-CHAT-007).
+    let countSql = 'SELECT COUNT(*) AS cnt FROM actionables'
+    let dataSql = `SELECT ${ACTIONABLE_COLUMNS} FROM actionables`
+    const countParams: unknown[] = []
+    const dataParams: unknown[] = []
 
     if (q.status) {
-      sql += ' WHERE status = ?'
-      params.push(q.status)
+      countSql += ' WHERE status = ?'
+      dataSql += ' WHERE status = ?'
+      countParams.push(q.status)
+      dataParams.push(q.status)
     }
 
-    sql += ' ORDER BY created_at DESC'
+    dataSql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    dataParams.push(q.limit, q.offset)
 
-    const rows = queryAll<Record<string, unknown>>(sql, params)
-    const all = rows.map(mapRow)
-    return { items: all.slice(q.offset, q.offset + q.limit), total: all.length }
+    const totalRow = queryOne<{ cnt: number }>(countSql, countParams)
+    const total = totalRow?.cnt ?? 0
+    const rows = queryAll<Record<string, unknown>>(dataSql, dataParams)
+    return { items: rows.map(mapRow), total }
   })
 
   // GET /api/meetings/:id/actionables
@@ -89,7 +108,7 @@ export async function registerActionables(app: FastifyInstance): Promise<void> {
     const { id: meetingId } = req.params as { id: string }
 
     const sql = `
-      SELECT DISTINCT a.*
+      SELECT DISTINCT ${ACTIONABLE_COLUMNS.split(', ').map((c) => `a.${c}`).join(', ')}
       FROM actionables a
       INNER JOIN knowledge_captures kc ON a.source_knowledge_id = kc.id
       LEFT JOIN recordings r ON kc.source_recording_id = r.id
@@ -105,7 +124,10 @@ export async function registerActionables(app: FastifyInstance): Promise<void> {
   app.patch('/api/actionables/:id', { preHandler: [app.requireAuth, app.requireSameOrigin] }, async (req) => {
     const { id } = req.params as { id: string }
 
-    const existing = queryAll<Record<string, unknown>>('SELECT * FROM actionables WHERE id = ?', [id])[0]
+    const existing = queryOne<Record<string, unknown>>(
+      `SELECT ${ACTIONABLE_COLUMNS} FROM actionables WHERE id = ?`,
+      [id]
+    )
     if (!existing) throw new NotFoundError('actionable not found')
 
     const body = patchBody.parse(req.body)
@@ -130,8 +152,11 @@ export async function registerActionables(app: FastifyInstance): Promise<void> {
 
     run('UPDATE actionables SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newStatus, id])
 
-    const updated = queryAll<Record<string, unknown>>('SELECT * FROM actionables WHERE id = ?', [id])[0]
-    return mapRow(updated)
+    const updated = queryOne<Record<string, unknown>>(
+      `SELECT ${ACTIONABLE_COLUMNS} FROM actionables WHERE id = ?`,
+      [id]
+    )
+    return mapRow(updated!)
   })
 
   // POST /api/actionables/:id/generate-output
@@ -141,7 +166,10 @@ export async function registerActionables(app: FastifyInstance): Promise<void> {
     async (req) => {
       const { id } = req.params as { id: string }
 
-      const actionable = queryAll<Record<string, unknown>>('SELECT * FROM actionables WHERE id = ?', [id])[0]
+      const actionable = queryOne<Record<string, unknown>>(
+        `SELECT ${ACTIONABLE_COLUMNS} FROM actionables WHERE id = ?`,
+        [id]
+      )
       if (!actionable) throw new NotFoundError('actionable not found')
 
       const status = actionable.status as string

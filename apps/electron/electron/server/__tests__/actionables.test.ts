@@ -156,6 +156,19 @@ describe('actionables REST endpoints', () => {
     await app.close()
   })
 
+  it('GET /api/actionables?status= with unknown status value returns 400', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/actionables?status=bogus_status',
+      cookies: { hidock_session: cookie }
+    })
+    // Unknown status values must produce 400, not a vacuous 200 empty list
+    expect(res.statusCode).toBe(400)
+    await app.close()
+  })
+
   it('GET /api/actionables items have camelCase fields', async () => {
     const app = await makeApp()
     const cookie = await login(app)

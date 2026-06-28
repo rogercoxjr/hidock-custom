@@ -17,9 +17,10 @@
  *   POST /api/rag/sessions/:sessionId/trim    — 200
  *   POST /api/rag/summarize-meeting           — 200 + 404 (null)
  *   POST /api/rag/find-action-items           — 200
- *   POST /api/rag/search                      — 200
+ *   GET  /api/rag/search?q=&limit=            — 200 (IPC: rag:search)
+ *   GET  /api/rag/global-search?q=&limit=     — 200 (IPC: rag:globalSearch)
  *   GET  /api/rag/chunks                      — 200
- *   POST /api/rag/index                       — 200
+ *   POST /api/rag/index                       — 200 (admin), 403 (non-admin)
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
@@ -42,7 +43,8 @@ vi.mock('../../main/services/rag', () => {
     clearSession: vi.fn(),
     removeLastMessages: vi.fn().mockReturnValue(2),
     summarizeMeeting: vi.fn().mockResolvedValue('A meeting summary'),
-    findActionItems: vi.fn().mockResolvedValue('- action 1\n- action 2')
+    findActionItems: vi.fn().mockResolvedValue('- action 1\n- action 2'),
+    globalSearch: vi.fn().mockResolvedValue([{ content: 'global result', score: 0.91 }])
   }
   return {
     getRAGService: vi.fn().mockReturnValue(mockRag),
@@ -396,17 +398,22 @@ describe('RAG REST router', () => {
     await app.close()
   })
 
-  // ─── POST /api/rag/search ─────────────────────────────────────────────────
+  // ─── GET /api/rag/search?q=&limit= ──────────────────────────────────────────
 
-  it('POST /api/rag/search returns mapped results', async () => {
+  it('GET /api/rag/search without auth returns 401', async () => {
+    const app = await makeApp()
+    const res = await app.inject({ method: 'GET', url: '/api/rag/search?q=test' })
+    expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('GET /api/rag/search returns mapped results', async () => {
     const app = await makeApp()
     const cookie = await login(app)
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/rag/search',
-      cookies: { hidock_session: cookie },
-      headers: { 'content-type': 'application/json' },
-      payload: { query: 'decisions made', limit: 5 }
+      method: 'GET',
+      url: '/api/rag/search?q=decisions+made&limit=5',
+      cookies: { hidock_session: cookie }
     })
     expect(res.statusCode).toBe(200)
     const body = res.json()
@@ -418,17 +425,38 @@ describe('RAG REST router', () => {
     await app.close()
   })
 
-  it('POST /api/rag/search with foreign origin returns 403', async () => {
+  it('GET /api/rag/search without q param returns 400', async () => {
     const app = await makeApp()
     const cookie = await login(app)
     const res = await app.inject({
-      method: 'POST',
+      method: 'GET',
       url: '/api/rag/search',
-      cookies: { hidock_session: cookie },
-      headers: { 'content-type': 'application/json', origin: 'https://evil.example.com' },
-      payload: { query: 'something' }
+      cookies: { hidock_session: cookie }
     })
-    expect(res.statusCode).toBe(403)
+    expect(res.statusCode).toBe(400)
+    await app.close()
+  })
+
+  // ─── GET /api/rag/global-search?q=&limit= ────────────────────────────────
+
+  it('GET /api/rag/global-search without auth returns 401', async () => {
+    const app = await makeApp()
+    const res = await app.inject({ method: 'GET', url: '/api/rag/global-search?q=test' })
+    expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('GET /api/rag/global-search returns results', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/rag/global-search?q=important+decisions&limit=3',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(200)
+    const body = res.json()
+    expect(Array.isArray(body)).toBe(true)
     await app.close()
   })
 
@@ -462,7 +490,7 @@ describe('RAG REST router', () => {
 
   // ─── POST /api/rag/index ─────────────────────────────────────────────────
 
-  it('POST /api/rag/index returns indexed count', async () => {
+  it('POST /api/rag/index returns indexed count (admin)', async () => {
     const app = await makeApp()
     const cookie = await login(app)
     const res = await app.inject({
@@ -492,5 +520,36 @@ describe('RAG REST router', () => {
     })
     expect(res.statusCode).toBe(400)
     await app.close()
+  })
+
+  it('POST /api/rag/index with non-admin authenticated user returns 403', async () => {
+    // Seed a non-admin member and log in as them
+    const { upsertAllowedUser } = await import('../../main/services/database')
+    upsertAllowedUser({ email: 'member@x.com', invitedBy: 'boss@x.com' })
+
+    const memberApp = await buildApp(
+      testDeps({ oidc: createFakeOidc({ email: 'member@x.com', emailVerified: true, sub: 'sub-member' }) })
+    )
+    const memberStart = await memberApp.inject({ method: 'GET', url: '/auth/login' })
+    const memberStartCookie = memberStart.cookies.find((c) => c.name === 'hidock_session')!
+    const memberCb = await memberApp.inject({
+      method: 'GET',
+      url: '/auth/callback?code=x&state=ignored-by-fake',
+      cookies: { hidock_session: memberStartCookie.value }
+    })
+    const memberCookie = (memberCb.cookies.find((c) => c.name === 'hidock_session') ?? memberStartCookie).value
+
+    const res = await memberApp.inject({
+      method: 'POST',
+      url: '/api/rag/index',
+      cookies: { hidock_session: memberCookie },
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        transcript: 'Injected transcript.',
+        metadata: { meetingId: 'meet-1' }
+      }
+    })
+    expect(res.statusCode).toBe(403)
+    await memberApp.close()
   })
 })

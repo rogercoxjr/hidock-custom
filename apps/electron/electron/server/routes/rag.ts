@@ -10,13 +10,14 @@
  *   POST   /api/rag/sessions/:sessionId/trim  — removeLastMessages(sessionId, count)
  *   POST   /api/rag/summarize-meeting        — summarizeMeeting(meetingId)
  *   POST   /api/rag/find-action-items        — findActionItems(meetingId?)
- *   POST   /api/rag/search                   — vectorStore.search(query, limit) → mapped results
+ *   GET    /api/rag/search?q=&limit=         — vectorStore.search(query, limit) → mapped results (IPC: rag:search)
+ *   GET    /api/rag/global-search?q=&limit=  — rag.globalSearch(query, limit) (IPC: rag:globalSearch)
  *   GET    /api/rag/chunks                   — getAllDocuments() mapped
- *   POST   /api/rag/index                    — vectorStore.indexTranscript (raised bodyLimit)
+ *   POST   /api/rag/index                    — vectorStore.indexTranscript (raised bodyLimit, admin-only)
  *
  * IPC channels ported: rag:status, rag:stats, rag:chat, rag:cancel,
  *   rag:clear-session, rag:removeLastMessages, rag:summarize-meeting,
- *   rag:find-action-items, rag:search, rag:get-chunks, rag:index-transcript
+ *   rag:find-action-items, rag:search, rag:globalSearch, rag:get-chunks, rag:index-transcript
  */
 
 import { FastifyInstance } from 'fastify'
@@ -78,8 +79,8 @@ const findActionItemsBody = z.object({
   meetingId: z.string().optional()
 })
 
-const searchBody = z.object({
-  query: z.string().min(1).max(2000),
+const searchQuery = z.object({
+  q: z.string().min(1).max(2000),
   limit: z.coerce.number().int().positive().max(50).default(5)
 })
 
@@ -129,7 +130,12 @@ export async function registerRag(app: FastifyInstance): Promise<void> {
     const body = chatBody.parse(req.body)
     const rag = getRAGService()
 
-    // Extract meetingFilter from optional filter, mirroring rag-handlers.ts
+    // Extract meetingFilter from optional filter, mirroring rag-handlers.ts.
+    // NOTE: rag.chat() currently accepts only a single meetingId string; for
+    // contact/project filters that map to multiple meetings only the first ID is
+    // forwarded.  This matches IPC fidelity (rag-handlers.ts:96-99 does the same
+    // [0] narrowing).  If the service is extended to accept an array, pass the
+    // full meetingIds array here instead.
     let meetingFilter: string | undefined
     if (body.filter) {
       const meetingIds = extractMeetingIdsFromFilter(body.filter)
@@ -211,17 +217,25 @@ export async function registerRag(app: FastifyInstance): Promise<void> {
     }
   )
 
-  // ─── POST /api/rag/search ─────────────────────────────────────────────────
-  // IPC: rag:search  (also covers rag:globalSearch for /api/rag/global-search below)
-  app.post('/api/rag/search', { preHandler: [app.requireAuth, app.requireSameOrigin] }, async (req) => {
-    const { query, limit } = searchBody.parse(req.body)
-    const results = await getVectorStore().search(query, limit)
+  // ─── GET /api/rag/search?q=&limit= ──────────────────────────────────────────
+  // IPC: rag:search
+  app.get('/api/rag/search', { preHandler: [app.requireAuth] }, async (req) => {
+    const { q, limit } = searchQuery.parse(req.query)
+    const results = await getVectorStore().search(q, limit)
     return results.map((r) => ({
       content: r.document.content,
       meetingId: r.document.metadata.meetingId,
       subject: r.document.metadata.subject,
       score: r.score
     }))
+  })
+
+  // ─── GET /api/rag/global-search?q=&limit= ────────────────────────────────
+  // IPC: rag:globalSearch
+  app.get('/api/rag/global-search', { preHandler: [app.requireAuth] }, async (req) => {
+    const { q, limit } = searchQuery.parse(req.query)
+    const results = await getRAGService().globalSearch(q, limit)
+    return results
   })
 
   // ─── GET /api/rag/chunks ─────────────────────────────────────────────────
@@ -242,10 +256,13 @@ export async function registerRag(app: FastifyInstance): Promise<void> {
 
   // ─── POST /api/rag/index ─────────────────────────────────────────────────
   // IPC: rag:index-transcript  (raised bodyLimit — transcripts can be large)
+  // Admin-only: indexing injects arbitrary text into the persistent vector store,
+  // which survives restarts.  Any authenticated user being able to pollute the RAG
+  // index or exhaust vector-store capacity is unacceptable on the REST surface.
   app.post(
     '/api/rag/index',
     {
-      preHandler: [app.requireAuth, app.requireSameOrigin],
+      preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin],
       bodyLimit: 10 * 1024 * 1024 // 10 MB
     },
     async (req) => {

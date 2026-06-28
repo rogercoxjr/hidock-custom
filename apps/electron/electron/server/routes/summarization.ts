@@ -3,8 +3,10 @@ import { z } from 'zod'
 import { getConfig } from '../../main/services/config'
 import { BadRequestError } from './_errors'
 
-const OLLAMA_TAGS_URL = 'https://ollama.com/api/tags'
-const OLLAMA_CHAT_URL = 'https://ollama.com/api/chat'
+// Correct Ollama Cloud API base is api.ollama.com (not the website ollama.com).
+// The IPC handler (summarization-handlers.ts) has been updated to match.
+const OLLAMA_TAGS_URL = 'https://api.ollama.com/api/tags'
+const OLLAMA_CHAT_URL = 'https://api.ollama.com/api/chat'
 const FETCH_TIMEOUT_MS = 30 * 1000
 
 const testConnectionBody = z.object({
@@ -12,20 +14,23 @@ const testConnectionBody = z.object({
   model: z.string().optional()
 })
 
-const listModelsQuery = z.object({
-  apiKey: z.string().optional()
-})
+// NOTE: The ?apiKey= query parameter has been intentionally removed from the
+// GET /api/summarization/models endpoint. GET query parameters appear in server
+// access logs, proxy logs, browser history, and Referer headers — passing an
+// API key there would expose it in plaintext. Callers that need to validate an
+// unsaved key before saving should use POST /api/summarization/test-connection
+// (which accepts { apiKey } in the request body).
+const listModelsQuery = z.object({})
 
 export async function registerSummarization(app: FastifyInstance): Promise<void> {
   // GET /api/summarization/models — list available Ollama Cloud models
+  // Admin-only: exposes which Ollama Cloud API key is configured and enumerates
+  // available models — these are administrator-tier settings operations.
   // Runs server-side because the browser cannot make cross-origin requests
-  // to ollama.com without CORS issues.
-  app.get('/api/summarization/models', { preHandler: [app.requireAuth] }, async (req) => {
-    const q = listModelsQuery.parse(req.query)
-    const apiKey =
-      typeof q.apiKey === 'string' && q.apiKey.length > 0
-        ? q.apiKey
-        : getConfig().summarization?.ollamaCloudApiKey ?? ''
+  // to api.ollama.com without CORS issues.
+  app.get('/api/summarization/models', { preHandler: [app.requireAuth, app.requireAdmin] }, async (req) => {
+    listModelsQuery.parse(req.query) // validates (no fields currently accepted)
+    const apiKey = getConfig().summarization?.ollamaCloudApiKey ?? ''
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -51,10 +56,11 @@ export async function registerSummarization(app: FastifyInstance): Promise<void>
   })
 
   // POST /api/summarization/test-connection — test the Ollama Cloud connection
+  // Admin-only: validates an API key and probes a model — admin-tier operation.
   // POSTs a 1-token chat with the configured model and classifies the result.
   app.post(
     '/api/summarization/test-connection',
-    { preHandler: [app.requireAuth, app.requireSameOrigin] },
+    { preHandler: [app.requireAuth, app.requireAdmin, app.requireSameOrigin] },
     async (req) => {
       const body = testConnectionBody.parse(req.body)
       const config = getConfig()
