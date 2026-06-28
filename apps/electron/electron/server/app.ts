@@ -82,5 +82,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerOutputs } = await import('./routes/outputs')
   await registerOutputs(app)
 
+  const { registerSummarization } = await import('./routes/summarization')
+  await registerSummarization(app)
+
   return app
 }
