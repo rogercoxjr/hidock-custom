@@ -14,11 +14,13 @@ export function testDeps(overrides: Partial<AppDeps> = {}): AppDeps {
 }
 
 describe('buildApp', () => {
+  // 30 s: buildApp does ~30 sequential dynamic imports; under full-suite CPU
+  // contention this can take well over the default 5 s on slower machines.
   it('serves /healthz', async () => {
     const app = await buildApp(testDeps())
     const res = await app.inject({ method: 'GET', url: '/healthz' })
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ status: 'ok' })
     await app.close()
-  })
+  }, 30_000)
 })

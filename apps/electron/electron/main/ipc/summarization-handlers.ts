@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron'
 import { getConfig } from '../services/config'
 
-const OLLAMA_TAGS_URL = 'https://ollama.com/api/tags'
-const OLLAMA_CHAT_URL = 'https://ollama.com/api/chat'
+// Correct Ollama Cloud API base is api.ollama.com, not the website ollama.com.
+const OLLAMA_TAGS_URL = 'https://api.ollama.com/api/tags'
+const OLLAMA_CHAT_URL = 'https://api.ollama.com/api/chat'
 const FETCH_TIMEOUT_MS = 30 * 1000 // 30 s per handler call (spec Task 6 Step 2)
 
 export function registerSummarizationHandlers(): void {

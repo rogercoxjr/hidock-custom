@@ -6,8 +6,10 @@ export class HttpError extends Error {
   constructor(public statusCode: number, message: string) { super(message); this.name = new.target.name }
 }
 export class BadRequestError extends HttpError { constructor(m = 'bad request') { super(400, m) } }
+export class ForbiddenError extends HttpError { constructor(m = 'forbidden') { super(403, m) } }
 export class NotFoundError extends HttpError { constructor(m = 'not found') { super(404, m) } }
 export class ConflictError extends HttpError { constructor(m = 'conflict') { super(409, m) } }
+export class UnprocessableEntityError extends HttpError { constructor(m = 'unprocessable entity') { super(422, m) } }
 
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((err, _req, reply) => {

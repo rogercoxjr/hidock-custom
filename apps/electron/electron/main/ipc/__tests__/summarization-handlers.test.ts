@@ -49,7 +49,7 @@ describe('Summarization IPC Handlers', () => {
   // --- summarization:listModels ---
 
   describe('summarization:listModels', () => {
-    it('GETs https://ollama.com/api/tags with Authorization: Bearer <key> and maps model names', async () => {
+    it('GETs https://api.ollama.com/api/tags with Authorization: Bearer <key> and maps model names', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ models: [{ name: 'gpt-oss:120b' }, { name: 'deepseek-v3.1:671b' }] })
@@ -58,7 +58,7 @@ describe('Summarization IPC Handlers', () => {
       const result = await handlers['summarization:listModels'](null)
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://ollama.com/api/tags',
+        'https://api.ollama.com/api/tags',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({ Authorization: 'Bearer test-ollama-key-12345' })
@@ -99,7 +99,7 @@ describe('Summarization IPC Handlers', () => {
       await handlers['summarization:listModels'](null, 'form-key-unsaved')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://ollama.com/api/tags',
+        'https://api.ollama.com/api/tags',
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: 'Bearer form-key-unsaved' })
         })
@@ -120,7 +120,7 @@ describe('Summarization IPC Handlers', () => {
       const result = await handlers['summarization:testConnection'](null)
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://ollama.com/api/chat',
+        'https://api.ollama.com/api/chat',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({ Authorization: 'Bearer test-ollama-key-12345' })

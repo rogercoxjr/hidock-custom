@@ -46,5 +46,83 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const { registerRecordings } = await import('./routes/recordings')
   await registerRecordings(app)
 
+  const { registerTranscripts } = await import('./routes/transcripts')
+  await registerTranscripts(app)
+
+  const { registerKnowledge } = await import('./routes/knowledge')
+  await registerKnowledge(app)
+
+  const { registerSyncedFiles } = await import('./routes/synced-files')
+  await registerSyncedFiles(app)
+
+  const { registerChat } = await import('./routes/chat')
+  await registerChat(app)
+
+  const { registerMeetings } = await import('./routes/meetings')
+  await registerMeetings(app)
+
+  const { registerCalendar } = await import('./routes/calendar')
+  await registerCalendar(app)
+
+  const { registerContacts } = await import('./routes/contacts')
+  await registerContacts(app)
+
+  const { registerProjects } = await import('./routes/projects')
+  await registerProjects(app)
+
+  const { registerRag } = await import('./routes/rag')
+  await registerRag(app)
+
+  const { registerAssistant } = await import('./routes/assistant')
+  await registerAssistant(app)
+
+  const { registerActionables } = await import('./routes/actionables')
+  await registerActionables(app)
+
+  const { registerOutputs } = await import('./routes/outputs')
+  await registerOutputs(app)
+
+  const { registerSummarization } = await import('./routes/summarization')
+  await registerSummarization(app)
+
+  const { registerSummarizationTemplates } = await import('./routes/summarization-templates')
+  await registerSummarizationTemplates(app)
+
+  const { registerQuality } = await import('./routes/quality')
+  await registerQuality(app)
+
+  const { registerVoiceprints } = await import('./routes/voiceprints')
+  await registerVoiceprints(app)
+
+  const { registerStorage } = await import('./routes/storage')
+  await registerStorage(app)
+
+  const { registerConfig } = await import('./routes/config')
+  await registerConfig(app)
+
+  const { registerSpeakers } = await import('./routes/speakers')
+  await registerSpeakers(app)
+
+  const { registerDiarization } = await import('./routes/diarization')
+  await registerDiarization(app)
+
+  const { registerIntegrity } = await import('./routes/integrity')
+  await registerIntegrity(app)
+
+  const { registerAppInfo } = await import('./routes/app-info')
+  await registerAppInfo(app)
+
+  const { registerDeviceCache } = await import('./routes/device-cache')
+  await registerDeviceCache(app)
+
+  const { registerMigration } = await import('./routes/migration')
+  await registerMigration(app)
+
+  const { registerStoragePolicy } = await import('./routes/storage-policy')
+  await registerStoragePolicy(app)
+
+  const { registerMedia } = await import('./routes/media')
+  await registerMedia(app)
+
   return app
 }

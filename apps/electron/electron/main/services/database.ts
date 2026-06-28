@@ -4784,7 +4784,10 @@ export function getRecordingsByStorageTier(tier: 'hot' | 'warm' | 'cold' | 'arch
  */
 export async function getRecordingByIdAsync(id: string): Promise<Recording | undefined> {
   return new Promise((resolve) => {
-    setImmediate(() => resolve(getRecordingById(id)))
+    setImmediate(() => {
+      if (!db) { resolve(undefined); return }
+      resolve(getRecordingById(id))
+    })
   })
 }
 
@@ -4793,7 +4796,10 @@ export async function getRecordingByIdAsync(id: string): Promise<Recording | und
  */
 export async function getTranscriptByRecordingIdAsync(recordingId: string): Promise<Transcript | undefined> {
   return new Promise((resolve) => {
-    setImmediate(() => resolve(getTranscriptByRecordingId(recordingId)))
+    setImmediate(() => {
+      if (!db) { resolve(undefined); return }
+      resolve(getTranscriptByRecordingId(recordingId))
+    })
   })
 }
 
@@ -4802,7 +4808,10 @@ export async function getTranscriptByRecordingIdAsync(recordingId: string): Prom
  */
 export async function queryAllAsync<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   return new Promise((resolve) => {
-    setImmediate(() => resolve(queryAll<T>(sql, params)))
+    setImmediate(() => {
+      if (!db) { resolve([]); return }
+      resolve(queryAll<T>(sql, params))
+    })
   })
 }
 
@@ -4812,6 +4821,7 @@ export async function queryAllAsync<T>(sql: string, params: unknown[] = []): Pro
 export async function upsertQualityAssessmentAsync(assessment: Omit<QualityAssessment, 'assessed_at'>): Promise<void> {
   return new Promise((resolve) => {
     setImmediate(() => {
+      if (!db) { resolve(); return }
       upsertQualityAssessment(assessment)
       resolve()
     })
@@ -4823,7 +4833,10 @@ export async function upsertQualityAssessmentAsync(assessment: Omit<QualityAsses
  */
 export async function getQualityAssessmentAsync(recordingId: string): Promise<QualityAssessment | undefined> {
   return new Promise((resolve) => {
-    setImmediate(() => resolve(getQualityAssessment(recordingId)))
+    setImmediate(() => {
+      if (!db) { resolve(undefined); return }
+      resolve(getQualityAssessment(recordingId))
+    })
   })
 }
 
@@ -4836,6 +4849,7 @@ export async function updateRecordingStorageTierAsync(
 ): Promise<void> {
   return new Promise((resolve) => {
     setImmediate(() => {
+      if (!db) { resolve(); return }
       updateRecordingStorageTier(recordingId, tier)
       resolve()
     })
