@@ -2035,3 +2035,33 @@ export function getJensenDevice(): JensenDevice {
   }
   return deviceInstance
 }
+
+// ============================================================
+// Pure Jensen stream parser — shared by conformance tests + the WebUSB mock
+// (see src/services/__mocks__/webusb-mock.ts). Read-only byte parsing only;
+// no device I/O. Mirrors the framing rules used by JensenDevice.parsePacket
+// above (header 0x12 0x34, 24-bit body length: bodyLen = rawLen & 0x00FFFFFF).
+// ============================================================
+
+export interface ParsedJensenMessage {
+  cmdId: number
+  body: Uint8Array
+}
+
+export function parseJensenStream(buf: Uint8Array): ParsedJensenMessage[] {
+  const out: ParsedJensenMessage[] = []
+  let off = 0
+  while (off + 12 <= buf.length) {
+    if (buf[off] !== 0x12 || buf[off + 1] !== 0x34) {
+      off++
+      continue
+    }
+    const cmdId = (buf[off + 2] << 8) | buf[off + 3]
+    const rawLen = (buf[off + 8] << 24) | (buf[off + 9] << 16) | (buf[off + 10] << 8) | buf[off + 11]
+    const bodyLen = rawLen & 0x00ffffff
+    if (off + 12 + bodyLen > buf.length) break
+    out.push({ cmdId, body: buf.subarray(off + 12, off + 12 + bodyLen) })
+    off += 12 + bodyLen
+  }
+  return out
+}
