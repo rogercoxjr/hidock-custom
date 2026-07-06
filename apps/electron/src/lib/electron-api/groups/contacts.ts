@@ -45,7 +45,13 @@ export function makeContactsGroup({ http }: ContactsDeps) {
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }
-      return { success: true, data: r.data as GetContactsResponse }
+      // Server returns { items, total }; type contract declares { contacts, total }. Normalize here.
+      const raw = r.data as { items?: any[]; contacts?: any[]; total: number }
+      const data: GetContactsResponse = {
+        contacts: (raw.items ?? raw.contacts ?? []) as any,
+        total: raw.total ?? 0,
+      }
+      return { success: true, data }
     },
 
     async getById(id: string): Promise<Result<ContactWithMeetings>> {

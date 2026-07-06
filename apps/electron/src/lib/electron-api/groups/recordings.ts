@@ -35,7 +35,7 @@ export function makeRecordingsGroup({ http }: RecordingsDeps) {
 
     /** Returns bare any[] — unwraps {items,total} envelope from 0c-2. */
     async getAll(): Promise<any[]> {
-      const r = await http.get('/api/recordings?limit=9999&offset=0')
+      const r = await http.get('/api/recordings?limit=1000&offset=0')
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }

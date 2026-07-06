@@ -265,19 +265,12 @@ export function Settings() {
 
   const loadStorageInfo = async () => {
     try {
-      setStorageError(null) // B-SET-002: Clear previous error
+      setStorageError(null)
       setStorageLoading(true)
-      const result = await window.electronAPI.storage.getInfo()
-      if (result.success && result.data) {
-        setStorageInfo(result.data)
-      } else {
-        // B-SET-002: Surface storage errors to user
-        const errorMsg = result.error || 'Failed to load storage info'
-        setStorageError(typeof errorMsg === 'string' ? errorMsg : String(errorMsg))
-        console.error('Failed to load storage info:', result.error)
-      }
+      // storage.getInfo is RAW-THROW (see CONTRACTS.md): returns raw StorageInfo, throws on error.
+      const info = await window.electronAPI.storage.getInfo()
+      setStorageInfo(info)
     } catch (error) {
-      // B-SET-002: Surface storage errors to user
       const errorMsg = error instanceof Error ? error.message : 'Failed to load storage info'
       setStorageError(errorMsg)
       console.error('Failed to load storage info:', error)
