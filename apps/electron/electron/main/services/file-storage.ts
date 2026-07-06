@@ -1,4 +1,16 @@
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, unlinkSync, utimesSync } from 'fs'
+import {
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  utimesSync,
+  renameSync,
+  copyFileSync,
+  rmSync
+} from 'fs'
 import { join, basename, extname, resolve, normalize } from 'path'
 import { getDataPath } from './config'
 
@@ -89,12 +101,14 @@ export function getDatabasePath(): string {
 }
 
 
-export async function saveRecording(
-  filename: string,
-  data: Buffer,
-  _meetingSubject?: string,
-  originalDate?: Date
-): Promise<string> {
+/**
+ * Resolve the on-disk destination path for a recording given its original
+ * (device-reported) filename: normalizes .hda -> .wav and resolves any
+ * filename collision by appending "-N" before the extension. Shared by
+ * saveRecording (buffer-based) and saveRecordingFromPath (move-based) so the
+ * naming/collision/.hda logic lives in exactly one place.
+ */
+export function resolveStoredPath(filename: string): string {
   const recordingsPath = getRecordingsPath()
 
   // Extract just the base filename without path
@@ -127,10 +141,19 @@ export async function saveRecording(
     }
   }
 
-  // Write the data as-is without modifications
-  const dataToWrite = data
+  return filePath
+}
 
-  writeFileSync(filePath, dataToWrite)
+export async function saveRecording(
+  filename: string,
+  data: Buffer,
+  _meetingSubject?: string,
+  originalDate?: Date
+): Promise<string> {
+  const filePath = resolveStoredPath(filename)
+
+  // Write the data as-is without modifications
+  writeFileSync(filePath, data)
 
   // Set the file's modification time to the original recording date
   // This ensures file explorer shows the correct date
@@ -143,6 +166,23 @@ export async function saveRecording(
   }
 
   return filePath
+}
+
+/**
+ * Move an already-written temp file (e.g. a completed device-sync partfile)
+ * into the recordings directory, reusing the same naming/collision/.hda->.wav
+ * resolution as saveRecording. Avoids buffering large device files in memory.
+ */
+export function saveRecordingFromPath(originalFilename: string, srcPath: string): string {
+  const dest = resolveStoredPath(originalFilename)
+  try {
+    renameSync(srcPath, dest)
+  } catch {
+    // Cross-device rename (e.g. tmp on a different filesystem) — fall back to copy+delete.
+    copyFileSync(srcPath, dest)
+    rmSync(srcPath, { force: true })
+  }
+  return dest
 }
 
 export async function saveTranscript(

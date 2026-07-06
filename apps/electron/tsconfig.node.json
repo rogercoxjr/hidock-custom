@@ -3,7 +3,8 @@
   "include": [
     "electron.vite.config.*",
     "electron/**/*",
-    "src/types/**/*"
+    "src/types/**/*",
+    "src/lib/electron-api/types-device-sync.ts"
   ],
   "exclude": [
     "electron/main/services/__tests__/benchmark.test.ts"
