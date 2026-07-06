@@ -38,7 +38,10 @@ export function makeKnowledgeGroup({ http }: KnowledgeDeps) {
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
-      return r.data as KnowledgeCapture[]
+      // GET /api/knowledge returns the pagination envelope {items,total}; unwrap
+      // .items. Guard null/empty bodies so callers always get an iterable array.
+      const body = r.data as { items?: KnowledgeCapture[]; total?: number } | null
+      return body?.items ?? []
     },
 
     async getById(id: string): Promise<KnowledgeCapture | null> {

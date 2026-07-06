@@ -225,11 +225,21 @@ describe('makeProjectsGroup', () => {
     grp = makeProjectsGroup({ http })
   })
 
-  it('getAll 2xx → {success:true, data}', async () => {
-    http.get.mockResolvedValueOnce(ok2xx({ projects: [{ id: 'p1' }], total: 1 }))
+  // Server returns {items,total} (GET /api/projects); the SDK must expose it as
+  // GetProjectsResponse {projects,total} — the shape the consumer reads.
+  it('getAll 2xx → {success:true, data:{projects,total}} (maps items→projects)', async () => {
+    http.get.mockResolvedValueOnce(ok2xx({ items: [{ id: 'p1' }], total: 1 }))
     const result = await grp.getAll()
     expect(result.success).toBe(true)
     expect((result as any).data.projects[0]).toEqual({ id: 'p1' })
+    expect((result as any).data.total).toBe(1)
+  })
+
+  it('getAll 2xx with null/empty body → {projects:[],total:0}', async () => {
+    http.get.mockResolvedValueOnce(ok2xx(null))
+    const result = await grp.getAll()
+    expect(result.success).toBe(true)
+    expect((result as any).data.projects).toEqual([])
   })
 
   it('getAll 4xx → {success:false, error: string}', async () => {
@@ -297,12 +307,19 @@ describe('makeKnowledgeGroup', () => {
     grp = makeKnowledgeGroup({ http })
   })
 
-  // RAW-THROW: getAll
-  it('getAll 2xx → bare KnowledgeCapture[]', async () => {
-    http.get.mockResolvedValueOnce(ok2xx([{ id: 'k1' }]))
+  // RAW-THROW: getAll — server returns the {items,total} pagination envelope;
+  // the SDK must unwrap .items (see GET /api/knowledge in routes/knowledge.ts).
+  it('getAll 2xx → bare KnowledgeCapture[] (unwraps .items)', async () => {
+    http.get.mockResolvedValueOnce(ok2xx({ items: [{ id: 'k1' }], total: 1 }))
     const result = await grp.getAll()
     expect(Array.isArray(result)).toBe(true)
     expect(result[0]).toEqual({ id: 'k1' })
+  })
+
+  it('getAll 2xx with null/empty body → []', async () => {
+    http.get.mockResolvedValueOnce(ok2xx(null))
+    const result = await grp.getAll()
+    expect(result).toEqual([])
   })
 
   it('getAll 4xx → throws', async () => {

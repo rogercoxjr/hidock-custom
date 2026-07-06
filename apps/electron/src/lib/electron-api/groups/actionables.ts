@@ -34,7 +34,10 @@ export function makeActionablesGroup({ http }: ActionablesDeps) {
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
-      return r.data as Actionable[]
+      // GET /api/actionables returns the pagination envelope {items,total};
+      // unwrap .items and guard null/empty bodies so callers get an array.
+      const body = r.data as { items?: Actionable[]; total?: number } | null
+      return body?.items ?? []
     },
 
     async getByMeeting(meetingId: string): Promise<Actionable[]> {

@@ -358,12 +358,19 @@ describe('makeActionablesGroup', () => {
     grp = makeActionablesGroup({ http })
   })
 
-  // RAW-THROW: getAll
-  it('getAll 2xx → bare Actionable[]', async () => {
-    http.get.mockResolvedValueOnce(ok2xx([{ id: 'a1', title: 'Task' }]))
+  // RAW-THROW: getAll — server returns the {items,total} envelope (GET
+  // /api/actionables); the SDK must unwrap .items.
+  it('getAll 2xx → bare Actionable[] (unwraps .items)', async () => {
+    http.get.mockResolvedValueOnce(ok2xx({ items: [{ id: 'a1', title: 'Task' }], total: 1 }))
     const result = await grp.getAll()
     expect(Array.isArray(result)).toBe(true)
     expect(result[0].id).toBe('a1')
+  })
+
+  it('getAll 2xx with null/empty body → []', async () => {
+    http.get.mockResolvedValueOnce(ok2xx(null))
+    const result = await grp.getAll()
+    expect(result).toEqual([])
   })
 
   it('getAll 4xx → throws', async () => {

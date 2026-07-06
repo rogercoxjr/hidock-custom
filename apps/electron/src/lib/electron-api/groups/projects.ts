@@ -38,7 +38,15 @@ export function makeProjectsGroup({ http }: ProjectsDeps) {
       if (!r.ok) {
         return { success: false, error: r.error ?? `HTTP ${r.status}` } as any
       }
-      return { success: true, data: r.data as GetProjectsResponse }
+      // GET /api/projects returns {items,total}; the consumer reads
+      // GetProjectsResponse {projects,total}. Map items→projects (tolerate the
+      // legacy 'projects' key too) and guard null/empty bodies.
+      const body = r.data as { items?: Project[]; projects?: Project[]; total?: number } | null
+      const data: GetProjectsResponse = {
+        projects: body?.items ?? body?.projects ?? [],
+        total: body?.total ?? 0,
+      }
+      return { success: true, data }
     },
 
     async getById(id: string): Promise<Result<ProjectWithMeetings>> {
