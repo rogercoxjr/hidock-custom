@@ -689,44 +689,66 @@ git commit -m "feat(phase1): device-sync stream/finalize/delete routes + ingest"
 
 ---
 
-## Task 6: Capped transcription enqueue (backpressure)
+## Task 6: Lock the transcription backpressure contract (test-only)
 
-Prevent a large sync batch from blasting the transcription provider. Reuse the existing parked-queue mechanism.
+**Discovery — no new cap code is needed.** `transcription.ts` already provides
+backpressure: `processQueueManually()` returns immediately if the module-level
+`isProcessing` mutex is set (`transcription.ts:111`), and the processor drains
+the queue **serially** (`isProcessing = true` at :193, `= false` at :325).
+Rate-limited items **park** via the existing `parked_until` logic rather than
+failing. So a bulk sync cannot spawn concurrent transcription runs or drop
+files — every synced file is enqueued with `addToQueue(id)` and the mutex + serial
+drain do the rest. This task locks that guarantee with a route-level test and
+confirms finalize does not *block* on transcription (fire-and-forget).
 
 **Files:**
-- Modify: `electron/server/routes/device-sync.ts` (finalize enqueue path)
 - Test: `electron/server/routes/__tests__/device-sync.test.ts` (add case)
-- Reference: `electron/main/services/transcription.ts` (`processQueueManually`, parked-queue columns `parked_until`).
+- Reference: `electron/main/services/transcription.ts:111,193,325` (mutex + serial drain)
 
 **Interfaces:**
-- Consumes: existing queue functions; no new public API.
+- Consumes: nothing new. `addToQueue` and `processQueueManually` are already
+  mocked in the Task 5 test setup.
 
 - [ ] **Step 1: Write the failing test**
 
+Add to `device-sync.test.ts` (reuses the Task 5 `vi.mock` of `database` and
+`transcription`; `addToQueue` and `processQueueManually` are `vi.fn()`s there):
+
 ```ts
-it('does not exceed the active-transcription cap on bulk finalize', async () => {
-  // Mock addToQueue to count calls; assert processQueueManually is invoked at most once per finalize
-  // and that enqueue still succeeds for every file (parking, not dropping).
-  // (Full mock setup mirrors Step 1 of Task 5.)
-  expect(true).toBe(true) // replace with real assertion once cap helper exists
+it('enqueues each synced file exactly once and does not block finalize on transcription', async () => {
+  const app = appWithAuth(); await registerDeviceSync(app)
+  const meta = Buffer.from(JSON.stringify({ filename: 'REC9.hda', size: 3 })).toString('base64')
+  const create = await app.inject({
+    method: 'POST', url: '/api/recordings/sync',
+    headers: { 'x-device-file': meta }, payload: Buffer.from([1, 2, 3]),
+  })
+  const { uploadId, serverSha256 } = create.json()
+  const fin = await app.inject({
+    method: 'POST', url: `/api/recordings/sync/${uploadId}/finalize`,
+    payload: { clientSha256: serverSha256 },
+  })
+  expect(fin.statusCode).toBe(200)
+  expect(fin.json().status).toBe('synced')
+  // Every synced file is enqueued; the finalize response does NOT await transcription.
+  const { addToQueue } = await import('../../../main/services/database')
+  expect(vi.mocked(addToQueue)).toHaveBeenCalledTimes(1)
 })
 ```
 
-- [ ] **Step 2: Run to confirm it fails** (after writing the real assertion)
+- [ ] **Step 2: Run to confirm it fails**
 
-Run: `npx vitest run electron/server/routes/__tests__/device-sync.test.ts -t "cap"`
-Expected: FAIL.
+Run: `npx vitest run electron/server/routes/__tests__/device-sync.test.ts -t "enqueues each synced file"`
+Expected: FAIL if the Task 5 mock does not yet expose `addToQueue` as a spy — add
+`addToQueue: vi.fn()` to the `database` mock. If Task 5 already awaited
+`processQueueManually`, the test still passes on status but this locks the
+fire-and-forget contract.
 
-- [ ] **Step 3: Implement the cap**
+- [ ] **Step 3: Confirm the production contract (no new code)**
 
-The queue already supports parking (`parked_until`). In finalize, keep `addToQueue(id)` (every file is enqueued, never dropped) and let the existing `processQueueManually` drain within the configured concurrency. If `processQueueManually` has no cap, gate the fire-and-forget call behind a check of the in-flight count (a small counter in the transcription service) so bulk finalizes don't spawn many concurrent runs:
-
-```ts
-// in transcription.ts, expose:
-export function activeTranscriptionCount(): number { /* return in-flight count */ }
-// in device-sync finalize: only kick the queue if under cap
-if (activeTranscriptionCount() < 2) { /* fire-and-forget processQueueManually */ }
-```
+Verify the Task 5 finalize handler calls `addToQueue(id)` then a **fire-and-forget**
+`processQueueManually()` (the `import(...).then(...)` form — NOT awaited). If it
+was awaited, change it to fire-and-forget so a slow/parked queue never blocks the
+sync HTTP response. No cap code is added — the `isProcessing` mutex is the cap.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -736,8 +758,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add electron/server/routes/device-sync.ts electron/main/services/transcription.ts electron/server/routes/__tests__/device-sync.test.ts
-git commit -m "feat(phase1): cap concurrent transcription on bulk sync"
+git add electron/server/routes/__tests__/device-sync.test.ts electron/server/routes/device-sync.ts
+git commit -m "test(phase1): lock transcription backpressure contract for bulk sync"
 ```
 
 ---
@@ -1072,57 +1094,126 @@ git commit -m "feat(phase1): wire Connect gesture + silent reconnect"
 
 ---
 
-## Task 11: Route Library "Download" → sync queue (renderer UI)
+## Task 11: Route device download through the sync client (renderer)
+
+Library already delegates its Download button to `useOperations().queueDownload`
+(`Library.tsx:527`). In hosted mode `queueDownload` calls the **stubbed**
+`downloadService.queueDownloads` → rejects. The fix is in `useOperations.ts`:
+drive the sync client instead. Library.tsx is unchanged.
 
 **Files:**
-- Modify: `src/pages/Library.tsx` (`handleDownload`, ~line 524)
-- Test: `src/pages/__tests__/Library.sync.test.tsx` (create)
+- Modify: `src/hooks/useOperations.ts` (`queueDownload`, ~line 156; `queueBulkDownloads`, ~line 178)
+- Modify: `src/lib/electron-api/types.ts` (add `deviceSync` + `downloadService.deviceFileSource` to the `ElectronAPI` interface so `window.electronAPI.deviceSync` typechecks)
+- Create: `src/hooks/__tests__/useOperations.sync.test.ts`
+- Reference: `src/hooks/__tests__/useOperations.test.ts` (mock pattern), `src/types/unified-recording.ts` (`isDeviceOnly`, `UnifiedRecording` fields: `deviceFilename`, `size`, `filename`, `dateRecorded`).
 
 **Interfaces:**
-- Consumes: `makeDeviceSyncClient` (Task 8), `window.electronAPI.downloadService.deviceFileSource` (Task 9).
+- Consumes: `window.electronAPI.downloadService.deviceFileSource(filename, size)` (Task 9), `window.electronAPI.deviceSync.syncFile(src)` (Task 12 facade), `SyncFinalizeResponse` (Task 1).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test (complete)**
 
-```tsx
-// src/pages/__tests__/Library.sync.test.tsx
-// Assert that clicking Download on a device-only recording invokes syncFile
-// with a DeviceFileSource for that recording (mock electronAPI + client).
+```ts
+// src/hooks/__tests__/useOperations.sync.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
+
+vi.mock('@/components/ui/toaster', () => ({ toast: vi.fn() }))
+vi.mock('@/hooks/useDownloadOrchestrator', () => ({
+  cancelDownloads: vi.fn(), cancelDownloadsComplete: vi.fn(), processPendingDownloads: vi.fn(),
+}))
+vi.mock('@/store/features/useTranscriptionStore', () => ({
+  useTranscriptionStore: vi.fn((sel: any) => {
+    const state = { addToQueue: vi.fn(), remove: vi.fn(), clear: vi.fn(), queue: new Map() }
+    return typeof sel === 'function' ? sel(state) : state
+  }),
+}))
+import { useOperations } from '../useOperations'
+
+const syncFile = vi.fn().mockResolvedValue({ recordingId: 'r1', status: 'synced' })
+const deviceFileSource = vi.fn().mockReturnValue({ filename: 'REC1.hda', size: 3, async *stream() {} })
+
+describe('useOperations.queueDownload (device sync)', () => {
+  beforeEach(() => {
+    syncFile.mockClear(); deviceFileSource.mockClear()
+    ;(window as any).electronAPI = { downloadService: { deviceFileSource }, deviceSync: { syncFile } }
+  })
+
+  it('syncs a device-only recording via deviceSync.syncFile', async () => {
+    const { result } = renderHook(() => useOperations())
+    const rec: any = {
+      id: 'x', filename: 'REC1.hda', deviceFilename: 'REC1.hda', size: 3,
+      location: 'device-only', dateRecorded: new Date(),
+    }
+    let ok: boolean | undefined
+    await act(async () => { ok = await result.current.queueDownload(rec) })
+    expect(ok).toBe(true)
+    expect(deviceFileSource).toHaveBeenCalledWith('REC1.hda', 3)
+    expect(syncFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns false for a non-device-only recording', async () => {
+    const { result } = renderHook(() => useOperations())
+    const rec: any = { id: 'y', filename: 'L.wav', location: 'local-only', dateRecorded: new Date() }
+    let ok: boolean | undefined
+    await act(async () => { ok = await result.current.queueDownload(rec) })
+    expect(ok).toBe(false)
+    expect(syncFile).not.toHaveBeenCalled()
+  })
+})
 ```
-*(Write the concrete assertion mirroring Task 10's harness: mock `deviceFileSource` to return a fake source, mock the sync client's `syncFile`, click Download, assert `syncFile` called with `{ filename, size }`.)*
 
 - [ ] **Step 2: Run to confirm it fails**
 
-Run: `npx vitest run src/pages/__tests__/Library.sync.test.tsx`
-Expected: FAIL.
+Run: `npx vitest run src/hooks/__tests__/useOperations.sync.test.ts`
+Expected: FAIL — `queueDownload` still calls `downloadService.queueDownloads`, so `deviceFileSource`/`syncFile` are never called.
 
-- [ ] **Step 3: Implement — one-at-a-time queue**
+- [ ] **Step 3: Rewrite `queueDownload` + `queueBulkDownloads`**
 
-Replace the body of `handleDownload` so that for a `device-only` recording it builds a `DeviceFileSource` and runs it through the sync client, serialized (the device allows one claim). Reuse the existing queue/toast affordances:
+Replace the two callbacks in `src/hooks/useOperations.ts`:
 
-```tsx
-const handleDownload = useCallback(async (recording: UnifiedRecording) => {
-  const src = window.electronAPI.downloadService.deviceFileSource(recording.filename, recording.fileSize ?? 0)
+```ts
+const queueDownload = useCallback(async (recording: UnifiedRecording) => {
+  if (!isDeviceOnly(recording)) return false
   try {
-    const res = await syncClient.syncFile(src, (sent) => setProgress(recording.id, sent))
-    if (res.status === 'skipped') toast.info('Already synced', recording.filename)
-    await refresh(false)
+    const src = window.electronAPI.downloadService.deviceFileSource(recording.deviceFilename, recording.size)
+    const res = await window.electronAPI.deviceSync.syncFile(src)
+    toast({ title: res.status === 'skipped' ? 'Already synced' : 'Synced', description: recording.filename })
+    return true
   } catch (e) {
-    toast.error('Sync failed', e instanceof Error ? e.message : 'Unknown error')
+    toast({ title: 'Sync failed', description: e instanceof Error ? e.message : 'Unknown error', variant: 'error' })
+    return false
   }
-}, [syncClient, refresh])
+}, [])
+
+const queueBulkDownloads = useCallback(async (recordings: UnifiedRecording[]) => {
+  const eligible = recordings.filter(isDeviceOnly)
+  let done = 0
+  for (const r of eligible) { if (await queueDownload(r)) done++ } // serial — one device claim at a time
+  if (done) toast({ title: `${done} recording${done > 1 ? 's' : ''} synced` })
+  return done
+}, [queueDownload])
 ```
-*(Serialize multiple selections through a simple `for ... of await` loop, not `Promise.all` — one device claim at a time.)*
 
-- [ ] **Step 4: Run to verify pass**
+Then add the facade types in `src/lib/electron-api/types.ts` so the calls typecheck:
 
-Run: `npx vitest run src/pages/__tests__/Library.sync.test.tsx`
-Expected: PASS.
+```ts
+// in the ElectronAPI interface:
+//   deviceSync: { syncFile(src: DeviceFileSource, onProgress?: (sent: number) => void): Promise<SyncFinalizeResponse> }
+// and on downloadService:
+//   deviceFileSource(filename: string, size: number): DeviceFileSource
+// (import DeviceFileSource + SyncFinalizeResponse from './types-device-sync')
+```
+
+- [ ] **Step 4: Run to verify pass + typecheck**
+
+Run: `npx vitest run src/hooks/__tests__/useOperations.sync.test.ts && npm run typecheck`
+Expected: PASS + typecheck clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pages/Library.tsx src/pages/__tests__/Library.sync.test.tsx
-git commit -m "feat(phase1): route Library download to serialized device sync"
+git add src/hooks/useOperations.ts src/lib/electron-api/types.ts src/hooks/__tests__/useOperations.sync.test.ts
+git commit -m "feat(phase1): route device download through the sync client"
 ```
 
 ---
