@@ -19,7 +19,6 @@ import {
   markRecordingDownloaded,
   addSyncedFile,
   addToQueue,
-  isFileSynced,
   getRecordingByFilename,
   getSyncedFilenames,
   queryOne,
@@ -33,7 +32,8 @@ import { saveRecording, getRecordingsPath } from './file-storage'
 import { emitActivityLog } from './activity-log'
 import { getConfig } from './config'
 import { existsSync } from 'fs'
-import { join, basename } from 'path'
+import { basename } from 'path'
+import { isFileAlreadySynced as reconcileIsSynced, normalizeFilename as reconcileNormalize } from './sync-reconcile'
 
 // Download queue item
 // C-004: Added 'cancelled' status to distinguish user cancellations from actual failures
@@ -93,14 +93,6 @@ class DownloadService {
    */
   private markDirty(): void {
     this.dirty = true
-  }
-
-  /**
-   * B-DWN-003: Normalize .hda filenames to .mp3 extension
-   * HiDock devices output .hda files which are actually MP3 format
-   */
-  static normalizeFilename(filename: string): string {
-    return filename.replace(/\.hda$/i, '.mp3')
   }
 
   /**
@@ -238,54 +230,13 @@ class DownloadService {
    * Check if a file needs to be downloaded
    * Reconciles database, synced_files table, and actual files on disk
    * C-004: Also checks .mp3 normalized name (B-DWN-003 normalizes .hda->.mp3)
+   *
+   * Delegates to the server-safe sync-reconcile module (extracted so the same
+   * reconciliation logic can run in the hosted Fastify server, which has no
+   * electron in its boot path).
    */
   isFileAlreadySynced(filename: string): { synced: boolean; reason: string } {
-    // Check 1: Is it in synced_files table?
-    if (isFileSynced(filename)) {
-      return { synced: true, reason: 'In synced_files table' }
-    }
-
-    // Check 2: Convert .hda to .wav and check both (legacy format)
-    const wavFilename = filename.replace(/\.hda$/i, '.wav')
-    if (wavFilename !== filename && isFileSynced(wavFilename)) {
-      return { synced: true, reason: 'WAV version in synced_files' }
-    }
-
-    // C-004: Check 2b: Also check .mp3 normalized name (B-DWN-003 normalizes .hda->.mp3)
-    const mp3Filename = DownloadService.normalizeFilename(filename)
-    if (mp3Filename !== filename && mp3Filename !== wavFilename && isFileSynced(mp3Filename)) {
-      return { synced: true, reason: 'MP3 version in synced_files' }
-    }
-
-    // Check 3: Check if file exists on disk (check wav and mp3 variants)
-    const recordingsPath = getRecordingsPath()
-    const filePath = join(recordingsPath, wavFilename)
-    if (existsSync(filePath)) {
-      // File exists but not in synced_files - add it!
-      console.log(`[DownloadService] Found orphaned file on disk: ${wavFilename}, adding to synced_files`)
-      addSyncedFile(filename, wavFilename, filePath)
-      return { synced: true, reason: 'File exists on disk (reconciled)' }
-    }
-    // C-004: Also check mp3 variant on disk
-    if (mp3Filename !== filename && mp3Filename !== wavFilename) {
-      const mp3Path = join(recordingsPath, mp3Filename)
-      if (existsSync(mp3Path)) {
-        console.log(`[DownloadService] Found orphaned MP3 file on disk: ${mp3Filename}, adding to synced_files`)
-        addSyncedFile(filename, mp3Filename, mp3Path)
-        return { synced: true, reason: 'MP3 file exists on disk (reconciled)' }
-      }
-    }
-
-    // Check 4: Check recordings table
-    const recording = getRecordingByFilename(filename) || getRecordingByFilename(wavFilename)
-    if (recording && recording.file_path && existsSync(recording.file_path)) {
-      // Recording exists with valid file path
-      console.log(`[DownloadService] Found in recordings table: ${filename}`)
-      addSyncedFile(filename, basename(recording.file_path), recording.file_path)
-      return { synced: true, reason: 'In recordings table with valid file' }
-    }
-
-    return { synced: false, reason: 'Not found anywhere' }
+    return reconcileIsSynced(filename)
   }
 
   /**
@@ -386,7 +337,7 @@ class DownloadService {
 
     for (const file of files) {
       // B-DWN-003: Normalize .hda filenames to .mp3
-      const normalizedFilename = DownloadService.normalizeFilename(file.filename)
+      const normalizedFilename = reconcileNormalize(file.filename)
 
       // spec-007: Check database for existing queue entry (check both original and normalized)
       const existingInDb = queryOne<{ id: string; status: string }>(
@@ -1078,7 +1029,7 @@ class DownloadService {
 /**
  * B-DWN-003: Normalize .hda filenames to .mp3 extension (exported for testing)
  */
-export const normalizeHdaFilename = DownloadService.normalizeFilename
+export const normalizeHdaFilename = reconcileNormalize
 
 // Singleton instance
 let downloadServiceInstance: DownloadService | null = null
