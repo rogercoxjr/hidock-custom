@@ -40,18 +40,14 @@ describe('config contract', () => {
     expect(result.data.calendar.syncIntervalMinutes).toBe(30)
   })
 
-  // KNOWN CONTRACT BUG (found by this harness): config.getValue()'s own doc comment
-  // classifies it as "RAW-THROW; bare value" (groups/config.ts header), and callers would
-  // reasonably expect `getValue('calendar')` to resolve directly to the calendar config
-  // object. The actual route (electron/server/routes/config.ts `GET /api/config?key=`)
-  // returns `{ key, value }` — the SDK method returns that envelope unmodified instead of
-  // unwrapping `.value`. No renderer call site currently exists for `config.getValue`, so
-  // this hasn't shipped a visible bug yet, but the shape is wrong relative to its own
-  // documented contract.
-  it('getValue returns a {key,value} envelope, not the documented bare value', async () => {
+  // Fixed contract bug: config.getValue()'s own doc comment classifies it as "RAW-THROW;
+  // bare value" (groups/config.ts header), so `getValue('calendar')` should resolve directly
+  // to the calendar config object. The route (electron/server/routes/config.ts
+  // `GET /api/config?key=`) returns `{ key, value }`; the group now unwraps `.value` before
+  // returning it to callers.
+  it('getValue returns the documented bare value, not a {key,value} envelope', async () => {
     const result = await grp.getValue('calendar')
-    expect(result).toHaveProperty('value')
-    expect(result).not.toHaveProperty('syncIntervalMinutes')
-    expect(result.value).toHaveProperty('syncIntervalMinutes')
+    expect(result).not.toHaveProperty('value')
+    expect(result).toHaveProperty('syncIntervalMinutes')
   })
 })

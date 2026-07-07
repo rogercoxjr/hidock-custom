@@ -67,20 +67,19 @@ describe('quality contract', () => {
     expect(typeof result.assessed).toBe('number')
   })
 
-  // KNOWN CONTRACT BUG (found by this harness): quality.getByQuality() calls
-  // `GET /api/recordings?quality=<level>`, but electron/server/routes/recordings.ts's `listQ`
-  // zod schema does not declare a `quality` field at all — zod silently strips it, so the
-  // route ignores the filter entirely and returns the FULL unfiltered `{items,total}`
-  // pagination envelope instead of an array of recordings matching `quality`. The route's own
-  // comment confirms this is known/intentional-for-now: "recordings-by-quality is provided by
-  // the 0c-4 quality domain (needs the knowledge_captures join); not a recordings column."
-  // This test documents the actual (buggy) behavior rather than the SDK's promised contract;
-  // see the harness report for the recommended fix.
-  it('getByQuality does NOT filter and returns the pagination envelope, not a bare array', async () => {
+  // Fixed contract bug: quality.getByQuality() calls `GET /api/recordings?quality=<level>`.
+  // electron/server/routes/recordings.ts's `listQ` zod schema now declares a `quality` field
+  // and, when present, sources rows from `getRecordingsByQuality()` (the existing
+  // recordings⋈quality_assessments join in database.ts) instead of the unfiltered
+  // `getRecordings()`. The SDK group now also unwraps `.items` from the route's
+  // `{items,total}` pagination envelope, so callers get the bare, filtered array their
+  // `Promise<any>` (recording-list) return type implies.
+  it('getByQuality filters by quality and returns a bare array', async () => {
     await grp.set(recId, 'high')
     const { insertRecording } = await import('../../../../electron/main/services/database')
+    const lowId = 'rec-quality-2-low'
     insertRecording({
-      id: 'rec-quality-2-low',
+      id: lowId,
       filename: 'q2.hda',
       file_path: null,
       date_recorded: '2024-01-02T10:00:00Z',
@@ -92,13 +91,11 @@ describe('quality contract', () => {
       source: 'hidock',
       is_imported: 0
     })
+    await grp.set(lowId, 'low')
 
     const result = await grp.getByQuality('high')
-    // What the SDK's return type (Promise<any>, meant to be a recording list) implies callers
-    // expect: a bare array containing only the 'high' recording.
-    // What actually comes back: the unfiltered {items,total} envelope with BOTH recordings.
-    expect(Array.isArray(result)).toBe(false)
-    expect(result.items).toHaveLength(2)
-    expect(result.total).toBe(2)
+    expect(Array.isArray(result)).toBe(true)
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe(recId)
   })
 })

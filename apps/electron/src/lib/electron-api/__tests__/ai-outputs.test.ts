@@ -761,10 +761,11 @@ describe('makeQualityGroup', () => {
     await expect(grp.autoAssess('r1')).rejects.toThrow('Error')
   })
 
+  // Route GET /api/recordings?quality= returns {items,total}; the group unwraps to the array.
   it('getByQuality 2xx → bare any', async () => {
-    http.get.mockResolvedValueOnce(ok2xx({ items: [{ id: 'r1' }] }))
+    http.get.mockResolvedValueOnce(ok2xx({ items: [{ id: 'r1' }], total: 1 }))
     const result = await grp.getByQuality('high')
-    expect(result.items[0].id).toBe('r1')
+    expect(result[0].id).toBe('r1')
   })
 
   it('getByQuality 4xx → throws', async () => {

@@ -177,9 +177,9 @@ describe('makeConfigGroup', () => {
     expect(err?.details).toEqual({ provider: 'Invalid' })
   })
 
-  // RAW-THROW: getValue
+  // RAW-THROW: getValue — route returns {key,value}; the group unwraps to the bare value.
   it('getValue 2xx → bare value', async () => {
-    http.get.mockResolvedValueOnce(ok2xx('dark'))
+    http.get.mockResolvedValueOnce(ok2xx({ key: 'theme', value: 'dark' }))
     const result = await grp.getValue('theme')
     expect(result).toBe('dark')
   })

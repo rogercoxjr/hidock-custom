@@ -55,7 +55,7 @@ export function makeQualityGroup({ http }: QualityDeps) {
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
-      return r.data
+      return (r.data as { items: unknown[] }).items
     },
 
     async batchAutoAssess(recordingIds: string[]): Promise<any> {

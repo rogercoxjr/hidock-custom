@@ -550,8 +550,9 @@ describe('makeCalendarGroup', () => {
     await expect(grp.clearAndSync()).rejects.toThrow('Error')
   })
 
+  // Route GET /api/calendar/last-sync returns {lastSyncAt}; the group unwraps to the bare value.
   it('getLastSync 2xx → string|null', async () => {
-    http.get.mockResolvedValueOnce(ok2xx('2026-01-01T00:00:00Z'))
+    http.get.mockResolvedValueOnce(ok2xx({ lastSyncAt: '2026-01-01T00:00:00Z' }))
     const result = await grp.getLastSync()
     expect(typeof result).toBe('string')
   })

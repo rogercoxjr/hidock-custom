@@ -38,25 +38,22 @@ describe('calendar contract', () => {
     expect(result).toHaveProperty('syncEnabled')
   })
 
-  // KNOWN CONTRACT BUG (found by this harness): calendar.getLastSync()'s signature promises
-  // `Promise<string | null>` (a bare value), but `GET /api/calendar/last-sync` returns
-  // `{ lastSyncAt: string | null }`. The group returns `r.data` unmodified — callers get the
-  // wrapper object, not the string/null they were promised.
-  it('getLastSync returns a {lastSyncAt} envelope, not the documented bare string|null', async () => {
+  // Fixed contract bug: calendar.getLastSync()'s signature promises `Promise<string | null>`
+  // (a bare value). `GET /api/calendar/last-sync` returns `{ lastSyncAt: string | null }`,
+  // and the group now unwraps `.lastSyncAt` before returning it to callers.
+  it('getLastSync returns the documented bare string|null, not a {lastSyncAt} envelope', async () => {
     const result = await grp.getLastSync()
-    expect(result).not.toBeNull()
-    expect((result as unknown as { lastSyncAt: string | null }).lastSyncAt).toBeNull()
+    expect(result).toBeNull()
   })
 
-  // KNOWN CONTRACT BUG (found by this harness): setUrl() PATCHes `{ url }`, but
-  // electron/server/routes/calendar.ts's `patchSettingsBody` zod schema only recognizes
-  // `icsUrl` / `syncEnabled` / `syncIntervalMinutes`. `url` is silently stripped by zod, none
-  // of the three recognized fields end up set, and the schema's `.refine()` (at least one
-  // field required) rejects the body with 400 — so this method ALWAYS throws, unconditionally,
-  // for every caller. Compare with the correctly-wired `toggleAutoSync()` below, which sends
-  // the right key (`syncEnabled`) and works.
-  it('setUrl sends the wrong body key ("url" instead of "icsUrl") and always 400s', async () => {
-    await expect(grp.setUrl('https://example.com/calendar.ics')).rejects.toThrow()
+  // Fixed contract bug: setUrl() now PATCHes `{ icsUrl }`, matching
+  // electron/server/routes/calendar.ts's `patchSettingsBody` zod schema (`icsUrl` /
+  // `syncEnabled` / `syncIntervalMinutes`). Previously it sent `{ url }`, which zod silently
+  // stripped, leaving no recognized field set and the `.refine()` (at least one field
+  // required) rejecting the body with 400 on every call.
+  it('setUrl sends the correct body key ("icsUrl") and updates the settings', async () => {
+    const result = await grp.setUrl('https://example.com/calendar.ics')
+    expect(result.icsUrl).toBe('https://example.com/calendar.ics')
   })
 
   it('toggleAutoSync updates syncEnabled and returns the updated settings', async () => {
@@ -64,10 +61,11 @@ describe('calendar contract', () => {
     expect(result.syncEnabled).toBe(false)
   })
 
-  // KNOWN CONTRACT BUG (found by this harness): same class of bug as `setUrl()` — setInterval()
-  // PATCHes `{ interval: minutes }`, but the route schema's field is `syncIntervalMinutes`.
-  // `interval` is stripped, no recognized field is set, and the request 400s every time.
-  it('setInterval sends the wrong body key ("interval" instead of "syncIntervalMinutes") and always 400s', async () => {
-    await expect(grp.setInterval(45)).rejects.toThrow()
+  // Fixed contract bug: setInterval() now PATCHes `{ syncIntervalMinutes }`, matching the
+  // route schema's field name. Previously it sent `{ interval: minutes }`, which zod
+  // silently stripped, leaving no recognized field set and the request 400ing every time.
+  it('setInterval sends the correct body key ("syncIntervalMinutes") and updates the settings', async () => {
+    const result = await grp.setInterval(45)
+    expect(result.syncIntervalMinutes).toBe(45)
   })
 })

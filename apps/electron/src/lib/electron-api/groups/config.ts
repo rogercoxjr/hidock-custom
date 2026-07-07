@@ -74,7 +74,7 @@ export function makeConfigGroup({ http }: ConfigDeps) {
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
-      return r.data
+      return (r.data as { value: unknown }).value
     },
   }
 }

@@ -34,11 +34,11 @@ export function makeCalendarGroup({ http }: CalendarDeps) {
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
-      return r.data as string | null
+      return (r.data as { lastSyncAt: string | null }).lastSyncAt
     },
 
     async setUrl(url: string): Promise<any> {
-      const r = await http.patch('/api/calendar/settings', { url })
+      const r = await http.patch('/api/calendar/settings', { icsUrl: url })
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
@@ -54,7 +54,7 @@ export function makeCalendarGroup({ http }: CalendarDeps) {
     },
 
     async setInterval(minutes: number): Promise<any> {
-      const r = await http.patch('/api/calendar/settings', { interval: minutes })
+      const r = await http.patch('/api/calendar/settings', { syncIntervalMinutes: minutes })
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }

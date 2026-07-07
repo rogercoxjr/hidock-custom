@@ -6,6 +6,7 @@ import { statSync, existsSync } from 'fs'
 import {
   getRecordings,
   getRecordingById,
+  getRecordingsByQuality,
   getTranscriptByRecordingId,
   updateRecordingStatus,
   updateRecordingTranscriptionStatus,
@@ -25,7 +26,8 @@ const ALLOWED_AUDIO_EXTENSIONS = new Set(['.mp3', '.m4a', '.wav', '.ogg', '.flac
 const listQ = z.object({
   limit: z.coerce.number().int().positive().max(1000).default(200),
   offset: z.coerce.number().int().min(0).default(0),
-  status: z.string().optional()
+  status: z.string().optional(),
+  quality: z.enum(['high', 'medium', 'low']).optional()
 })
 
 const patchBody = z.object({
@@ -54,9 +56,10 @@ const nearDateQ = z.object({
 export async function registerRecordings(app: FastifyInstance): Promise<void> {
   app.get('/api/recordings', { preHandler: [app.requireAuth] }, async (req) => {
     const q = listQ.parse(req.query)
-    let rows = getRecordings()
+    // quality filtering joins recordings to quality_assessments (0c-4 quality domain);
+    // getRecordingsByQuality() already does this join, so use it as the base set when requested.
+    let rows = q.quality ? getRecordingsByQuality(q.quality) : getRecordings()
     if (q.status) rows = rows.filter((r) => r.status === q.status)
-    // recordings-by-quality is provided by the 0c-4 quality domain (needs the knowledge_captures join); not a recordings column.
     return { items: rows.slice(q.offset, q.offset + q.limit), total: rows.length }
   })
 
