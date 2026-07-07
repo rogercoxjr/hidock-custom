@@ -251,6 +251,36 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     })
   })
 
+  it('shows an error toast when every file fails to sync (not a false "nothing to sync")', async () => {
+    const size = 1024
+    vi.mocked(useUnifiedRecordings).mockReturnValue({
+      recordings: makeDeviceRecordings(3, size),
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    } as any)
+    mockGetFilesToSync.mockResolvedValue(filesToSyncResult(3, size))
+    // Every file in the non-empty list fails (e.g. server unreachable) → syncDeviceFiles
+    // resolves 0. That must surface as a total-failure error, not a benign no-op.
+    mockSyncFile.mockRejectedValue(new Error('Server unreachable'))
+
+    renderDevice()
+    await clickSync()
+
+    await waitFor(() => {
+      expect(mockSyncFile).toHaveBeenCalledTimes(3)
+    })
+
+    const { toast } = await import('@/components/ui/toaster')
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Sync failed', variant: 'error' })
+      )
+    })
+    // Must NOT report this as a no-op success.
+    expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Nothing to sync' }))
+  })
+
   it('does NOT sync any files when there is nothing to sync', async () => {
     const size = 50 * 1024 * 1024
     vi.mocked(useUnifiedRecordings).mockReturnValue({

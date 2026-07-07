@@ -469,8 +469,8 @@ export function Device() {
 
   // Auto-pipeline P5 fix (Defect 1): the queue-and-refresh body, extracted so
   // the large-batch confirmation can defer it until the user confirms. Owns the
-  // deviceSyncing lifecycle (set true here, cleared on the no-op/error paths and
-  // by the download orchestrator once downloads actually run).
+  // deviceSyncing lifecycle (set true here, cleared unconditionally in the
+  // `finally` below once syncDeviceFiles settles, success or failure).
   const performSync = async (
     files: Array<{ filename: string; size: number; dateCreated?: string }>
   ) => {
@@ -486,17 +486,33 @@ export function Device() {
       // may still have synced some files).
       await refreshSyncedFilenames()
 
-      if (synced > 0) {
+      if (files.length === 0) {
+        // Benign no-op: caller passed an empty list, nothing to report.
+        toast({
+          title: 'Nothing to sync',
+          description: 'All files are already synced',
+          variant: 'default'
+        })
+      } else if (synced === files.length) {
         toast({
           title: 'Sync complete',
           description: `Synced ${synced} recording${synced !== 1 ? 's' : ''}`,
           variant: 'default'
         })
-      } else {
+      } else if (synced > 0) {
         toast({
-          title: 'Nothing to sync',
-          description: 'All files are already synced',
+          title: 'Sync partially complete',
+          description: `Synced ${synced} of ${files.length}; the rest failed`,
           variant: 'default'
+        })
+      } else {
+        // synced === 0 with a non-empty input: every file failed (e.g. server
+        // unreachable). Per-file errors are logged via console.error elsewhere;
+        // surface the aggregate failure to the user instead of a false no-op.
+        toast({
+          title: 'Sync failed',
+          description: 'No recordings were downloaded',
+          variant: 'error'
         })
       }
     } catch (e) {
