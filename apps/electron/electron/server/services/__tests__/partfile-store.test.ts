@@ -29,13 +29,11 @@ describe('partfile-store', () => {
     const p = createPart()
     const a = new Uint8Array([1, 2, 3]); const b = new Uint8Array([4, 5])
     p.write(a); p.write(b)
-    const r = p.finish()
+    const r = await p.finish()
     const expected = createHash('sha256').update(Buffer.concat([Buffer.from(a), Buffer.from(b)])).digest('hex')
     expect(r.sha256).toBe(expected)
     expect(r.bytes).toBe(5)
 
-    // Wait a tick to ensure stream finishes before cleanup
-    await new Promise((resolve) => setImmediate(resolve))
     deletePart(p.uploadId)
   })
 })

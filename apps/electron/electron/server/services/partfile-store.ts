@@ -13,7 +13,7 @@ function partsDir(): string {
 export function createPart(): {
   uploadId: string
   write: (chunk: Uint8Array) => void
-  finish: () => { sha256: string; bytes: number; path: string }
+  finish: () => Promise<{ sha256: string; bytes: number; path: string }>
 } {
   const uploadId = randomUUID()
   const path = join(partsDir(), `${uploadId}.part`)
@@ -23,7 +23,12 @@ export function createPart(): {
   return {
     uploadId,
     write(chunk) { hash.update(chunk); bytes += chunk.length; ws.write(Buffer.from(chunk)) },
-    finish() { ws.end(); return { sha256: hash.digest('hex'), bytes, path } },
+    finish() {
+      return new Promise((resolve, reject) => {
+        ws.on('error', reject)
+        ws.end(() => resolve({ sha256: hash.digest('hex'), bytes, path }))
+      })
+    },
   }
 }
 
