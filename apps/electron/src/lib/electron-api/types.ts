@@ -36,6 +36,7 @@ import type {
   Conversation,
   Message,
 } from '../../types/knowledge'
+import type { DeviceFileSource, SyncFinalizeResponse } from './types-device-sync'
 
 // Re-export imported types so consumers of this module get a single import point.
 export type {
@@ -496,6 +497,8 @@ export interface ElectronAPI {
     getFilesToSync: (files: Array<{ filename: string; size: number; duration: number; dateCreated: string | Date }>, opts?: { auto?: boolean; deviceSerial?: string }) => Promise<Array<{ filename: string; size: number; duration: number; dateCreated: string | Date; skipReason?: string }>>
     ensureBaseline: (deviceSerial: string, filenames: string[]) => Promise<{ created: boolean }>
     queueDownloads: (files: Array<{ filename: string; size: number; dateCreated?: string }>) => Promise<string[]>
+    /** Task 9: builds a streamable device-file source (SEAM 1) for the device sync client. */
+    deviceFileSource: (filename: string, size: number) => DeviceFileSource
     startSession: (files: Array<{ filename: string; size: number; dateCreated?: string }>) => Promise<{
       id: string
       totalFiles: number
@@ -516,6 +519,11 @@ export interface ElectronAPI {
     cancelPendingDownloads: () => Promise<number>
     notifyCompletion: (stats: { completed: number; failed: number; aborted: boolean }) => Promise<void>
     onStateUpdate: (callback: (state: any) => void) => () => void
+  }
+
+  // Device Sync Client (Task 12 facade) — streams a DeviceFileSource to the hosted-hub server.
+  deviceSync: {
+    syncFile: (src: DeviceFileSource, onProgress?: (sent: number) => void) => Promise<SyncFinalizeResponse>
   }
 
   // Device Cache - Caches device file listings for offline access

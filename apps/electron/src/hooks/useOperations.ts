@@ -1,9 +1,26 @@
 import { useCallback } from 'react'
 import { toast } from '@/components/ui/toaster'
 import { useTranscriptionStore } from '@/store/features/useTranscriptionStore'
-import { cancelDownloads, cancelDownloadsComplete, processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
+import { cancelDownloads, cancelDownloadsComplete } from '@/hooks/useDownloadOrchestrator'
 import type { UnifiedRecording } from '@/types/unified-recording'
 import { hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
+import type { ElectronAPI } from '@/lib/electron-api/types'
+
+// TODO(Phase1 Task 12): window.electronAPI's *ambient* type is sourced from the real
+// Electron desktop preload's ElectronAPI (electron/preload/index.ts, via
+// electron/preload/index.d.ts's `declare global`), which doesn't (and structurally can't,
+// without a desktop-side implementation) include the hosted-mode-only REST facade members
+// `deviceSync` / `downloadService.deviceFileSource` — those are composed onto
+// `window.electronAPI` at runtime by `installRestApi()` (src/lib/electron-api/index.ts,
+// Task 12) and typed on the renderer's own `ElectronAPI` in src/lib/electron-api/types.ts.
+// Verified the two ElectronAPI interfaces are otherwise a byte-identical/superset match
+// (2026-07-06) — this narrow cast bridges the gap for hosted mode without widening the
+// ambient global (out of this task's scope; that reconciliation belongs with Task 12).
+// Read fresh on every call (not cached at module scope) so tests that reassign
+// `window.electronAPI` per-case still see the current mock.
+function hostedApi(): ElectronAPI {
+  return window.electronAPI as unknown as ElectronAPI
+}
 
 /**
  * Centralized hook for all download and transcription operations.
@@ -153,49 +170,35 @@ export function useOperations() {
 
   // ── Downloads ──────────────────────────────────────────
 
+  // Routes through the device sync client (renderer) rather than the stubbed
+  // downloadService.queueDownloads — hosted mode has no local download queue, so the
+  // device file is streamed straight to the server via deviceSync.syncFile.
   const queueDownload = useCallback(async (recording: UnifiedRecording) => {
     if (!isDeviceOnly(recording)) return false
 
     try {
-      await window.electronAPI.downloadService.queueDownloads([{
-        filename: recording.deviceFilename,
-        size: recording.size,
-        dateCreated: recording.dateRecorded.toISOString()
-      }])
-      // Explicitly kick the queue — don't rely on the opportunistic onStateUpdate gate,
-      // which doesn't fire reliably once the device is already connected (orphaned-download bug).
-      processPendingDownloads()
-      toast({ title: 'Download started', description: recording.filename })
+      const src = hostedApi().downloadService.deviceFileSource(recording.deviceFilename, recording.size)
+      const res = await hostedApi().deviceSync.syncFile(src)
+      toast({ title: res.status === 'skipped' ? 'Already synced' : 'Synced', description: recording.filename })
       return true
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error'
-      toast({ title: 'Download failed', description: msg, variant: 'error' })
+      toast({ title: 'Sync failed', description: msg, variant: 'error' })
       return false
     }
   }, [])
 
   const queueBulkDownloads = useCallback(async (recordings: UnifiedRecording[]) => {
     const eligible = recordings.filter(isDeviceOnly)
-    if (eligible.length === 0) return 0
-
-    try {
-      await window.electronAPI.downloadService.queueDownloads(
-        eligible.map((r) => ({
-          filename: r.deviceFilename,
-          size: r.size,
-          dateCreated: r.dateRecorded.toISOString()
-        }))
-      )
-      // Explicitly kick the queue — see queueDownload note (orphaned-download bug).
-      processPendingDownloads()
-      toast({ title: `${eligible.length} download${eligible.length > 1 ? 's' : ''} queued` })
-      return eligible.length
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error'
-      toast({ title: 'Downloads failed', description: msg, variant: 'error' })
-      return 0
+    let done = 0
+    // Serialized — one device claim at a time. The device has a single USB endpoint, so
+    // concurrent syncFile calls would race for the same connection (see USB safety notes).
+    for (const r of eligible) {
+      if (await queueDownload(r)) done++
     }
-  }, [])
+    if (done) toast({ title: `${done} recording${done > 1 ? 's' : ''} synced` })
+    return done
+  }, [queueDownload])
 
   const cancelAllDownloads = useCallback(async () => {
     try {

@@ -13,7 +13,6 @@ vi.mock('@/hooks/useDownloadOrchestrator', () => ({
   cancelDownloadsComplete: vi.fn(),
   processPendingDownloads: vi.fn()
 }))
-import { processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 
 // Mock transcription store
 const mockAddToQueue = vi.fn()
@@ -45,6 +44,12 @@ const mockCancelTranscription = vi.fn().mockResolvedValue(undefined)
 const mockCancelAllTranscriptions = vi.fn().mockResolvedValue({ count: 3 })
 const mockQueueDownloads = vi.fn().mockResolvedValue(undefined)
 const mockCancelAllDownloads = vi.fn().mockResolvedValue(undefined)
+// Task 11: queueDownload/queueBulkDownloads now route through the device sync client
+// instead of the stubbed downloadService.queueDownloads.
+const mockDeviceFileSource = vi.fn((filename: string, size: number) => ({
+  filename, size, async *stream() { /* no chunks needed — syncFile is mocked */ }
+}))
+const mockSyncFile = vi.fn().mockResolvedValue({ recordingId: 'r1', status: 'synced' })
 
 const mockAddToQueueIPC = vi.fn().mockResolvedValue('queue-item-1')
 // AC6 forced re-transcribe routes through recordings.transcribe (the clearing IPC),
@@ -64,7 +69,11 @@ global.window.electronAPI = {
   },
   downloadService: {
     queueDownloads: mockQueueDownloads,
-    cancelAll: mockCancelAllDownloads
+    cancelAll: mockCancelAllDownloads,
+    deviceFileSource: mockDeviceFileSource
+  },
+  deviceSync: {
+    syncFile: mockSyncFile
   }
 } as any
 
@@ -320,7 +329,7 @@ describe('useOperations', () => {
       expect(mockQueueDownloads).not.toHaveBeenCalled()
     })
 
-    it('queues download for device-only recording', async () => {
+    it('syncs device-only recording via the device sync client (Task 11)', async () => {
       const { result } = renderHook(() => useOperations())
 
       const deviceOnly = {
@@ -341,36 +350,14 @@ describe('useOperations', () => {
       })
 
       expect(success).toBe(true)
-      expect(mockQueueDownloads).toHaveBeenCalledWith([{
-        filename: 'REC0005.WAV',
-        size: 2048,
-        dateCreated: expect.any(String)
-      }])
+      // Task 11: routes through downloadService.deviceFileSource + deviceSync.syncFile
+      // instead of the stubbed queueDownloads (which rejects in hosted mode).
+      expect(mockDeviceFileSource).toHaveBeenCalledWith('REC0005.WAV', 2048)
+      expect(mockSyncFile).toHaveBeenCalledTimes(1)
+      expect(mockQueueDownloads).not.toHaveBeenCalled()
     })
 
-    it('starts processing after queuing — regression: Library/Calendar download must not orphan', async () => {
-      const { result } = renderHook(() => useOperations())
-
-      const deviceOnly = {
-        id: 'rec-6',
-        filename: 'REC0006.WAV',
-        location: 'device-only' as const,
-        deviceFilename: 'REC0006.WAV',
-        syncStatus: 'not-synced' as const,
-        transcriptionStatus: 'none' as const,
-        size: 4096,
-        duration: 90,
-        dateRecorded: new Date('2026-02-01')
-      }
-
-      await act(async () => {
-        await result.current.queueDownload(deviceOnly as any)
-      })
-
-      expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not start processing when the recording is not device-only', async () => {
+    it('does not touch the device sync client when the recording is not device-only', async () => {
       const { result } = renderHook(() => useOperations())
 
       const localOnly = {
@@ -389,12 +376,13 @@ describe('useOperations', () => {
         await result.current.queueDownload(localOnly as any)
       })
 
-      expect(vi.mocked(processPendingDownloads)).not.toHaveBeenCalled()
+      expect(mockDeviceFileSource).not.toHaveBeenCalled()
+      expect(mockSyncFile).not.toHaveBeenCalled()
     })
   })
 
   describe('queueBulkDownloads', () => {
-    it('starts processing after queuing eligible device-only recordings', async () => {
+    it('syncs eligible device-only recordings serially via the device sync client (Task 11)', async () => {
       const { result } = renderHook(() => useOperations())
 
       const recs = [
@@ -416,10 +404,12 @@ describe('useOperations', () => {
       })
 
       expect(count).toBe(1)
-      expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
+      expect(mockDeviceFileSource).toHaveBeenCalledTimes(1)
+      expect(mockDeviceFileSource).toHaveBeenCalledWith('B1.WAV', 10)
+      expect(mockSyncFile).toHaveBeenCalledTimes(1)
     })
 
-    it('does not start processing when nothing is eligible', async () => {
+    it('does not touch the device sync client when nothing is eligible', async () => {
       const { result } = renderHook(() => useOperations())
 
       const recs = [
@@ -430,11 +420,14 @@ describe('useOperations', () => {
         }
       ]
 
+      let count: number | undefined
       await act(async () => {
-        await result.current.queueBulkDownloads(recs as any)
+        count = await result.current.queueBulkDownloads(recs as any)
       })
 
-      expect(vi.mocked(processPendingDownloads)).not.toHaveBeenCalled()
+      expect(count).toBe(0)
+      expect(mockDeviceFileSource).not.toHaveBeenCalled()
+      expect(mockSyncFile).not.toHaveBeenCalled()
     })
   })
 
