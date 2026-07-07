@@ -39,7 +39,7 @@ vi.mock('@/services/hidock-device', () => ({
 // --- useDownloadOrchestrator mock -----------------------------------------
 vi.mock('@/hooks/useDownloadOrchestrator', () => ({
   cancelDownloads: vi.fn(),
-  processPendingDownloads: vi.fn()
+  retryFailedDownloads: vi.fn()
 }))
 
 // --- useUnifiedRecordings mock --------------------------------------------
@@ -110,11 +110,13 @@ vi.mock('@/components/ui/toaster', () => {
 })
 
 import { useUnifiedRecordings } from '@/hooks/useUnifiedRecordings'
-import { processPendingDownloads } from '@/hooks/useDownloadOrchestrator'
 
 // --- electronAPI mock ------------------------------------------------------
 const mockGetFilesToSync = vi.fn()
-const mockQueueDownloads = vi.fn()
+const mockDeviceFileSource = vi.fn((filename: string, size: number) => ({
+  filename, size, async *stream() { /* no chunks needed — syncFile is mocked */ }
+}))
+const mockSyncFile = vi.fn()
 const mockGetState = vi.fn().mockResolvedValue({ queue: [] })
 const mockOnStateUpdate = vi.fn(() => () => {})
 const mockCancelPendingDownloads = vi.fn().mockResolvedValue(0)
@@ -122,11 +124,14 @@ const mockCancelPendingDownloads = vi.fn().mockResolvedValue(0)
 global.window.electronAPI = {
   downloadService: {
     getFilesToSync: mockGetFilesToSync,
-    queueDownloads: mockQueueDownloads,
+    deviceFileSource: mockDeviceFileSource,
     getState: mockGetState,
     onStateUpdate: mockOnStateUpdate,
     retryFailed: vi.fn().mockResolvedValue({ count: 0 }),
     cancelPendingDownloads: mockCancelPendingDownloads
+  },
+  deviceSync: {
+    syncFile: mockSyncFile
   },
   syncedFiles: {
     getFilenames: vi.fn().mockResolvedValue([])
@@ -186,7 +191,7 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     mockDeviceSyncing = false
     mockAutoTranscribe = false
     mockDeviceService.isConnected.mockReturnValue(true)
-    mockQueueDownloads.mockResolvedValue(['id-1'])
+    mockSyncFile.mockResolvedValue({ recordingId: 'r', status: 'synced' })
     mockGetState.mockResolvedValue({ queue: [] })
     mockOnStateUpdate.mockReturnValue(() => {})
     mockCancelPendingDownloads.mockResolvedValue(0)
@@ -212,18 +217,16 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     await clickSync()
 
     await waitFor(() => {
-      expect(mockQueueDownloads).toHaveBeenCalledTimes(1)
+      expect(mockSyncFile).toHaveBeenCalledTimes(3)
     })
-    expect(mockQueueDownloads).toHaveBeenCalledWith([
-      expect.objectContaining({ filename: 'rec-0.hda' }),
-      expect.objectContaining({ filename: 'rec-1.hda' }),
-      expect.objectContaining({ filename: 'rec-2.hda' })
-    ])
+    expect(mockDeviceFileSource).toHaveBeenCalledWith('rec-0.hda', size)
+    expect(mockDeviceFileSource).toHaveBeenCalledWith('rec-1.hda', size)
+    expect(mockDeviceFileSource).toHaveBeenCalledWith('rec-2.hda', size)
     // No confirmation dialog rendered.
     expect(screen.queryByText(/Download recordings\?/i)).not.toBeInTheDocument()
   })
 
-  it('explicitly starts pending downloads after a successful queue (no reliance on opportunistic gate)', async () => {
+  it('sets deviceSyncing true while syncing and false once the hosted sync settles', async () => {
     const size = 1024
     vi.mocked(useUnifiedRecordings).mockReturnValue({
       recordings: makeDeviceRecordings(3, size),
@@ -237,16 +240,18 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     await clickSync()
 
     await waitFor(() => {
-      expect(mockQueueDownloads).toHaveBeenCalledTimes(1)
+      expect(mockSyncFile).toHaveBeenCalledTimes(3)
     })
-    // FIX: performSync must imperatively kick off processing rather than waiting
-    // for the opportunistic onStateUpdate gate, which can silently never fire.
+    // performSync now awaits syncDeviceFiles directly (hosted device-sync client) rather
+    // than queueing to a download orchestrator, so it must own the full deviceSyncing
+    // lifecycle itself: true before syncing, false once settled (finally block).
+    expect(mockSetDeviceSyncState).toHaveBeenCalledWith({ deviceSyncing: true })
     await waitFor(() => {
-      expect(vi.mocked(processPendingDownloads)).toHaveBeenCalledTimes(1)
+      expect(mockSetDeviceSyncState).toHaveBeenCalledWith({ deviceSyncing: false })
     })
   })
 
-  it('does NOT start pending downloads when there is nothing to queue', async () => {
+  it('does NOT sync any files when there is nothing to sync', async () => {
     const size = 50 * 1024 * 1024
     vi.mocked(useUnifiedRecordings).mockReturnValue({
       recordings: makeDeviceRecordings(58, size),
@@ -266,7 +271,7 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     await waitFor(() => {
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'All synced' }))
     })
-    expect(vi.mocked(processPendingDownloads)).not.toHaveBeenCalled()
+    expect(mockSyncFile).not.toHaveBeenCalled()
   })
 
   it('large sync (58 files) confirms first — no queue until confirm clicked', async () => {
@@ -282,21 +287,20 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     renderDevice()
     await clickSync()
 
-    // Dialog shown; queue NOT called yet.
+    // Dialog shown; sync NOT called yet.
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText(/58 recordings/i)).toBeInTheDocument()
     // Estimated size present (GB string for ~2.8 GB).
     expect(within(dialog).getByText(/GB/i)).toBeInTheDocument()
-    expect(mockQueueDownloads).not.toHaveBeenCalled()
+    expect(mockSyncFile).not.toHaveBeenCalled()
 
-    // Confirm → now it queues all 58.
+    // Confirm → now it syncs all 58.
     const confirmBtn = within(dialog).getByRole('button', { name: /^Download$/i })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
-      expect(mockQueueDownloads).toHaveBeenCalledTimes(1)
+      expect(mockSyncFile).toHaveBeenCalledTimes(58)
     })
-    expect(mockQueueDownloads.mock.calls[0][0]).toHaveLength(58)
   })
 
   it('cancel queues nothing and resets syncing state', async () => {
@@ -319,7 +323,7 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     await waitFor(() => {
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     })
-    expect(mockQueueDownloads).not.toHaveBeenCalled()
+    expect(mockSyncFile).not.toHaveBeenCalled()
     // performSync was never entered, so deviceSyncing was never set true.
     expect(mockSetDeviceSyncState).not.toHaveBeenCalledWith({ deviceSyncing: true })
   })
@@ -339,7 +343,7 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
 
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText(/4 recordings/i)).toBeInTheDocument()
-    expect(mockQueueDownloads).not.toHaveBeenCalled()
+    expect(mockSyncFile).not.toHaveBeenCalled()
   })
 
   it('all-synced shows "All synced" toast, no dialog, no queue', async () => {
@@ -365,7 +369,7 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
       )
     })
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    expect(mockQueueDownloads).not.toHaveBeenCalled()
+    expect(mockSyncFile).not.toHaveBeenCalled()
   })
 })
 

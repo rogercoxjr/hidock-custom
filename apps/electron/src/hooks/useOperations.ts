@@ -205,6 +205,25 @@ export function useOperations() {
     return done
   }, [queueDownload])
 
+  // Same hosted device-sync client as queueDownload/queueBulkDownloads above, but takes
+  // raw {filename, size} pairs (e.g. from downloadService.getFilesToSync) rather than
+  // UnifiedRecording objects — used by the /sync page's "Sync all" flow (Device.tsx).
+  const syncDeviceFiles = useCallback(async (files: Array<{ filename: string; size: number }>) => {
+    let synced = 0
+    // Serialized — one device claim at a time (see queueBulkDownloads USB safety notes).
+    for (const f of files) {
+      try {
+        const src = hostedApi().downloadService.deviceFileSource(f.filename, f.size)
+        await hostedApi().deviceSync.syncFile(src)
+        synced++
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unknown error'
+        console.error('Failed to sync device file:', f.filename, msg)
+      }
+    }
+    return synced
+  }, [])
+
   const cancelAllDownloads = useCallback(async () => {
     try {
       cancelDownloads()
@@ -226,6 +245,7 @@ export function useOperations() {
     // Downloads
     queueDownload,
     queueBulkDownloads,
+    syncDeviceFiles,
     cancelAllDownloads
   }
 }

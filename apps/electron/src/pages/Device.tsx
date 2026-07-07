@@ -14,7 +14,8 @@ import { toast } from '@/components/ui/toaster'
 import { useAppStore } from '@/store/useAppStore'
 import { hasDeviceFile, type DeviceOnlyRecording, type BothLocationsRecording } from '@/types/unified-recording'
 import { useUnifiedRecordings } from '@/hooks/useUnifiedRecordings'
-import { cancelDownloads, processPendingDownloads, retryFailedDownloads } from '@/hooks/useDownloadOrchestrator'
+import { cancelDownloads, retryFailedDownloads } from '@/hooks/useDownloadOrchestrator'
+import { useOperations } from '@/hooks/useOperations'
 
 import { formatEta, formatBytes } from '@/utils/formatters'
 import { DeviceFileList } from '@/components/DeviceFileList'
@@ -46,6 +47,7 @@ export function Device() {
   // Initialize service
   const deviceService = getHiDockDeviceService()
   const { recordings, loading: loadingRecordings, refresh: refreshRecordings } = useUnifiedRecordings()
+  const { syncDeviceFiles } = useOperations()
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [connectionElapsed, setConnectionElapsed] = useState(0)
@@ -475,33 +477,28 @@ export function Device() {
     // B-DEV-001: Use store syncing state as single source of truth
     setDeviceSyncState({ deviceSyncing: true })
     try {
-      // Queue files to download service - useDownloadOrchestrator will handle actual downloads
-      // IMPORTANT: Pass dateCreated to preserve original recording dates from device
-      // Note: dateCreated from getFilesToSync is already serialized to ISO string by IPC
-      const queuedIds = await window.electronAPI.downloadService.queueDownloads(files)
+      // Hosted mode has no local download queue — stream each device file straight to the
+      // server via the device-sync client (mirrors useOperations.queueBulkDownloads, which
+      // the Library page already uses). Serial, one device claim at a time (USB safety).
+      const synced = await syncDeviceFiles(files)
 
-      if (queuedIds.length > 0) {
-        // Refresh synced filenames to update button count
-        await refreshSyncedFilenames()
+      // Refresh synced filenames to update button count either way (a partial-failure run
+      // may still have synced some files).
+      await refreshSyncedFilenames()
 
-        // FIX: explicitly start processing — don't rely on the opportunistic
-        // onStateUpdate gate, which can silently never fire and orphan pending items.
-        processPendingDownloads()
-
+      if (synced > 0) {
         toast({
-          title: 'Sync started',
-          description: `Queued ${queuedIds.length} recording${queuedIds.length !== 1 ? 's' : ''} for download`,
+          title: 'Sync complete',
+          description: `Synced ${synced} recording${synced !== 1 ? 's' : ''}`,
           variant: 'default'
         })
       } else {
         toast({
           title: 'Nothing to sync',
-          description: 'All files are already queued or downloaded',
+          description: 'All files are already synced',
           variant: 'default'
         })
-        setDeviceSyncState({ deviceSyncing: false })
       }
-      // Note: deviceSyncing is not cleared here for queued files - the download orchestrator will manage sync state
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sync failed')
       toast({
@@ -509,6 +506,7 @@ export function Device() {
         description: e instanceof Error ? e.message : 'Unknown error',
         variant: 'error'
       })
+    } finally {
       setDeviceSyncState({ deviceSyncing: false })
     }
   }
