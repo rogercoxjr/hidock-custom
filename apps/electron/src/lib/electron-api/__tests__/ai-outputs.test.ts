@@ -88,7 +88,8 @@ describe('makeRagGroup', () => {
 
   // RESULT: globalSearch — reads error.message
   it('globalSearch 2xx → {success:true, data:{knowledge,people,projects}}', async () => {
-    http.get.mockResolvedValueOnce(ok2xx({ knowledge: [{ id: 'k1' }], people: [], projects: [] }))
+    // /api/rag/global-search forwards ragService.globalSearch()'s own Result envelope; SDK unwraps inner {success,data}.
+    http.get.mockResolvedValueOnce(ok2xx({ success: true, data: { knowledge: [{ id: 'k1' }], people: [], projects: [] } }))
     const result = await grp.globalSearch('test')
     expect(result.success).toBe(true)
     expect(Array.isArray((result as any).data.knowledge)).toBe(true)
@@ -104,7 +105,7 @@ describe('makeRagGroup', () => {
 
   // RESULT: cancel
   it('cancel 2xx → {success:true, data: boolean}', async () => {
-    http.post.mockResolvedValueOnce(ok2xx(true))
+    http.post.mockResolvedValueOnce(ok2xx({ cancelled: true }))
     const result = await grp.cancel('s1')
     expect(result.success).toBe(true)
     expect((result as any).data).toBe(true)
@@ -118,7 +119,7 @@ describe('makeRagGroup', () => {
 
   // RESULT: removeLastMessages
   it('removeLastMessages 2xx → {success:true, data: number}', async () => {
-    http.post.mockResolvedValueOnce(ok2xx(2))
+    http.post.mockResolvedValueOnce(ok2xx({ removed: 2 }))
     const result = await grp.removeLastMessages('s1', 2)
     expect(result.success).toBe(true)
     expect((result as any).data).toBe(2)
@@ -212,7 +213,7 @@ describe('makeRagGroup', () => {
 
   // RESULT: summarizeMeeting
   it('summarizeMeeting 2xx → {success:true, data: string}', async () => {
-    http.post.mockResolvedValueOnce(ok2xx('Summary text'))
+    http.post.mockResolvedValueOnce(ok2xx({ summary: 'Summary text' }))
     const result = await grp.summarizeMeeting('m1')
     expect(result.success).toBe(true)
     expect((result as any).data).toBe('Summary text')
@@ -220,7 +221,7 @@ describe('makeRagGroup', () => {
 
   // RESULT: findActionItems
   it('findActionItems 2xx → {success:true, data: string}', async () => {
-    http.post.mockResolvedValueOnce(ok2xx('Action items'))
+    http.post.mockResolvedValueOnce(ok2xx({ actionItems: 'Action items' }))
     const result = await grp.findActionItems()
     expect(result.success).toBe(true)
     expect((result as any).data).toBe('Action items')
