@@ -102,4 +102,14 @@ describe('http transport', () => {
     await del('/api/x')
     expect((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].method).toBe('DELETE')
   })
+
+  it('postStream sends body with credentials and returns parsed result', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ uploadId: 'u1' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { postStream } = await import('../http')
+    const r = await postStream('/api/recordings/sync', new Uint8Array([1, 2, 3]), { 'x-device-file': 'abc' })
+    expect(r.ok).toBe(true)
+    expect((r.data as any).uploadId).toBe('u1')
+    expect(fetchMock.mock.calls[0][1].credentials).toBe('include')
+  })
 })
