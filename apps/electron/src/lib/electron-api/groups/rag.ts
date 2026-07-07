@@ -75,7 +75,7 @@ export function makeRagGroup({ http }: RagDeps) {
     },
 
     async removeLastMessages(sessionId: string, count: number): Promise<Result<number>> {
-      const r = await http.post('/api/rag/session/trim', { sessionId, count })
+      const r = await http.post(`/api/rag/sessions/${encodeURIComponent(sessionId)}/trim`, { count })
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }
@@ -83,7 +83,7 @@ export function makeRagGroup({ http }: RagDeps) {
     },
 
     async clearSession(sessionId: string): Promise<Result<void>> {
-      const r = await http.post('/api/rag/session/clear', { sessionId })
+      const r = await http.post(`/api/rag/sessions/${encodeURIComponent(sessionId)}/clear`, {})
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }

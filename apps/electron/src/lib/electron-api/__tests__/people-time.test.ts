@@ -573,6 +573,13 @@ describe('makeCalendarGroup', () => {
     expect((result as any).autoSync).toBe(true)
   })
 
+  // Route PATCH /api/calendar/settings expects `syncEnabled`, not `autoSync`.
+  it('toggleAutoSync sends PATCH body with `syncEnabled` key (route contract)', async () => {
+    http.patch.mockResolvedValueOnce(ok2xx({ syncEnabled: true }))
+    await grp.toggleAutoSync(true)
+    expect(http.patch).toHaveBeenCalledWith('/api/calendar/settings', { syncEnabled: true })
+  })
+
   it('setInterval 2xx → bare any', async () => {
     http.patch.mockResolvedValueOnce(ok2xx({ interval: 30 }))
     const result = await grp.setInterval(30)

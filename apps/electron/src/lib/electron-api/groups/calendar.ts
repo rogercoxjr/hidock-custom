@@ -46,7 +46,7 @@ export function makeCalendarGroup({ http }: CalendarDeps) {
     },
 
     async toggleAutoSync(enabled: boolean): Promise<any> {
-      const r = await http.patch('/api/calendar/settings', { autoSync: enabled })
+      const r = await http.patch('/api/calendar/settings', { syncEnabled: enabled })
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }

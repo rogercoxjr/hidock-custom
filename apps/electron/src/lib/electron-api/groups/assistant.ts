@@ -28,7 +28,8 @@ export function makeAssistantGroup({ http }: AssistantDeps) {
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }
-      return r.data as Conversation[]
+      const body = r.data as { items?: Conversation[] } | null
+      return body?.items ?? []
     },
 
     async createConversation(title?: string): Promise<Conversation> {

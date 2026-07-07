@@ -75,9 +75,12 @@ export function makeStoragePolicyGroup({ http }: StoragePolicyDeps) {
     // -------------------------------------------------------------------------
 
     async executeCleanup(recordingIds: string[], archive?: boolean): Promise<any> {
+      // Route schema (routes/storage-policy.ts executeCleanupBody) only accepts `{ ids }` —
+      // there is no archive/mode concept server-side, so `archive` is accepted here for API
+      // compatibility but not sent.
+      void archive
       const r = await http.post('/api/storage-policy/execute-cleanup', {
-        recordingIds,
-        archive,
+        ids: recordingIds,
       })
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)

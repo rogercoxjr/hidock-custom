@@ -124,11 +124,26 @@ describe('makeRagGroup', () => {
     expect((result as any).data).toBe(2)
   })
 
+  // Route is POST /api/rag/sessions/:sessionId/trim with body {count} — sessionId is a path
+  // param, not a body field.
+  it('removeLastMessages POSTs to /api/rag/sessions/:sessionId/trim with {count} body', async () => {
+    http.post.mockResolvedValueOnce(ok2xx(2))
+    await grp.removeLastMessages('s1', 2)
+    expect(http.post).toHaveBeenCalledWith('/api/rag/sessions/s1/trim', { count: 2 })
+  })
+
   // RESULT: clearSession
   it('clearSession 2xx → {success:true, data:undefined}', async () => {
     http.post.mockResolvedValueOnce(ok2xx(null))
     const result = await grp.clearSession('s1')
     expect(result.success).toBe(true)
+  })
+
+  // Route is POST /api/rag/sessions/:sessionId/clear — sessionId is a path param, no body needed.
+  it('clearSession POSTs to /api/rag/sessions/:sessionId/clear', async () => {
+    http.post.mockResolvedValueOnce(ok2xx({ ok: true }))
+    await grp.clearSession('s1')
+    expect(http.post).toHaveBeenCalledWith('/api/rag/sessions/s1/clear', {})
   })
 
   // RAW-THROW: chatLegacy
@@ -225,12 +240,19 @@ describe('makeAssistantGroup', () => {
     grp = makeAssistantGroup({ http })
   })
 
-  // RAW-THROW: getConversations
-  it('getConversations 2xx → bare Conversation[]', async () => {
-    http.get.mockResolvedValueOnce(ok2xx([{ id: 'c1', title: 'Test' }]))
+  // RAW-THROW: getConversations — route GET /api/assistant/conversations returns the
+  // {items,total} pagination envelope; the SDK unwraps .items to a bare array.
+  it('getConversations 2xx → unwraps {items,total} envelope to bare array', async () => {
+    http.get.mockResolvedValueOnce(ok2xx({ items: [{ id: 'c1', title: 'Test' }], total: 1 }))
     const result = await grp.getConversations()
     expect(Array.isArray(result)).toBe(true)
     expect(result[0].id).toBe('c1')
+  })
+
+  it('getConversations 2xx with null/empty body → []', async () => {
+    http.get.mockResolvedValueOnce(ok2xx(null))
+    const result = await grp.getConversations()
+    expect(result).toEqual([])
   })
 
   it('getConversations 4xx → throws', async () => {
@@ -754,6 +776,13 @@ describe('makeQualityGroup', () => {
     http.post.mockResolvedValueOnce(ok2xx({ processed: 3 }))
     const result = await grp.batchAutoAssess(['r1', 'r2', 'r3'])
     expect(result.processed).toBe(3)
+  })
+
+  // Route POST /api/quality/batch-assess expects `{ ids }`, not `{ recordingIds }`.
+  it('batchAutoAssess sends POST body with `ids` key (route contract)', async () => {
+    http.post.mockResolvedValueOnce(ok2xx({ assessed: 2, items: [] }))
+    await grp.batchAutoAssess(['r1', 'r2'])
+    expect(http.post).toHaveBeenCalledWith('/api/quality/batch-assess', { ids: ['r1', 'r2'] })
   })
 
   it('batchAutoAssess 4xx → throws', async () => {

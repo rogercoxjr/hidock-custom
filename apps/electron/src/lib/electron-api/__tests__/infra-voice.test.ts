@@ -772,6 +772,14 @@ describe('makeDeviceCacheGroup', () => {
     expect(result).toBeUndefined()
   })
 
+  // Route PUT /api/device-cache expects `{ files: [...] }`, not a bare array.
+  it('saveAll sends PUT body as `{ files: [...] }` (route contract)', async () => {
+    http.put.mockResolvedValueOnce(ok2xx({ ok: true, count: 1 }))
+    const files = [{ filename: 'test.wav' }]
+    await grp.saveAll(files)
+    expect(http.put).toHaveBeenCalledWith('/api/device-cache', { files })
+  })
+
   it('saveAll 4xx → resolves void silently (VOID must not throw)', async () => {
     // CONTRACTS: VOID methods must never throw; failed PUT logs a warning and returns.
     http.put.mockResolvedValueOnce(err4xx(500, 'Error'))
@@ -844,6 +852,13 @@ describe('makeStoragePolicyGroup', () => {
     http.post.mockResolvedValueOnce(ok2xx({ deleted: 2 }))
     const result = await grp.executeCleanup(['r1', 'r2'])
     expect(result.deleted).toBe(2)
+  })
+
+  // Route POST /api/storage-policy/execute-cleanup expects `{ ids }`, not `{ recordingIds, archive }`.
+  it('executeCleanup sends POST body with `ids` key only (route contract)', async () => {
+    http.post.mockResolvedValueOnce(ok2xx({ deleted: 2 }))
+    await grp.executeCleanup(['r1', 'r2'])
+    expect(http.post).toHaveBeenCalledWith('/api/storage-policy/execute-cleanup', { ids: ['r1', 'r2'] })
   })
 
   it('executeCleanup 4xx → throws', async () => {

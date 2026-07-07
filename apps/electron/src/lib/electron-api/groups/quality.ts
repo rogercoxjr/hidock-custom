@@ -59,7 +59,7 @@ export function makeQualityGroup({ http }: QualityDeps) {
     },
 
     async batchAutoAssess(recordingIds: string[]): Promise<any> {
-      const r = await http.post('/api/quality/batch-assess', { recordingIds })
+      const r = await http.post('/api/quality/batch-assess', { ids: recordingIds })
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }

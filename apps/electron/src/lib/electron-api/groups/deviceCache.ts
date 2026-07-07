@@ -33,7 +33,7 @@ export function makeDeviceCacheGroup({ http }: DeviceCacheDeps) {
     // -------------------------------------------------------------------------
 
     async saveAll(files: any[]): Promise<void> {
-      const r = await http.put('/api/device-cache', files)
+      const r = await http.put('/api/device-cache', { files })
       if (!r.ok) {
         console.warn('[deviceCache.saveAll] PUT /api/device-cache failed:', r.error ?? `HTTP ${r.status}`)
       }
