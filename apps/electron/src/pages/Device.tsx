@@ -12,7 +12,12 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { toast } from '@/components/ui/toaster'
 import { useAppStore } from '@/store/useAppStore'
-import { hasDeviceFile, type DeviceOnlyRecording, type BothLocationsRecording } from '@/types/unified-recording'
+import {
+  hasDeviceFile,
+  isDeviceOnly,
+  type DeviceOnlyRecording,
+  type BothLocationsRecording
+} from '@/types/unified-recording'
 import { useUnifiedRecordings } from '@/hooks/useUnifiedRecordings'
 import { cancelDownloads, retryFailedDownloads } from '@/hooks/useDownloadOrchestrator'
 import { useOperations } from '@/hooks/useOperations'
@@ -537,29 +542,14 @@ export function Device() {
     setError(null)
 
     try {
-      // Filter to device-accessible recordings only
-      const deviceRecordings = recordings.filter(rec => hasDeviceFile(rec))
-      // Use download service to determine which files need syncing (handles all reconciliation)
-      // Note: dateCreated maps from UnifiedRecording.dateRecorded (same underlying device timestamp)
-      // DL-08: Use deviceFilename (actual device name) for sync lookups. Currently filename
-      // and deviceFilename are always equal for device recordings, but deviceFilename is
-      // the canonical field for device-accessible recordings.
-      const filesToCheck = deviceRecordings.map(rec => ({
-        filename: (rec as DeviceOnlyRecording | BothLocationsRecording).deviceFilename,
-        size: rec.size,
-        duration: rec.duration,
-        dateCreated: rec.dateRecorded
-      }))
-
-      const filesWithStatus = await window.electronAPI.downloadService.getFilesToSync(filesToCheck)
-      const toSync = filesWithStatus.filter(f => !f.skipReason)
+      // Hosted mode has no local download queue/reconciliation service — only device-only
+      // recordings actually need syncing (BothLocationsRecording already has a local copy).
+      // Mirrors Library.tsx's handleBulkDownload (`filteredRecordings.filter(isDeviceOnly)`).
+      // DL-08: deviceFilename is the canonical field for device-accessible recordings.
+      const toSync = recordings.filter(isDeviceOnly)
 
       if (shouldLogQa()) {
-        console.log(`[Device.tsx] handleSyncAll: ${toSync.length} need sync, ${filesWithStatus.length - toSync.length} already synced`)
-        // Log skip reasons for debugging
-        for (const f of filesWithStatus.filter(f => f.skipReason)) {
-          console.log(`  Skipping ${f.filename}: ${f.skipReason}`)
-        }
+        console.log(`[Device.tsx] handleSyncAll: ${toSync.length} device-only recording(s) need sync`)
       }
 
       if (toSync.length === 0) {
@@ -572,12 +562,12 @@ export function Device() {
       }
 
       // Build the queue payload (preserves original recording dates from device)
-      const filesToQueue = toSync.map(f => ({
-        filename: f.filename,
-        size: f.size,
-        dateCreated: typeof f.dateCreated === 'string' ? f.dateCreated : f.dateCreated?.toISOString()
+      const filesToQueue = toSync.map(rec => ({
+        filename: rec.deviceFilename,
+        size: rec.size,
+        dateCreated: rec.dateRecorded.toISOString()
       }))
-      const totalBytes = toSync.reduce((s, f) => s + (f.size || 0), 0)
+      const totalBytes = toSync.reduce((s, rec) => s + (rec.size || 0), 0)
 
       // Auto-pipeline P5 fix (Defect 1): a large manual Sync would flood the
       // queue + downstream metered transcription with the whole backlog. Confirm

@@ -6,10 +6,15 @@
  * on `JensenDevice` (no aggregate event bus, no standalone cancel-in-flight primitive) remain
  * `phase1Reject` / `noopUnsub` stubs — see the per-method comments below for why.
  *
- * `downloadService.*` (queue/session orchestration) has no web-renderer implementation yet —
- * all 18 of its methods stay Phase-1 stubs. The one addition is `deviceFileSource()` (SEAM 1,
- * `types-device-sync.ts`), which exposes a single device file as an async-iterable byte stream
- * for the device-sync upload client (`device-sync-client.ts`) to consume.
+ * `downloadService.*` (queue/session orchestration) has no web-renderer implementation, and
+ * hosted mode has no main-process download queue at all — device files are synced directly
+ * via the hosted device-sync client instead (see `deviceFileSource()` below). Most of its
+ * methods stay Phase-1 stubs; six with real renderer consumers (getState, ensureBaseline,
+ * cancelActive, cancelAll, retryFailed, getFilesToSync) resolve to benign hosted defaults
+ * (idle/empty equivalents) instead, so those consumers don't break on an unconditional
+ * rejection. The one real addition is `deviceFileSource()` (SEAM 1, `types-device-sync.ts`),
+ * which exposes a single device file as an async-iterable byte stream for the device-sync
+ * upload client (`device-sync-client.ts`) to consume.
  *
  * NOTE: downloadService.onStateUpdate is handled by the events group (events.ts) — this
  * file provides the remaining 18 downloadService methods only.
@@ -156,11 +161,20 @@ export function makeDeviceGroup() {
     },
 
     // -----------------------------------------------------------------------
-    // downloadService.* — queue/session orchestration has no renderer implementation yet, so
-    // all 18 method stubs stay Phase-1 (onStateUpdate is in events.ts). The one real addition
-    // is deviceFileSource(), which exposes a device file as a DeviceFileSource (SEAM 1).
+    // downloadService.* — queue/session orchestration has no renderer implementation yet.
+    // Hosted mode has NO main-process download queue: device files are synced directly and
+    // serially via the hosted device-sync client (useOperations.syncDeviceFiles /
+    // queueBulkDownloads -> deviceFileSource + deviceSync.syncFile). These queue/session
+    // methods are therefore vestigial in hosted mode. Six of them (getState, ensureBaseline,
+    // cancelActive, cancelAll, retryFailed, getFilesToSync) are real consumer call sites
+    // (renderer code awaits/`.then()`s them without always handling a rejection), so they
+    // resolve to benign hosted defaults — an idle/empty equivalent of their declared return
+    // type — instead of rejecting. The remaining methods have no hosted-mode consumer and
+    // stay Phase-1 stubs (onStateUpdate is in events.ts).
     // -----------------------------------------------------------------------
     downloadService: {
+      // Benign hosted default: no local download queue/session in hosted mode, so the idle,
+      // empty state is always correct (not a fake "in progress" or error state).
       getState: (): Promise<{
         queue: Array<{
           id: string
@@ -179,17 +193,23 @@ export function makeDeviceGroup() {
         } | null
         isProcessing: boolean
         isPaused: boolean
-      }> => phase1Reject(),
+      }> => Promise.resolve({ queue: [], session: null, isProcessing: false, isPaused: false }),
 
       isFileSynced: (_filename: string): Promise<{ synced: boolean; reason: string }> => phase1Reject(),
 
+      // Benign hosted default: hosted "Sync All" (Device.tsx handleSyncAll) computes the
+      // device-only file list directly from the recordings instead of depending on this
+      // method's reconciliation, so an empty result here is always safe.
       getFilesToSync: (
         _files: Array<{ filename: string; size: number; duration: number; dateCreated: string | Date }>,
         _opts?: { auto?: boolean; deviceSerial?: string },
       ): Promise<Array<{ filename: string; size: number; duration: number; dateCreated: string | Date; skipReason?: string }>> =>
-        phase1Reject(),
+        Promise.resolve([]),
 
-      ensureBaseline: (_deviceSerial: string, _filenames: string[]): Promise<{ created: boolean }> => phase1Reject(),
+      // Benign hosted default: there is no local baseline ledger to create in hosted mode, so
+      // this always reports "nothing created" rather than rejecting.
+      ensureBaseline: (_deviceSerial: string, _filenames: string[]): Promise<{ created: boolean }> =>
+        Promise.resolve({ created: false }),
 
       queueDownloads: (_files: Array<{ filename: string; size: number; dateCreated?: string }>): Promise<string[]> =>
         phase1Reject(),
@@ -215,15 +235,23 @@ export function makeDeviceGroup() {
 
       cancel: (_filename: string): Promise<{ success: boolean; error?: string }> => phase1Reject(),
 
-      cancelAll: (): Promise<void> => phase1Reject(),
+      // Benign hosted default: no queue/session to cancel in hosted mode — a no-op resolve.
+      cancelAll: (): Promise<void> => Promise.resolve(),
 
-      retryFailed: (_deviceConnected?: boolean): Promise<{ count: number; error?: string }> => phase1Reject(),
+      // Benign hosted default: hosted mode has no failed-download queue to retry, so this
+      // always reports "nothing retried" rather than rejecting.
+      retryFailed: (_deviceConnected?: boolean): Promise<{ count: number; error?: string }> =>
+        Promise.resolve({ count: 0 }),
 
       getStats: (): Promise<{ totalSynced: number; pendingInQueue: number; failedInQueue: number }> => phase1Reject(),
 
       checkStalled: (): Promise<number> => phase1Reject(),
 
-      cancelActive: (_reason?: string): Promise<number> => phase1Reject(),
+      // Benign hosted default: no in-flight download session to cancel in hosted mode (files
+      // are synced directly via deviceSync.syncFile, not through this orchestrator) — resolve
+      // "0 cancelled" rather than rejecting (this is awaited unconditionally on device
+      // disconnect in useDeviceSubscriptions.ts, with no catch).
+      cancelActive: (_reason?: string): Promise<number> => Promise.resolve(0),
 
       cancelPendingDownloads: (): Promise<number> => phase1Reject(),
 

@@ -172,6 +172,24 @@ function makeDeviceRecordings(count: number, size: number) {
   }))
 }
 
+// Build N "both locations" recordings (already downloaded AND still on device) — these are
+// the "already synced" case for handleSyncAll, which now filters via isDeviceOnly() directly
+// (no more getFilesToSync reconciliation call).
+function makeBothLocationsRecordings(count: number, size: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `both-${i}`,
+    filename: `both-${i}.hda`,
+    deviceFilename: `both-${i}.hda`,
+    localPath: `/recordings/both-${i}.hda`,
+    size,
+    duration: 60,
+    dateRecorded: new Date('2026-06-10T12:00:00Z'),
+    location: 'both' as const,
+    syncStatus: 'synced' as const,
+    transcriptionStatus: 'none' as const
+  }))
+}
+
 // What getFilesToSync returns (IPC-serialized: dateCreated may be a string).
 function filesToSyncResult(count: number, size: number) {
   return Array.from({ length: count }, (_, i) => ({
@@ -282,17 +300,18 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
   })
 
   it('does NOT sync any files when there is nothing to sync', async () => {
-    const size = 50 * 1024 * 1024
+    // No device-only recordings in the unified-recordings list (e.g. the device's raw
+    // recordingCount — used only for the button's optimistic label heuristic — hasn't been
+    // reconciled into the list yet). handleSyncAll computes toSync via
+    // `recordings.filter(isDeviceOnly)` directly (no more getFilesToSync reconciliation
+    // call), so an empty/non-device-only recordings list means nothing to sync regardless
+    // of what the button label says.
     vi.mocked(useUnifiedRecordings).mockReturnValue({
-      recordings: makeDeviceRecordings(58, size),
+      recordings: [],
       loading: false,
       error: null,
       refresh: vi.fn()
     } as any)
-    // Every file skipped → toSync empty → performSync never called.
-    mockGetFilesToSync.mockResolvedValue(
-      filesToSyncResult(58, size).map(f => ({ ...f, skipReason: 'already-synced' }))
-    )
 
     renderDevice()
     await clickSync()
@@ -302,6 +321,30 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'All synced' }))
     })
     expect(mockSyncFile).not.toHaveBeenCalled()
+    expect(mockGetFilesToSync).not.toHaveBeenCalled()
+  })
+
+  it('only syncs device-only recordings, skipping ones already downloaded (both locations)', async () => {
+    const size = 1024
+    // Mix of 3 device-only (need sync) + 2 both-locations (already downloaded) recordings.
+    // handleSyncAll must sync only the 3 device-only ones and must not call getFilesToSync.
+    vi.mocked(useUnifiedRecordings).mockReturnValue({
+      recordings: [...makeDeviceRecordings(3, size), ...makeBothLocationsRecordings(2, size)],
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    } as any)
+
+    renderDevice()
+    await clickSync()
+
+    await waitFor(() => {
+      expect(mockSyncFile).toHaveBeenCalledTimes(3)
+    })
+    expect(mockDeviceFileSource).toHaveBeenCalledWith('rec-0.hda', size)
+    expect(mockDeviceFileSource).toHaveBeenCalledWith('rec-1.hda', size)
+    expect(mockDeviceFileSource).toHaveBeenCalledWith('rec-2.hda', size)
+    expect(mockGetFilesToSync).not.toHaveBeenCalled()
   })
 
   it('large sync (58 files) confirms first — no queue until confirm clicked', async () => {
@@ -377,17 +420,14 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
   })
 
   it('all-synced shows "All synced" toast, no dialog, no queue', async () => {
-    const size = 50 * 1024 * 1024
+    // No device-only recordings → toSync empty (see "does NOT sync any files..." above for
+    // why the recordings list, not getFilesToSync, drives this now).
     vi.mocked(useUnifiedRecordings).mockReturnValue({
-      recordings: makeDeviceRecordings(58, size),
+      recordings: [],
       loading: false,
       error: null,
       refresh: vi.fn()
     } as any)
-    // Every file skipped → toSync empty.
-    mockGetFilesToSync.mockResolvedValue(
-      filesToSyncResult(58, size).map(f => ({ ...f, skipReason: 'already-synced' }))
-    )
 
     renderDevice()
     await clickSync()
@@ -400,6 +440,7 @@ describe('Device — manual Sync confirmation gate (Defect 1)', () => {
     })
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(mockSyncFile).not.toHaveBeenCalled()
+    expect(mockGetFilesToSync).not.toHaveBeenCalled()
   })
 })
 
