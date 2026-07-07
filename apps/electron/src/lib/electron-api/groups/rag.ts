@@ -53,7 +53,8 @@ export function makeRagGroup({ http }: RagDeps) {
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }
-      return { success: true, data: r.data as string }
+      // Route wraps the payload as `{ summary }` (electron/server/routes/rag.ts:201).
+      return { success: true, data: (r.data as { summary: string }).summary }
     },
 
     async findActionItems(meetingId?: string): Promise<Result<string>> {
@@ -63,7 +64,8 @@ export function makeRagGroup({ http }: RagDeps) {
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }
-      return { success: true, data: r.data as string }
+      // Route wraps the payload as `{ actionItems }` (electron/server/routes/rag.ts:216).
+      return { success: true, data: (r.data as { actionItems: string }).actionItems }
     },
 
     async cancel(sessionId: string): Promise<Result<boolean>> {
@@ -71,7 +73,8 @@ export function makeRagGroup({ http }: RagDeps) {
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }
-      return { success: true, data: r.data as boolean }
+      // Route wraps the payload as `{ cancelled }` (electron/server/routes/rag.ts:161).
+      return { success: true, data: (r.data as { cancelled: boolean }).cancelled }
     },
 
     async removeLastMessages(sessionId: string, count: number): Promise<Result<number>> {
@@ -79,7 +82,8 @@ export function makeRagGroup({ http }: RagDeps) {
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }
-      return { success: true, data: r.data as number }
+      // Route wraps the payload as `{ removed }` (electron/server/routes/rag.ts:186).
+      return { success: true, data: (r.data as { removed: number }).removed }
     },
 
     async clearSession(sessionId: string): Promise<Result<void>> {
@@ -94,13 +98,21 @@ export function makeRagGroup({ http }: RagDeps) {
       query: string,
       limit?: number,
     ): Promise<Result<{ knowledge: any[]; people: any[]; projects: any[] }>> {
-      const params = new URLSearchParams({ q: query, scope: 'global' })
+      const params = new URLSearchParams({ q: query })
       if (limit !== undefined) params.set('limit', String(limit))
-      const r = await http.get(`/api/rag/search?${params.toString()}`)
+      const r = await http.get(`/api/rag/global-search?${params.toString()}`)
       if (!r.ok) {
         return { success: false, error: errObj(r) as any }
       }
-      return { success: true, data: r.data as { knowledge: any[]; people: any[]; projects: any[] } }
+      // The route (electron/server/routes/rag.ts:235-239) forwards RAGService.globalSearch()'s
+      // own Result<T> envelope verbatim — always HTTP 200 — instead of unwrapping it the way
+      // every sibling route in this file does. So `r.data` is itself `{success,data}` or
+      // `{success,error}`; unwrap that inner envelope rather than casting `r.data` directly.
+      const inner = r.data as Result<{ knowledge: any[]; people: any[]; projects: any[] }>
+      if (!inner.success) {
+        return { success: false, error: { message: inner.error.message, details: inner.error.details } as any }
+      }
+      return { success: true, data: inner.data }
     },
 
     // -------------------------------------------------------------------------
