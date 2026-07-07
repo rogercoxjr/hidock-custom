@@ -31,7 +31,8 @@ export function makeTranscriptsGroup({ http }: TranscriptsDeps) {
     },
 
     async getByRecordingIds(recordingIds: string[]): Promise<Record<string, any>> {
-      const r = await http.post('/api/transcripts/by-recording-ids', { recordingIds })
+      // Route parses `{ ids }` (zod); sending `recordingIds` 400s → transcripts never load.
+      const r = await http.post('/api/transcripts/by-recording-ids', { ids: recordingIds })
       if (!r.ok) {
         throw new Error(r.error ?? `HTTP ${r.status}`)
       }

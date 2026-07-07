@@ -72,6 +72,15 @@ describe('makeTranscriptsGroup', () => {
     expect(result).toEqual(body)
   })
 
+  // Contract: the server route (POST /api/transcripts/by-recording-ids) parses
+  // `{ ids }` via zod — sending any other key 400s and the transcript never
+  // loads in the Library. Pin the request body key to the route's contract.
+  it('getByRecordingIds POSTs the { ids } body the route expects', async () => {
+    http.post.mockResolvedValueOnce(ok2xx({}))
+    await grp.getByRecordingIds(['r1', 'r2'])
+    expect(http.post).toHaveBeenCalledWith('/api/transcripts/by-recording-ids', { ids: ['r1', 'r2'] })
+  })
+
   it('getByRecordingIds 4xx → throws', async () => {
     http.post.mockResolvedValueOnce(err4xx())
     await expect(grp.getByRecordingIds(['r1'])).rejects.toThrow()
