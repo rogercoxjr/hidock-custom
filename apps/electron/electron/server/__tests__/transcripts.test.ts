@@ -555,6 +555,23 @@ describe('transcripts REST router', () => {
     await app.close()
   })
 
+  it('POST /api/recordings/:id/resummarize with NO request body does not 400', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    // Deliberately omit `payload` entirely — this is what the SDK sends today
+    // (`http.post(path)` with no second arg means `req.body === undefined`),
+    // as opposed to the `payload: {}` case above which fastify JSON-encodes
+    // to a real (parseable) empty object body.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/recordings/rec-tx-1/resummarize',
+      cookies: { hidock_session: cookie }
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().ok).toBe(true)
+    await app.close()
+  })
+
   it('POST /api/recordings/:id/resummarize returns 400 when no transcript exists', async () => {
     const { insertRecording } = await import('../../main/services/database')
     insertRecording({

@@ -472,6 +472,17 @@ describe('makeRecordingsGroup', () => {
     expect(result.error).toBeUndefined()
   })
 
+  it('resummarize sends an explicit {} body (not a bodyless POST)', async () => {
+    // A bodyless POST (`http.post(path)` with no 2nd arg) leaves `body === undefined`
+    // in http.ts's `request()`, which skips both `Content-Type` and `init.body` —
+    // the route's zod `resummarizeBody.parse(req.body)` then throws on `undefined`
+    // (expected object) and always 400s. Sending `{}` keeps the request a valid,
+    // parseable empty object so the all-optional schema accepts it.
+    http.post.mockResolvedValueOnce(ok2xx({ success: true }))
+    await grp.resummarize('r1')
+    expect(http.post).toHaveBeenCalledWith('/api/recordings/r1/resummarize', {})
+  })
+
   it('resummarize 4xx → {success:false,error}', async () => {
     http.post.mockResolvedValueOnce(err4xx(500, 'template missing'))
     const result = await grp.resummarize('r1')

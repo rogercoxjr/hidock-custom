@@ -278,6 +278,22 @@ describe('projects REST endpoints', () => {
     await app.close()
   })
 
+  it('PATCH /api/projects/:id with description:null clears the description', async () => {
+    const app = await makeApp()
+    const cookie = await login(app)
+    // proj-1 is seeded with description: 'First project' — clearing it sends {description:null}.
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/projects/proj-1',
+      cookies: { hidock_session: cookie },
+      headers: { 'content-type': 'application/json' },
+      payload: { description: null }
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().description).toBeNull()
+    await app.close()
+  })
+
   it('PATCH /api/projects/:id updates status to archived', async () => {
     const app = await makeApp()
     const cookie = await login(app)

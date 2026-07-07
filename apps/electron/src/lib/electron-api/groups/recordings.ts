@@ -253,7 +253,7 @@ export function makeRecordingsGroup({ http }: RecordingsDeps) {
     },
 
     async resummarize(recordingId: string): Promise<{ success: boolean; error?: string }> {
-      const r = await http.post(`/api/recordings/${recordingId}/resummarize`)
+      const r = await http.post(`/api/recordings/${recordingId}/resummarize`, {})
       if (!r.ok) {
         return { success: false, error: r.error }
       }

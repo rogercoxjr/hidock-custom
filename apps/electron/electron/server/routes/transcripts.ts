@@ -322,7 +322,8 @@ export async function registerTranscripts(app: FastifyInstance): Promise<void> {
       const rec = getRecordingById(id)
       if (!rec) throw new NotFoundError('recording not found')
 
-      const body = resummarizeBody.parse(req.body)
+      // Body is entirely optional — a bodyless POST (req.body === undefined) is valid intent.
+      const body = resummarizeBody.parse(req.body ?? {})
       const existingTranscript = getTranscriptByRecordingId(id)
       if (!existingTranscript?.full_text?.trim()) {
         throw new BadRequestError('no transcript to summarize yet — transcribe this recording first')

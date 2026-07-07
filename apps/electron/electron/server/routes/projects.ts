@@ -27,12 +27,12 @@ const listQ = z.object({
 
 const createBody = z.object({
   name: z.string().min(1),
-  description: z.string().optional()
+  description: z.string().nullable().optional()
 })
 
 const patchBody = z.object({
   name: z.string().min(1).optional(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   status: z.string().optional()
 }).refine((d) => Object.keys(d).length > 0, { message: 'at least one field required' })
 

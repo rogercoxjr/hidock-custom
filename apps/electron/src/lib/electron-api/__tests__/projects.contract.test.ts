@@ -74,6 +74,14 @@ describe('projects contract', () => {
     if (result.success) expect(result.data.name).toBe('Project Four Renamed')
   })
 
+  it('update with description:null clears the description (not rejected as a 400)', async () => {
+    const created = await grp.create({ name: 'Project Four-B', description: 'has a description' })
+    if (!created.success) throw new Error('setup failed')
+    const result = await grp.update({ id: created.data.id, description: null })
+    expect(result.success).toBe(true)
+    if (result.success) expect(result.data.description).toBeNull()
+  })
+
   it('tagMeeting / getForMeeting / untagMeeting round-trip the project↔meeting link', async () => {
     const created = await grp.create({ name: 'Project Five' })
     if (!created.success) throw new Error('setup failed')
