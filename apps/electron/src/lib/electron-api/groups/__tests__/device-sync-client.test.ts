@@ -35,4 +35,32 @@ describe('makeDeviceSyncClient', () => {
     expect(res.status).toBe('synced')
     expect(postStream).toHaveBeenCalledTimes(2)
   })
+
+  it('retries the whole file on a finalize integrity mismatch', async () => {
+    const postStream = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { uploadId: 'u3', serverSha256: 'x', bytesReceived: 3 },
+    })
+    const post = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 400, error: 'integrity check failed' })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: { recordingId: 'r1', status: 'synced' } })
+    const http = { postStream, post } as any
+    const client = makeDeviceSyncClient({ http })
+    const res = await client.syncFile(srcOf([1, 2, 3]))
+    expect(res.status).toBe('synced')
+    expect(postStream).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws after MAX_ATTEMPTS failed creates without exceeding the attempt bound', async () => {
+    const postStream = vi.fn().mockResolvedValue({ ok: false, status: 0, error: 'network' })
+    const http = {
+      postStream,
+      post: vi.fn().mockResolvedValue({ ok: true, status: 200, data: { recordingId: 'r', status: 'synced' } }),
+    } as any
+    const client = makeDeviceSyncClient({ http })
+    await expect(client.syncFile(srcOf([1, 2, 3]))).rejects.toThrow()
+    expect(postStream).toHaveBeenCalledTimes(2)
+  })
 })
