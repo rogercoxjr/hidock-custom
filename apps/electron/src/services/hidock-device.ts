@@ -291,7 +291,12 @@ class HiDockDeviceService {
     // Try ONCE on startup to connect to any already-authorized device
     // After this, the browser's USB connect event will handle new connections
     // (set up in jensen.ts setupUsbConnectListener via navigator.usb.onconnect)
-    this.tryConnectSilent()
+    // Fire-and-forget: swallow failures (e.g. no device, WebUSB unavailable) so a
+    // silent-reconnect attempt can never surface as an unhandled rejection (Task 10).
+    this.tryConnectSilent().catch((err) => {
+      const reason = err instanceof Error ? err.message : String(err)
+      this.logActivity('info', 'Auto-connect', `Silent reconnect skipped: ${reason}`)
+    })
 
     // NO POLLING - rely entirely on browser USB connect events
     // When a device is plugged in, navigator.usb.onconnect fires and jensen.ts handles it
