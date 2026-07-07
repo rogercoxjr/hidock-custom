@@ -148,4 +148,26 @@ describe('device-sync routes', () => {
     })
     expect(fin.statusCode).toBe(404)
   })
+
+  it('enqueues each synced file exactly once and does not block finalize on transcription', async () => {
+    const app = appWithAuth()
+    await registerDeviceSync(app)
+    const meta = Buffer.from(JSON.stringify({ filename: 'REC9.hda', size: 3 })).toString('base64')
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/recordings/sync',
+      headers: { 'x-device-file': meta },
+      payload: Buffer.from([1, 2, 3])
+    })
+    const { uploadId, serverSha256 } = create.json()
+    const fin = await app.inject({
+      method: 'POST',
+      url: `/api/recordings/sync/${uploadId}/finalize`,
+      payload: { clientSha256: serverSha256 }
+    })
+    expect(fin.statusCode).toBe(200)
+    expect(fin.json().status).toBe('synced')
+    // Every synced file is enqueued; the finalize response does NOT await transcription.
+    expect(addToQueue).toHaveBeenCalledTimes(1)
+  })
 })
