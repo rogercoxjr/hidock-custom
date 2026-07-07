@@ -52,14 +52,29 @@ export async function registerDeviceSync(app: FastifyInstance): Promise<void> {
         }
 
         const part = createPart()
-        await new Promise<void>((resolve, reject) => {
-          req.raw.on('data', (c: Buffer) => part.write(c))
-          req.raw.on('end', () => resolve())
-          req.raw.on('error', reject)
-        })
-        const r = await part.finish()
-        finished.set(part.uploadId, { ...r, meta })
-        return reply.code(200).send({ uploadId: part.uploadId, serverSha256: r.sha256, bytesReceived: r.bytes })
+        try {
+          await new Promise<void>((resolve, reject) => {
+            req.raw.on('data', (c: Buffer) => {
+              part.write(c)
+              // Fail fast: don't wait for the full body if the partfile write has
+              // already errored (e.g. ENOSPC/EIO) — no point draining the rest of
+              // the upload. part.finish() would also reject on this, but bailing
+              // here avoids buffering a possibly-large remaining body first.
+              const err = part.hasError()
+              if (err) reject(err)
+            })
+            req.raw.on('end', () => resolve())
+            req.raw.on('error', reject)
+          })
+          const r = await part.finish()
+          finished.set(part.uploadId, { ...r, meta })
+          return reply.code(200).send({ uploadId: part.uploadId, serverSha256: r.sha256, bytesReceived: r.bytes })
+        } catch (err) {
+          // A disk error mid-upload must become a handled 5xx + partfile cleanup,
+          // never an unhandled crash — see partfile-store.ts's 'error' listener.
+          deletePart(part.uploadId)
+          throw err
+        }
       }
     )
 

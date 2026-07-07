@@ -13,6 +13,7 @@ function partsDir(): string {
 export function createPart(): {
   uploadId: string
   write: (chunk: Uint8Array) => void
+  hasError: () => Error | null
   finish: () => Promise<{ sha256: string; bytes: number; path: string }>
 } {
   const uploadId = randomUUID()
@@ -20,13 +21,34 @@ export function createPart(): {
   const ws = createWriteStream(path)
   const hash = createHash('sha256')
   let bytes = 0
+
+  // Attach the 'error' listener immediately at stream creation — NOT lazily inside
+  // finish(). Writes happen during the body-streaming phase (see device-sync.ts),
+  // well before finish() is ever called; without a listener from the start, a
+  // mid-stream disk error (ENOSPC/EIO) would emit an unhandled 'error' event and
+  // crash the process. Capture the error here and surface it via finish()/hasError()
+  // instead, plus reject any finish() call already in flight when the stream errors
+  // out mid-.end().
+  let writeError: Error | null = null
+  let pendingReject: ((err: Error) => void) | null = null
+  ws.on('error', (err) => {
+    writeError = err
+    if (pendingReject) { pendingReject(err); pendingReject = null }
+  })
+
   return {
     uploadId,
     write(chunk) { hash.update(chunk); bytes += chunk.length; ws.write(Buffer.from(chunk)) },
+    hasError() { return writeError },
     finish() {
       return new Promise((resolve, reject) => {
-        ws.on('error', reject)
-        ws.end(() => resolve({ sha256: hash.digest('hex'), bytes, path }))
+        if (writeError) return reject(writeError)
+        pendingReject = reject
+        ws.end(() => {
+          pendingReject = null
+          if (writeError) return reject(writeError)
+          resolve({ sha256: hash.digest('hex'), bytes, path })
+        })
       })
     },
   }
