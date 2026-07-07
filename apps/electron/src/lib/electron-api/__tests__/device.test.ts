@@ -1,13 +1,21 @@
 /**
- * device.test.ts — Shape-assertion tests for the device stubs SDK group (Task 9 / PHASE-1).
+ * device.test.ts — Shape-assertion tests for the device SDK group (Task 9 / PHASE-1 un-stub).
  *
- * Asserts:
- *   1. Every jensen.* method exists and rejects with the PHASE-1 error message.
- *   2. Every jensen.on* method returns a callable no-op unsubscribe function.
- *   3. Every downloadService.* method exists and rejects with the PHASE-1 error message.
- *      (onStateUpdate is NOT in this group — it lives in events.ts)
+ * `makeDeviceGroup()` now delegates most jensen.* methods to a real `JensenDevice` instance
+ * (see ../groups/device.ts and ../groups/__tests__/device-live.test.ts for mock-backed coverage
+ * of the delegated methods). This file asserts only the methods that have NO `JensenDevice`
+ * counterpart and therefore remain Phase-1 stubs:
+ *   - jensen.cancelDownload (no standalone cancel-in-flight primitive on JensenDevice — the
+ *     real downloadFile() cancellation is expressed via an AbortSignal parameter instead)
+ *   - all 6 jensen.on* event subscriptions (JensenDevice has no multi-subscriber event bus —
+ *     just single-slot onconnect/ondisconnect callback properties and per-call
+ *     onChunk/onProgress callbacks, not subscribable events; wiring a real pub-sub layer is
+ *     connect/reconnect-gesture work for a later task)
+ *   - all 18 downloadService.* methods (queue/session orchestration has no renderer
+ *     implementation yet; onStateUpdate is NOT in this group — it lives in events.ts)
  *
- * No HTTP mocking is needed because these are all stubs with no fetch calls.
+ * downloadService.deviceFileSource() (the one real addition to that namespace) is covered by
+ * device-live.test.ts, not here.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -15,135 +23,11 @@ import { makeDeviceGroup } from '../groups/device'
 
 const PHASE1_ERROR = 'device path is Phase 1'
 
-describe('makeDeviceGroup — jensen stubs', () => {
+describe('makeDeviceGroup — jensen stubs (no JensenDevice counterpart)', () => {
   const { jensen } = makeDeviceGroup()
-
-  // -------------------------------------------------------------------------
-  // Core methods — reject with Phase 1 marker
-  // -------------------------------------------------------------------------
-
-  it('connect rejects with phase1 error', async () => {
-    await expect(jensen.connect()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('tryConnect rejects with phase1 error', async () => {
-    await expect(jensen.tryConnect()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('disconnect rejects with phase1 error', async () => {
-    await expect(jensen.disconnect()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('reset rejects with phase1 error', async () => {
-    await expect(jensen.reset()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('isConnected rejects with phase1 error', async () => {
-    await expect(jensen.isConnected()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('getModel rejects with phase1 error', async () => {
-    await expect(jensen.getModel()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('isP1Device rejects with phase1 error', async () => {
-    await expect(jensen.isP1Device()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  // -------------------------------------------------------------------------
-  // Device info & settings
-  // -------------------------------------------------------------------------
-
-  it('getDeviceInfo rejects with phase1 error', async () => {
-    await expect(jensen.getDeviceInfo()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('getCardInfo rejects with phase1 error', async () => {
-    await expect(jensen.getCardInfo()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('getFileCount rejects with phase1 error', async () => {
-    await expect(jensen.getFileCount()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('getSettings rejects with phase1 error', async () => {
-    await expect(jensen.getSettings()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('setTime rejects with phase1 error', async () => {
-    await expect(jensen.setTime()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('setAutoRecord rejects with phase1 error', async () => {
-    await expect(jensen.setAutoRecord(true)).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  // -------------------------------------------------------------------------
-  // File operations
-  // -------------------------------------------------------------------------
-
-  it('listFiles rejects with phase1 error', async () => {
-    await expect(jensen.listFiles()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('downloadFile rejects with phase1 error', async () => {
-    await expect(jensen.downloadFile('test.wav', 1024)).rejects.toThrow(PHASE1_ERROR)
-  })
 
   it('cancelDownload rejects with phase1 error', async () => {
     await expect(jensen.cancelDownload()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('deleteFile rejects with phase1 error', async () => {
-    await expect(jensen.deleteFile('test.wav')).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('formatCard rejects with phase1 error', async () => {
-    await expect(jensen.formatCard()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  // -------------------------------------------------------------------------
-  // Realtime
-  // -------------------------------------------------------------------------
-
-  it('getRealtimeSettings rejects with phase1 error', async () => {
-    await expect(jensen.getRealtimeSettings()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('startRealtime rejects with phase1 error', async () => {
-    await expect(jensen.startRealtime()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('pauseRealtime rejects with phase1 error', async () => {
-    await expect(jensen.pauseRealtime()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('stopRealtime rejects with phase1 error', async () => {
-    await expect(jensen.stopRealtime()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('getRealtimeData rejects with phase1 error', async () => {
-    await expect(jensen.getRealtimeData(0)).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  // -------------------------------------------------------------------------
-  // Battery & Bluetooth
-  // -------------------------------------------------------------------------
-
-  it('getBatteryStatus rejects with phase1 error', async () => {
-    await expect(jensen.getBatteryStatus()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('startBluetoothScan rejects with phase1 error', async () => {
-    await expect(jensen.startBluetoothScan()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('stopBluetoothScan rejects with phase1 error', async () => {
-    await expect(jensen.stopBluetoothScan()).rejects.toThrow(PHASE1_ERROR)
-  })
-
-  it('getBluetoothStatus rejects with phase1 error', async () => {
-    await expect(jensen.getBluetoothStatus()).rejects.toThrow(PHASE1_ERROR)
   })
 
   // -------------------------------------------------------------------------

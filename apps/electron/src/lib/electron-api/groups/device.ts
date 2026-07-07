@@ -1,10 +1,15 @@
 /**
- * device.ts — PHASE-1 stub group for jensen.* and downloadService.* (minus onStateUpdate).
+ * device.ts — renderer device SDK group (jensen.* + downloadService.*, minus onStateUpdate).
  *
- * The browser WebUSB device path (0c §4) is Phase 1 and has no REST endpoint.
- * Per CONTRACTS.md §PHASE-1 section:
- *   - Methods reject / return safe defaults with a 'device path is Phase 1' marker.
- *   - on* events return a no-op () => void unsubscribe so subscribing components do not crash.
+ * Un-stubbed (Task 9): jensen.* methods that have a real `JensenDevice` counterpart now
+ * delegate to a shared `JensenDevice` instance over real WebUSB. Methods with NO counterpart
+ * on `JensenDevice` (no aggregate event bus, no standalone cancel-in-flight primitive) remain
+ * `phase1Reject` / `noopUnsub` stubs — see the per-method comments below for why.
+ *
+ * `downloadService.*` (queue/session orchestration) has no web-renderer implementation yet —
+ * all 18 of its methods stay Phase-1 stubs. The one addition is `deviceFileSource()` (SEAM 1,
+ * `types-device-sync.ts`), which exposes a single device file as an async-iterable byte stream
+ * for the device-sync upload client (`device-sync-client.ts`) to consume.
  *
  * NOTE: downloadService.onStateUpdate is handled by the events group (events.ts) — this
  * file provides the remaining 18 downloadService methods only.
@@ -18,7 +23,8 @@
  *   Object.assign(api.downloadService, deviceGroup.downloadService)
  */
 
-// No external deps needed — all stubs.
+import { JensenDevice } from '../../../services/jensen'
+import type { DeviceFileSource } from '../types-device-sync'
 
 const PHASE1_ERROR = 'device path is Phase 1'
 const noop = (): void => {}
@@ -34,49 +40,87 @@ function phase1Reject<T = never>(): Promise<T> {
 }
 
 export function makeDeviceGroup() {
+  const dev = new JensenDevice()
+
   return {
     // -----------------------------------------------------------------------
-    // jensen.* — 28 PHASE-1 method stubs + 6 on* event stubs
+    // jensen.* — real delegation to JensenDevice where a counterpart exists;
+    // phase1Reject / noopUnsub otherwise (see comments).
     // -----------------------------------------------------------------------
     jensen: {
       // Core
-      connect: (): Promise<boolean> => phase1Reject(),
-      tryConnect: (): Promise<boolean> => phase1Reject(),
-      disconnect: (): Promise<void> => phase1Reject(),
-      reset: (): Promise<boolean> => phase1Reject(),
-      isConnected: (): Promise<boolean> => phase1Reject(),
-      getModel: (): Promise<string | null> => phase1Reject(),
-      isP1Device: (): Promise<boolean> => phase1Reject(),
+      connect: (signal?: AbortSignal): Promise<boolean> => dev.connect(signal),
+      tryConnect: (preAuthorized?: USBDevice): Promise<boolean> => dev.tryConnect(preAuthorized),
+      disconnect: (): Promise<void> => dev.disconnect(),
+      reset: (): Promise<boolean> => dev.reset(),
+      isConnected: (): Promise<boolean> => Promise.resolve(dev.isConnected()),
+      getModel: (): Promise<string | null> => Promise.resolve(dev.getModel()),
+      isP1Device: (): Promise<boolean> => Promise.resolve(dev.isP1Device()),
 
       // Device info & settings
-      getDeviceInfo: (): Promise<any> => phase1Reject(),
-      getCardInfo: (): Promise<any> => phase1Reject(),
-      getFileCount: (): Promise<{ count: number } | null> => phase1Reject(),
-      getSettings: (): Promise<any> => phase1Reject(),
-      setTime: (): Promise<any> => phase1Reject(),
-      setAutoRecord: (_enabled: boolean): Promise<any> => phase1Reject(),
+      getDeviceInfo: (timeout?: number): ReturnType<JensenDevice['getDeviceInfo']> => dev.getDeviceInfo(timeout),
+      getCardInfo: (timeout?: number): ReturnType<JensenDevice['getCardInfo']> => dev.getCardInfo(timeout),
+      getFileCount: (timeout?: number): Promise<{ count: number } | null> => dev.getFileCount(timeout),
+      getSettings: (timeout?: number): ReturnType<JensenDevice['getSettings']> => dev.getSettings(timeout),
+      // Real setTime() requires a Date; default to "now" so the Phase-1 zero-arg call shape
+      // (`jensen.setTime()`) keeps working for callers that just want to sync the clock.
+      setTime: (date?: Date, timeout?: number): ReturnType<JensenDevice['setTime']> =>
+        dev.setTime(date ?? new Date(), timeout),
+      setAutoRecord: (enabled: boolean, timeout?: number): ReturnType<JensenDevice['setAutoRecord']> =>
+        dev.setAutoRecord(enabled, timeout),
 
       // File operations
-      listFiles: (): Promise<any[] | null> => phase1Reject(),
-      downloadFile: (_filename: string, _fileSize: number): Promise<boolean | null> => phase1Reject(),
+      listFiles: (
+        onProgress?: (filesFound: number, expectedFiles: number) => void,
+        expectedFileCount?: number,
+        onNewFiles?: (files: unknown[]) => void,
+      ): ReturnType<JensenDevice['listFiles']> =>
+        dev.listFiles(onProgress, expectedFileCount, onNewFiles as never),
+      // Real downloadFile() requires an onChunk callback; default to a no-op sink so callers
+      // that only care about the completion boolean (the Phase-1 call shape) still work.
+      // Streaming consumers should use downloadService.deviceFileSource() instead, which wires
+      // a real onChunk to drain an async iterable.
+      downloadFile: (
+        filename: string,
+        fileSize: number,
+        onChunk?: (data: Uint8Array) => void,
+        onProgress?: (received: number) => void,
+        signal?: AbortSignal,
+      ): Promise<boolean> => dev.downloadFile(filename, fileSize, onChunk ?? noop, onProgress, signal),
+      // No JensenDevice counterpart: cancellation is expressed via the AbortSignal passed into
+      // downloadFile() itself, not a standalone "cancel the in-flight transfer" method — there
+      // is no device-level handle here to cancel without fabricating extra state. Stays Phase-1.
       cancelDownload: (): Promise<void> => phase1Reject(),
-      deleteFile: (_filename: string): Promise<any> => phase1Reject(),
-      formatCard: (): Promise<any> => phase1Reject(),
+      deleteFile: (filename: string, timeout?: number): ReturnType<JensenDevice['deleteFile']> =>
+        dev.deleteFile(filename, timeout),
+      formatCard: (timeout?: number): ReturnType<JensenDevice['formatCard']> => dev.formatCard(timeout),
 
       // Realtime
-      getRealtimeSettings: (): Promise<any> => phase1Reject(),
-      startRealtime: (): Promise<any> => phase1Reject(),
-      pauseRealtime: (): Promise<any> => phase1Reject(),
-      stopRealtime: (): Promise<any> => phase1Reject(),
-      getRealtimeData: (_offset: number): Promise<any> => phase1Reject(),
+      getRealtimeSettings: (timeout?: number): ReturnType<JensenDevice['getRealtimeSettings']> =>
+        dev.getRealtimeSettings(timeout),
+      startRealtime: (timeout?: number): ReturnType<JensenDevice['startRealtime']> => dev.startRealtime(timeout),
+      pauseRealtime: (timeout?: number): ReturnType<JensenDevice['pauseRealtime']> => dev.pauseRealtime(timeout),
+      stopRealtime: (timeout?: number): ReturnType<JensenDevice['stopRealtime']> => dev.stopRealtime(timeout),
+      getRealtimeData: (offset: number, timeout?: number): ReturnType<JensenDevice['getRealtimeData']> =>
+        dev.getRealtimeData(offset, timeout),
 
       // Battery & Bluetooth
-      getBatteryStatus: (): Promise<any> => phase1Reject(),
-      startBluetoothScan: (_duration?: number): Promise<any> => phase1Reject(),
-      stopBluetoothScan: (): Promise<any> => phase1Reject(),
-      getBluetoothStatus: (): Promise<any> => phase1Reject(),
+      getBatteryStatus: (timeout?: number): ReturnType<JensenDevice['getBatteryStatus']> =>
+        dev.getBatteryStatus(timeout),
+      startBluetoothScan: (duration?: number, timeout?: number): ReturnType<JensenDevice['startBluetoothScan']> =>
+        dev.startBluetoothScan(duration, timeout),
+      stopBluetoothScan: (timeout?: number): ReturnType<JensenDevice['stopBluetoothScan']> =>
+        dev.stopBluetoothScan(timeout),
+      getBluetoothStatus: (timeout?: number): ReturnType<JensenDevice['getBluetoothStatus']> =>
+        dev.getBluetoothStatus(timeout),
 
-      // Push event subscriptions (6 on* events)
+      // Push event subscriptions (6 on* events) — NO JensenDevice counterpart for any of these:
+      // `JensenDevice` exposes single-slot `onconnect`/`ondisconnect` callback properties (last
+      // writer wins, no unsubscribe semantics) rather than a multi-subscriber event bus, and has
+      // no aggregate state-changed / download-chunk / download-progress / scan-progress emitters
+      // at all (downloadFile()/listFiles() take *per-call* onChunk/onProgress callbacks, not
+      // subscribable events). Wiring a real pub-sub layer on top is connect/reconnect-gesture
+      // work for a later task, not a straight delegation — stays Phase-1 here.
       onStateChanged: (_callback: (state: {
         connected: boolean
         model: string | null
@@ -106,7 +150,9 @@ export function makeDeviceGroup() {
     },
 
     // -----------------------------------------------------------------------
-    // downloadService.* — 18 PHASE-1 method stubs (onStateUpdate is in events.ts)
+    // downloadService.* — queue/session orchestration has no renderer implementation yet, so
+    // all 18 method stubs stay Phase-1 (onStateUpdate is in events.ts). The one real addition
+    // is deviceFileSource(), which exposes a device file as a DeviceFileSource (SEAM 1).
     // -----------------------------------------------------------------------
     downloadService: {
       getState: (): Promise<{
@@ -177,6 +223,72 @@ export function makeDeviceGroup() {
 
       notifyCompletion: (_stats: { completed: number; failed: number; aborted: boolean }): Promise<void> =>
         phase1Reject(),
+
+      /**
+       * SEAM 1 — exposes a single device file as an async-iterable byte stream for the
+       * device-sync upload client (`device-sync-client.ts`). Drains `JensenDevice.downloadFile`'s
+       * per-chunk `onChunk` callback into the stream via a promise-signalled queue (no polling):
+       * a waiting `stream()` iteration is woken exactly when a chunk arrives or the underlying
+       * download settles, so the generator can't spin and can't hang once `downloadFile`
+       * resolves/rejects.
+       */
+      deviceFileSource(filename: string, size: number): DeviceFileSource {
+        return {
+          filename,
+          size,
+          async *stream() {
+            const queue: Uint8Array[] = []
+            let wake: (() => void) | null = null
+            let finished = false
+            let failure: Error | null = null
+
+            const notify = (): void => {
+              if (wake) {
+                const fn = wake
+                wake = null
+                fn()
+              }
+            }
+
+            const donePromise = dev
+              .downloadFile(filename, size, (chunk) => {
+                queue.push(chunk)
+                notify()
+              })
+              .then((ok) => {
+                finished = true
+                if (!ok) failure = new Error(`deviceFileSource: downloadFile failed for ${filename}`)
+                notify()
+              })
+              .catch((err: unknown) => {
+                finished = true
+                failure = err instanceof Error ? err : new Error(String(err))
+                notify()
+              })
+
+            try {
+              for (;;) {
+                if (queue.length > 0) {
+                  yield queue.shift() as Uint8Array
+                  continue
+                }
+                if (finished) {
+                  if (failure) throw failure
+                  return
+                }
+                // Suspend until the next chunk arrives or the download settles — no polling.
+                await new Promise<void>((resolve) => {
+                  wake = resolve
+                })
+              }
+            } finally {
+              // If the consumer stops early (e.g. `break`), still observe the download promise
+              // so a late failure doesn't surface as an unhandled rejection.
+              await donePromise.catch(() => {})
+            }
+          },
+        }
+      },
     },
   }
 }
