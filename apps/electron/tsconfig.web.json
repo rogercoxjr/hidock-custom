@@ -8,7 +8,9 @@
     "electron/main/types/*.ts"
   ],
   "exclude": [
-    "electron/main/types/jensen.ts"
+    "electron/main/types/jensen.ts",
+    "src/lib/electron-api/__tests__/contract-harness.ts",
+    "src/lib/electron-api/__tests__/*.contract.test.ts"
   ],
   "compilerOptions": {
     "composite": true,
