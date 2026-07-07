@@ -6,18 +6,23 @@ import type { UnifiedRecording } from '@/types/unified-recording'
 import { hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 import type { ElectronAPI } from '@/lib/electron-api/types'
 
-// TODO(Phase1 Task 12): window.electronAPI's *ambient* type is sourced from the real
-// Electron desktop preload's ElectronAPI (electron/preload/index.ts, via
-// electron/preload/index.d.ts's `declare global`), which doesn't (and structurally can't,
-// without a desktop-side implementation) include the hosted-mode-only REST facade members
-// `deviceSync` / `downloadService.deviceFileSource` — those are composed onto
-// `window.electronAPI` at runtime by `installRestApi()` (src/lib/electron-api/index.ts,
-// Task 12) and typed on the renderer's own `ElectronAPI` in src/lib/electron-api/types.ts.
-// Verified the two ElectronAPI interfaces are otherwise a byte-identical/superset match
-// (2026-07-06) — this narrow cast bridges the gap for hosted mode without widening the
-// ambient global (out of this task's scope; that reconciliation belongs with Task 12).
-// Read fresh on every call (not cached at module scope) so tests that reassign
-// `window.electronAPI` per-case still see the current mock.
+// Task 12 investigated reconciling this: window.electronAPI's *ambient* type is sourced from
+// the real Electron desktop preload's ElectronAPI (electron/preload/index.ts), whose object
+// literal (`const electronAPI: ElectronAPI = {...}`, backed by ipcRenderer IPC to a
+// main-process implementation over the native `usb` package) is checked structurally against
+// the interface. Adding `deviceSync` / `downloadService.deviceFileSource` as required members
+// there forced tsc to demand real implementations in that object literal too (confirmed:
+// `tsc` failed with "Property 'deviceFileSource' is missing" once added) — but desktop mode
+// has no way to back them: its `jensen`/`downloadService` live in the main process via
+// native-USB IPC, entirely separate from the renderer-side WebUSB `getJensenDevice()`
+// singleton the hosted REST facade uses. Stubbing them to compile would silently lie about
+// desktop capability, so the reconciliation was judged too risky per Task 12's brief and left
+// for a dedicated task. `deviceSync` / `downloadService.deviceFileSource` are hosted-mode-only
+// REST facade members — composed onto `window.electronAPI` at runtime by `installRestApi()`
+// (src/lib/electron-api/index.ts) and typed on the renderer's own `ElectronAPI` in
+// src/lib/electron-api/types.ts. This narrow cast bridges the gap for hosted mode without
+// widening the desktop ambient global. Read fresh on every call (not cached at module scope)
+// so tests that reassign `window.electronAPI` per-case still see the current mock.
 function hostedApi(): ElectronAPI {
   return window.electronAPI as unknown as ElectronAPI
 }

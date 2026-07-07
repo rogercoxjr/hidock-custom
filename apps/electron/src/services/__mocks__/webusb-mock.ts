@@ -100,10 +100,10 @@ export function makeMockUsbDevice(files: MockFile[]): USBDevice {
     async close() {
       ;(this as any).opened = false
     },
-    async selectConfiguration() {},
-    async claimInterface() {},
-    async releaseInterface() {},
-    async selectAlternateInterface() {},
+    async selectConfiguration() { /* no-op mock */ },
+    async claimInterface() { /* no-op mock */ },
+    async releaseInterface() { /* no-op mock */ },
+    async selectAlternateInterface() { /* no-op mock */ },
     async transferOut(_ep: number, data: BufferSource) {
       const view = new Uint8Array(data as ArrayBuffer)
       const cmd = (view[2] << 8) | view[3]
