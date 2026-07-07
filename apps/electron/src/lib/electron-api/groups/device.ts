@@ -23,7 +23,7 @@
  *   Object.assign(api.downloadService, deviceGroup.downloadService)
  */
 
-import { JensenDevice } from '../../../services/jensen'
+import { getJensenDevice, type JensenDevice } from '../../../services/jensen'
 import type { DeviceFileSource } from '../types-device-sync'
 
 const PHASE1_ERROR = 'device path is Phase 1'
@@ -40,7 +40,13 @@ function phase1Reject<T = never>(): Promise<T> {
 }
 
 export function makeDeviceGroup() {
-  const dev = new JensenDevice()
+  // Share the app-wide singleton JensenDevice instance rather than constructing a new one.
+  // Two separate JensenDevice instances would each call claimInterface(0) on the same
+  // physical HiDock over WebUSB, producing LIBUSB_ERROR_ACCESS device lockups (see
+  // CLAUDE.md "USB Device Safety"). The real connect path (pages/Device.tsx ->
+  // hidock-device.ts) also uses getJensenDevice(), so this keeps a single owner of the
+  // USB connection across the whole renderer.
+  const dev = getJensenDevice()
 
   return {
     // -----------------------------------------------------------------------
