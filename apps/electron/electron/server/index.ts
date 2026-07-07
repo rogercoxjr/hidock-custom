@@ -32,6 +32,14 @@ export async function startServer(): Promise<FastifyInstance> {
     publicUrl: cfg.publicUrl, cookieSecure: true
   })
   await app.listen({ port: cfg.port, host: '0.0.0.0' })
+  // The hosted server has no Electron main process to run the transcription
+  // queue processor (Electron does this in main/index.ts). Without it, queued
+  // items only drain on an opportunistic processQueueManually() kick (sync/upload),
+  // so a re-queued or otherwise un-kicked item sits 'pending' forever. Start the
+  // draining interval here. Dynamic import matches the routes' lazy-load of the
+  // transcription service, keeping it off the static (electron-free) boot graph.
+  const { startTranscriptionProcessor } = await import('../main/services/transcription')
+  startTranscriptionProcessor()
   return app
 }
 
