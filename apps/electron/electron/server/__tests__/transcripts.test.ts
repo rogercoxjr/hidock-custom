@@ -117,6 +117,16 @@ describe('transcripts REST router', () => {
   })
 
   afterEach(async () => {
+    // Stop any processor interval started this test BEFORE the DB closes / module resets.
+    // vi.resetModules() gives a fresh module next test but does NOT clear a leaked setInterval —
+    // an un-stopped interval keeps firing processQueue() against the now-closed DB, corrupting
+    // later tests (the source of the cross-test 500s in queue/status, cancel-all, processor/start).
+    try {
+      const { stopTranscriptionProcessor } = await import('../../main/services/transcription')
+      stopTranscriptionProcessor()
+    } catch {
+      /* module may not have loaded */
+    }
     const { closeDatabase } = await import('../../main/services/database')
     try {
       closeDatabase()
@@ -623,7 +633,13 @@ describe('transcripts REST router', () => {
   })
 
   it('POST /api/recordings/:id/transcription/retry returns ok and sets recording status to pending', async () => {
-    const { getRecordingById, getQueueItems } = await import('../../main/services/database')
+    const { getRecordingById, getQueueItems, acquireTranscriptionLock } = await import('../../main/services/database')
+    // Hold the transcription mutex so the retry route's fire-and-forget processQueueManually()
+    // finds the lock taken and SKIPS (processQueue() returns early) — it therefore can't
+    // asynchronously flip the recording pending→error (transcription fails in the keyless test
+    // env) before we assert. This makes the route's synchronous 'pending' write observable
+    // deterministically, using the module's own mutex rather than a fragile module mock.
+    acquireTranscriptionLock('retry-test-lock-holder')
     const app = await makeApp()
     const cookie = await login(app)
     const res = await app.inject({
