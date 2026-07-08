@@ -138,6 +138,46 @@ jobs:
         flags: web
         name: web-node-${{ matrix.node-version }}
 
+  # Electron App (Hosted Knowledge Hub) — server + renderer gate
+  test-electron:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/electron
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 22
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: 'npm'
+        cache-dependency-path: apps/electron/package-lock.json
+
+    - name: Install dependencies (skip Electron-ABI postinstall)
+      # package.json's postinstall runs `electron-builder install-app-deps`, which rebuilds
+      # native modules against Electron's Node ABI. The suite runs under plain Node (Vitest),
+      # so skip that and rebuild the must-have native deps for THIS runner's Node ABI below.
+      run: npm ci --ignore-scripts
+
+    - name: Rebuild native modules for the runner's Node ABI
+      run: npm rebuild better-sqlite3 sodium-native
+
+    - name: Typecheck (node + web tsconfigs)
+      run: npm run typecheck
+
+    - name: Lint
+      run: npm run lint
+
+    - name: Test — unit + contract + integration + hosted-invariant guards
+      run: npx vitest run
+
+    - name: Server bundle + electron-boot-path audit (no `electron` on the boot graph)
+      run: npm run build:server
+
+    - name: Build SPA
+      run: npm run build
+
   # Security Scanning
   security:
     runs-on: ubuntu-latest
