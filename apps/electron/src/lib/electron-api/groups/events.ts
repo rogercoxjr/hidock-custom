@@ -102,7 +102,13 @@ export function makeEventsGroup({ wsClient }: EventsDeps): EventsGroup {
     onTranscriptionCancelled: (cb) => wsClient.subscribe('transcription:cancelled', cb as (p: unknown) => void),
     onTranscriptionAllCancelled: (cb) => wsClient.subscribe('transcription:all-cancelled', cb as (p: unknown) => void),
 
-    onSecurityWarning: (cb) => wsClient.subscribe('security-warning', cb as (p: unknown) => void),
+    // security-warning is an ELECTRON-DESKTOP-ONLY startup check: it fires only when the Chromium
+    // BrowserWindow is launched with --remote-debugging-port (electron/main/index.ts), delivered
+    // via preload IPC. The hosted Fastify server has no Chromium debug port and no analog, so there
+    // is no /ws publisher — subscribing here would be a dead NEVER-FIRED channel. Return a no-op
+    // unsub: the shared SecurityWarningBanner still gets a valid token and simply never fires in
+    // hosted mode (desktop delivers it via preload IPC, unchanged).
+    onSecurityWarning: () => () => {},
     onActivityLogEntry: (cb) => wsClient.subscribe('activity-log:entry', cb as (p: unknown) => void),
     onVoiceprintCaptured: (cb) => wsClient.subscribe('voiceprint:captured', cb as (p: unknown) => void),
 

@@ -161,11 +161,15 @@ export async function registerTranscripts(app: FastifyInstance): Promise<void> {
   // ------------------------------------------------------------------
   // POST /api/transcripts/by-recording-ids
   // ------------------------------------------------------------------
-  app.post('/api/transcripts/by-recording-ids', { preHandler: [app.requireAuth] }, async (req) => {
-    const { ids } = byRecordingIdsBody.parse(req.body)
-    const map = getTranscriptsByRecordingIds(ids)
-    return Object.fromEntries(map)
-  })
+  app.post(
+    '/api/transcripts/by-recording-ids',
+    { preHandler: [app.requireAuth, app.requireSameOrigin] },
+    async (req) => {
+      const { ids } = byRecordingIdsBody.parse(req.body)
+      const map = getTranscriptsByRecordingIds(ids)
+      return Object.fromEntries(map)
+    }
+  )
 
   // ------------------------------------------------------------------
   // GET /api/transcripts/search?q=

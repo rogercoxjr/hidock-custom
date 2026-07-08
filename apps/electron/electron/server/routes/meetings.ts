@@ -50,7 +50,7 @@ export async function registerMeetings(app: FastifyInstance): Promise<void> {
 
   // POST /api/meetings/by-ids  { ids: string[] }
   // Must be registered before /:id to avoid route conflict
-  app.post('/api/meetings/by-ids', { preHandler: [app.requireAuth] }, async (req) => {
+  app.post('/api/meetings/by-ids', { preHandler: [app.requireAuth, app.requireSameOrigin] }, async (req) => {
     const { ids } = byIdsBody.parse(req.body)
     const map = getMeetingsByIds(ids)
     // Return as plain object (Map → object for JSON serialization, same as db-handlers)

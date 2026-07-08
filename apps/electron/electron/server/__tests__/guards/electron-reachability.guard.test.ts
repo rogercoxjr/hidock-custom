@@ -128,29 +128,25 @@ const routeFiles = readdirSync(routesDir)
   .sort()
 
 // ---------------------------------------------------------------------------------------
-// KNOWN, TRACKED PRODUCT BUG — documented exception (keep the guard green for everything
-// else while still catching any NEW leak).
+// Load-time electron leak allowlist — documented exceptions to the "no route may reach a
+// load-time electron import" invariant below. Currently EMPTY.
 //
-// The voiceprint capture path leaks 'electron' into hosted mode: the speakers route
-// dynamically imports voiceprint-service (directly and via voiceprint/speaker-matcher),
-// and voiceprint-service statically `import { app } from 'electron'` while
-// voiceprint-worker-pool statically `import { utilityProcess, app } from 'electron'`. Under
-// plain Node those dynamic imports reject, so voiceprint capture is broken in hosted mode.
-// This is a real, tracked product bug, NOT a test artifact.
-//
-// TODO(voiceprint-hosted-electron): make voiceprint-service / voiceprint-worker-pool
-// hosted-safe (lazy-load electron behind an isElectron guard, or run the worker only in the
-// desktop build). When fixed: delete these two entries, and un-skip the "IDEAL" test below
-// — the honesty test will start failing to remind you these entries are now stale.
-const KNOWN_LEAK_MODULES = new Set<string>([
+// The voiceprint capture path (speakers route -> voiceprint-service -> voiceprint-worker-pool,
+// directly and via voiceprint/speaker-matcher) USED to leak here: both modules statically
+// `import ... from 'electron'`, which throws at load under plain Node. They were made
+// hosted-safe — electron (utilityProcess/app) is now loaded LAZILY via dynamic import behind an
+// "are we in Electron?" guard, and under plain Node the embed step degrades to a no-op. They are
+// now tracked as reviewed-safe LAZY electron users in KNOWN_SAFE_LAZY_MODULES below.
+const KNOWN_LEAK_MODULES = new Set<string>([])
+
+// Reachable lazy (function-scoped / dynamic-import) electron modules that have been reviewed and
+// confirmed hosted-safe. Adding a new one here is a conscious "yes, this is guarded" decision.
+const KNOWN_SAFE_LAZY_MODULES = new Set<string>([
+  'main/ipc/migration-handlers.ts', // electron is require()'d only inside the Electron-only IPC-registration path
+  // Voiceprint capture: electron (utilityProcess/app) is dynamic-import()'d only when running
+  // under Electron; under plain Node the embed step degrades to a no-op (see each module's top).
   'main/services/voiceprint-service.ts',
   'main/services/voiceprint-worker-pool.ts'
-])
-
-// Reachable lazy (function-scoped) electron modules that have been reviewed and confirmed
-// hosted-safe. Adding a new one here is a conscious "yes, this is guarded" decision.
-const KNOWN_SAFE_LAZY_MODULES = new Set<string>([
-  'main/ipc/migration-handlers.ts' // electron is require()'d only inside the Electron-only IPC-registration path
 ])
 
 describe('guard: no Fastify route can load an electron import in hosted mode', () => {
@@ -162,32 +158,39 @@ describe('guard: no Fastify route can load an electron import in hosted mode', (
     expect(totalVisited).toBeGreaterThan(routeFiles.length) // routes actually pull in transitive modules
   })
 
-  it('walker is sound: it still detects the known voiceprint leak reached from the speakers route', () => {
+  it('walker is sound: it follows the speakers route into the voiceprint chain and detects electron use', () => {
     // Proves the walker follows DYNAMIC imports transitively into services, skips type-only
-    // imports, and detects a load-time electron import — i.e. a real NEW leak could not slip
-    // past it. Also documents that the tracked voiceprint bug is currently real.
-    const { loadTime } = walk(join(routesDir, 'speakers.ts'))
-    const reached = [...loadTime.keys()].map(rel)
-    expect(reached).toContain('main/services/voiceprint-service.ts')
-    expect(reached).toContain('main/services/voiceprint-worker-pool.ts')
+    // imports, and detects electron usage — i.e. a real NEW leak could not slip past it. The
+    // voiceprint modules now use LAZY (dynamic-import) electron rather than a load-time import,
+    // so they surface in the `lazy` set (reviewed-safe, see KNOWN_SAFE_LAZY_MODULES) and NOT in
+    // `loadTime` — proving the hosted crash we defend against is gone.
+    const { loadTime, lazy } = walk(join(routesDir, 'speakers.ts'))
+    const reachedLazy = [...lazy.keys()].map(rel)
+    expect(reachedLazy).toContain('main/services/voiceprint-service.ts')
+    expect(reachedLazy).toContain('main/services/voiceprint-worker-pool.ts')
+    const reachedLoadTime = [...loadTime.keys()].map(rel)
+    expect(reachedLoadTime).not.toContain('main/services/voiceprint-service.ts')
+    expect(reachedLoadTime).not.toContain('main/services/voiceprint-worker-pool.ts')
   })
 
-  it('keeps the voiceprint allowlist honest — its modules still import electron at load time', () => {
-    // If this fails, the tracked bug was fixed: remove the stale KNOWN_LEAK_MODULES entry
-    // and un-skip the IDEAL test below.
-    for (const modRel of KNOWN_LEAK_MODULES) {
+  it('keeps the lazy allowlist honest — voiceprint modules use lazy (not load-time) electron', () => {
+    // If a future edit reintroduces a load-time `import ... from 'electron'` in these modules,
+    // this fails so the KNOWN_SAFE_LAZY_MODULES blessing can't silently hide a real hosted crash.
+    for (const modRel of ['main/services/voiceprint-service.ts', 'main/services/voiceprint-worker-pool.ts']) {
       const abs = resolve(electronRoot, modRel)
-      expect(existsSync(abs), `allowlisted module missing: ${modRel}`).toBe(true)
-      expect(importsElectronAtLoadTime(readFileSync(abs, 'utf8')), `${modRel} no longer imports electron`).toBe(true)
+      expect(existsSync(abs), `module missing: ${modRel}`).toBe(true)
+      const src = readFileSync(abs, 'utf8')
+      expect(importsElectronAtLoadTime(src), `${modRel} must NOT import electron at load time`).toBe(false)
+      expect(importsElectronLazily(src), `${modRel} should access electron lazily`).toBe(true)
     }
   })
 
-  it('no route can reach a load-time electron import (except the tracked voiceprint chain)', () => {
+  it('no route can reach a load-time electron import in hosted mode', () => {
     const offenders: string[] = []
     for (const file of routeFiles) {
       const { loadTime } = walk(join(routesDir, file))
       for (const [mod, chain] of loadTime) {
-        if (KNOWN_LEAK_MODULES.has(rel(mod))) continue // documented, tracked exception
+        if (KNOWN_LEAK_MODULES.has(rel(mod))) continue // documented, tracked exception (currently none)
         offenders.push(`${file}: reaches ${rel(mod)}\n      via ${chain.map(rel).join(' -> ')}`)
       }
     }
@@ -212,19 +215,5 @@ describe('guard: no Fastify route can load an electron import in hosted mode', (
       `New reachable lazy electron require(s) — confirm they never run in hosted mode, then ` +
         `add to KNOWN_SAFE_LAZY_MODULES:\n  ${unreviewed.join('\n  ')}`
     ).toEqual([])
-  })
-
-  // IDEAL end-state invariant: NO route reaches electron at all — including the voiceprint
-  // capture path. Skipped because the voiceprint bug above makes it fail today. Un-skip it
-  // (and drop KNOWN_LEAK_MODULES) once TODO(voiceprint-hosted-electron) is resolved.
-  it.skip('IDEAL: no route reaches any electron import, including voiceprint capture', () => {
-    const offenders: string[] = []
-    for (const file of routeFiles) {
-      const { loadTime } = walk(join(routesDir, file))
-      for (const [mod, chain] of loadTime) {
-        offenders.push(`${file}: reaches ${rel(mod)} via ${chain.map(rel).join(' -> ')}`)
-      }
-    }
-    expect(offenders).toEqual([])
   })
 })

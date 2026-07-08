@@ -37,28 +37,6 @@ function isPublicException(path: string): boolean {
   return path === '/healthz' || path.startsWith('/auth/')
 }
 
-// ─────────────────────────────────────────────────────────────────────────────────────────
-// TRACKED GAP (do not silently expand): these read-only batch-fetch POST routes carry only
-// requireAuth and are missing requireSameOrigin. They are POSTs purely because they take a
-// large `{ ids: [...] }` body (a GET can't), and they only SELECT — they mutate nothing.
-// Practical CSRF risk is low (SameSite=lax + requireAuth already block forced cross-site
-// requests, and CORS blocks reading the response), but they still DEVIATE from the strict
-// method-based invariant asserted here. They are excluded from the strict mutating assertion
-// below and pinned by the "TRACKED GAP" test so that the moment the guard is added (or a
-// route is removed/renamed) the pin fails and forces this allow-list to be cleaned up.
-//
-// TODO(security): add app.requireSameOrigin to these three routes for defense-in-depth
-//   consistency, then delete both this allow-list and the "TRACKED GAP" test below.
-//     - POST /api/knowledge/by-ids            (routes/knowledge.ts)
-//     - POST /api/meetings/by-ids             (routes/meetings.ts)
-//     - POST /api/transcripts/by-recording-ids (routes/transcripts.ts)
-// ─────────────────────────────────────────────────────────────────────────────────────────
-const KNOWN_MISSING_SAME_ORIGIN = new Set<string>([
-  'POST /api/knowledge/by-ids',
-  'POST /api/meetings/by-ids',
-  'POST /api/transcripts/by-recording-ids'
-])
-
 type Resolution = 'inline' | 'named-const' | 'none' | 'indirect'
 
 interface RouteReg {
@@ -263,8 +241,8 @@ describe('server auth-coverage guard', () => {
       const noSameOrigin = !r.guards!.has('requireSameOrigin')
       // requireAuth is non-negotiable for every mutating route.
       if (noAuth) violations.push(`${routeKey(r)} — missing requireAuth  (${r.file}:${r.line})`)
-      // requireSameOrigin is required too, except for the explicitly tracked read-only gaps.
-      if (noSameOrigin && !KNOWN_MISSING_SAME_ORIGIN.has(routeKey(r))) {
+      // requireSameOrigin is required for every mutating route (no exceptions).
+      if (noSameOrigin) {
         violations.push(`${routeKey(r)} — missing requireSameOrigin  (${r.file}:${r.line})`)
       }
     }
@@ -275,24 +253,6 @@ describe('server auth-coverage guard', () => {
         '\n  '
       )}`
     ).toEqual([])
-  })
-
-  // xfail-style pin for the documented TRACKED GAP above. It asserts the CURRENT (defective)
-  // state — that each allow-listed route still exists and is still missing requireSameOrigin.
-  // When the gap is fixed (guard added) or a route is removed/renamed, this assertion FAILS,
-  // forcing removal of both this test and the KNOWN_MISSING_SAME_ORIGIN allow-list. This keeps
-  // the suite green today while ensuring the gap cannot be quietly forgotten.
-  it('TRACKED GAP: read-only batch POST routes still lack requireSameOrigin (see TODO)', () => {
-    const byKey = new Map(allRoutes.map((r) => [routeKey(r), r]))
-    const stillMissing = [...KNOWN_MISSING_SAME_ORIGIN].filter((key) => {
-      const r = byKey.get(key)
-      return r != null && r.guards != null && !r.guards.has('requireSameOrigin')
-    })
-    expect(
-      stillMissing.sort(),
-      'A tracked auth gap changed. If requireSameOrigin was added (good!), remove that route ' +
-        'from KNOWN_MISSING_SAME_ORIGIN and delete this test.'
-    ).toEqual([...KNOWN_MISSING_SAME_ORIGIN].sort())
   })
 
   it('notes (does not fail on) routes whose preHandler cannot be resolved statically', () => {

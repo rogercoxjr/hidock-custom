@@ -89,7 +89,7 @@ export async function registerKnowledge(app: FastifyInstance): Promise<void> {
 
   // Must be registered before /:id to avoid route conflict
   // POST /api/knowledge/by-ids — batch fetch
-  app.post('/api/knowledge/by-ids', { preHandler: [app.requireAuth] }, async (req) => {
+  app.post('/api/knowledge/by-ids', { preHandler: [app.requireAuth, app.requireSameOrigin] }, async (req) => {
     const { ids } = byIdsBody.parse(req.body)
     const placeholders = ids.map(() => '?').join(',')
     const rows = queryAll<Record<string, unknown>>(

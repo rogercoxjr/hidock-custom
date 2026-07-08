@@ -52,7 +52,11 @@ describe('voiceprint worker pool', () => {
   })
   it('child exit resolves pending to null and respawns on next call', async () => {
     behavior = 'silent'
+    // The child is forked lazily via a dynamic electron import now, so the fork is async — wait
+    // for THIS call's child to spawn before emitting its exit (reset lastChild to detect it).
+    lastChild = null
     const p = embedSamples('/m', 16000, new Float32Array(10))
+    await vi.waitFor(() => expect(lastChild).not.toBeNull())
     lastChild.emit('exit', 0)
     expect(await p).toBeNull()
     behavior = 'reply'

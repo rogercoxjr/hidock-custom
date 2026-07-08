@@ -15,7 +15,6 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
-import { app } from 'electron'
 import { resolveFfmpegPath } from './asr/audio-normalize'
 import {
   getRecordingById,
@@ -305,8 +304,9 @@ export async function embedLabelWindows(
 
     const windows = sliceLabelWindows(pcm, turns, label, opts?.windowMs, opts?.hopMs)
     const embeddings: Float32Array[] = []
+    const model = await modelPath()
     for (const w of windows) {
-      const emb = await embedSamples(modelPath(), 16000, w)
+      const emb = await embedSamples(model, 16000, w)
       if (emb) embeddings.push(emb)
     }
     return embeddings
@@ -321,9 +321,25 @@ function embeddingToBlob(vec: Float32Array): Uint8Array {
   return new Uint8Array(vec.buffer, vec.byteOffset, vec.byteLength)
 }
 
-/** Resolve the on-disk model path the same way getExtractor() does — the
- *  utilityProcess worker loads sherpa from this path off the main thread. */
-function modelPath(): string {
+/**
+ * Resolve the on-disk model path the same way getExtractor() does — the utilityProcess worker
+ * loads sherpa from this path off the main thread.
+ *
+ * `app` comes from electron, which is loaded LAZILY (dynamic import, not a top-level static
+ * import) so merely importing this module under plain Node (hosted mode) doesn't throw. When
+ * electron isn't available (hosted) this returns '' — the worker pool no-ops on the empty path,
+ * so voiceprint capture degrades gracefully instead of crashing. See the note on the top of
+ * voiceprint-worker-pool.ts for why the electron import must stay lazy.
+ */
+async function modelPath(): Promise<string> {
+  let app: Electron.App
+  try {
+    const electron = await import('electron')
+    if (!electron || typeof (electron as { app?: unknown }).app !== 'object') return ''
+    app = electron.app
+  } catch {
+    return '' // plain Node (hosted) — electron unavailable; caller's embed step no-ops
+  }
   return app.isPackaged
     ? join(process.resourcesPath, 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
     : join(app.getAppPath(), 'resources', 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
@@ -422,7 +438,7 @@ export async function captureVoiceprint(
     // Embed OFF the main thread in a utilityProcess (see voiceprint-worker-pool): the
     // synchronous sherpa compute() can no longer block the UI. embedSamples never throws;
     // it resolves null on any worker failure so the speaker→contact mapping always succeeds.
-    const embedding = await embedSamples(modelPath(), 16000, samples)
+    const embedding = await embedSamples(await modelPath(), 16000, samples)
     if (!embedding || !shouldBankGivenExisting(embedding, [])) {
       return { captured: false, cleanSpeechMs: cleanMs, reason: 'embedding-failed' }
     }
@@ -499,12 +515,13 @@ export async function embedRecordingLabels(recordingId: string): Promise<void> {
   }
 
   const runId = `drun_${randomUUID()}`
+  const model = await modelPath()
   const labels = [...new Set(turns.map((t) => t.speaker))]
   for (const label of labels) {
     if (collectCleanSpeechMs(turns, label) < MIN_CLEAN_SPEECH_MS) continue
     const samples = pcmToFloat32(pcm, turns, label)
     if (samples.length === 0) continue
-    const embedding = await embedSamples(modelPath(), 16000, samples)
+    const embedding = await embedSamples(model, 16000, samples)
     if (!embedding) continue
     insertLabelEmbedding({
       id: `le_${recordingId}_${runId}_${label}`,

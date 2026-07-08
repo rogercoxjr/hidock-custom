@@ -30,10 +30,10 @@
  *  - ONE_DIRECTIONAL: device-pipeline jensen:* channels. Broadcast from ipc/jensen-handlers.ts
  *    but consumed by the device pipeline through a SEPARATE renderer subscription surface (not
  *    events.ts). Intentionally one-directional with respect to the events.ts contract.
- *  - KNOWN_DEFECTS: real never-fired gaps that exist in product code right now. They are NOT
- *    silently masked — each is pinned by an xfail `it.fails` test that flips RED the moment a
- *    real /ws broadcaster is added (telling you to remove the entry). See the DEFECT REPORT
- *    block at the bottom of this file.
+ *  - KNOWN_DEFECTS: real never-fired gaps that exist in product code right now — currently EMPTY
+ *    (both former defects, integrity:progress and security-warning, are resolved). Any future
+ *    entry would be pinned by an xfail `it.fails` test that flips RED the moment a real /ws
+ *    broadcaster is added, telling you to remove the entry.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -77,12 +77,12 @@ const ONE_DIRECTIONAL = new Set<string>([
 ])
 
 // KNOWN, TRACKED DEFECTS: subscribed by the renderer over /ws but NEVER broadcast over /ws.
-// Do not "fix" by deleting the subscription without confirming product intent — each is
-// pinned by an xfail it.fails() below and called out in the DEFECT REPORT at end of file.
-const KNOWN_DEFECTS = new Set<string>([
-  'security-warning', // only legacy webContents.send() at electron/main/index.ts:285 — no /ws publisher
-  'integrity:progress', // integrity-service.ts emits nothing; route comment at integrity.ts:32 is stale
-])
+// Currently EMPTY — both former defects are resolved:
+//   - integrity:progress → integrity-service.ts now broadcasts it from runFullScan().
+//   - security-warning   → Electron-desktop-only (remote-debugging warning via preload IPC);
+//     the dead /ws subscription was removed from events.ts, so it is no longer subscribed.
+// A future never-fired gap would be added here with a matching it.fails() pin below.
+const KNOWN_DEFECTS = new Set<string>([])
 
 function collectTsFiles(dir: string): string[] {
   const out: string[] = []
@@ -151,45 +151,10 @@ describe('WS channel contract guard (broadcast <-> subscribe)', () => {
   })
 
   // ---------------------------------------------------------------------------------------
-  // xfail pins for the two real defects. Each is GREEN while the defect exists and FLIPS RED
-  // the instant a real /ws broadcaster for the channel is added — your cue to fix the contract,
-  // delete the KNOWN_DEFECTS entry, and delete the corresponding it.fails below.
+  // RESOLVED (no xfail pins remain): both formerly-dead channels are now contract-clean —
+  //   - integrity:progress → broadcast from integrity-service.ts runFullScan() over /ws.
+  //   - security-warning   → Electron-desktop-only; its dead /ws subscription was removed from
+  //     events.ts (delivered on desktop via preload IPC only). No hosted analog exists.
+  // The two invariant tests above now enforce both directions with no allowlist exceptions.
   // ---------------------------------------------------------------------------------------
-
-  it.fails('KNOWN DEFECT: security-warning is subscribed but never broadcast over /ws', () => {
-    // TODO(ws-contract): events.ts:105 subscribes 'security-warning' on /ws, but the main process
-    // only emits it via legacy Electron IPC webContents.send() (electron/main/index.ts:285), never
-    // via getBroadcaster().broadcast(). Under the headless/hosted server the warning never reaches
-    // the renderer. Fix: broadcast 'security-warning' over /ws (or remove the dead subscription).
-    expect(broadcastChannels.has('security-warning')).toBe(true)
-  })
-
-  it.fails('KNOWN DEFECT: integrity:progress is subscribed but never broadcast over /ws', () => {
-    // TODO(ws-contract): events.ts:113 subscribes 'integrity:progress' and the route comment at
-    // electron/server/routes/integrity.ts:32 claims progress is broadcast over /ws, but
-    // integrity-service.ts emits no progress at all — the scan progress bar never advances.
-    // Fix: have integrity-service broadcast 'integrity:progress' (or remove the dead subscription).
-    expect(broadcastChannels.has('integrity:progress')).toBe(true)
-  })
 })
-
-/**
- * DEFECT REPORT (tracked here so the suite stays green while the gap stays visible)
- * ================================================================================
- * Two channels the renderer subscribes to over /ws are NEVER broadcast over /ws:
- *
- *   1. security-warning   — subscribed at src/lib/electron-api/groups/events.ts:105.
- *      Only publisher is legacy webContents.send('security-warning', ...) at
- *      electron/main/index.ts:285 (Electron IPC, not the /ws transport). No
- *      getBroadcaster().broadcast('security-warning', ...) exists anywhere, so under the
- *      headless/hosted server the remote-debugging warning never reaches the UI.
- *
- *   2. integrity:progress — subscribed at src/lib/electron-api/groups/events.ts:113.
- *      electron/server/routes/integrity.ts:32 comments "Progress events are broadcast over
- *      /ws as integrity:progress messages", but electron/main/services/integrity-service.ts
- *      emits nothing (no getBroadcaster, no progress callback). The integrity scan progress
- *      bar can never advance.
- *
- * Both are pinned by it.fails() above; fixing either will turn its pin RED as a reminder to
- * remove it from KNOWN_DEFECTS.
- */

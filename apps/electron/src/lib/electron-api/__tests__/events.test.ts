@@ -96,8 +96,15 @@ describe('makeEventsGroup', () => {
     assertEvent((g, cb) => g.onTranscriptionAllCancelled(cb), 'transcription:all-cancelled')
   })
 
-  it('onSecurityWarning → channel "security-warning"', () => {
-    assertEvent((g, cb) => g.onSecurityWarning(cb), 'security-warning')
+  it('onSecurityWarning is a no-op in hosted mode (Electron-desktop-only; no /ws subscribe)', () => {
+    // security-warning fires only on desktop via preload IPC (remote-debugging warning); there is
+    // no /ws publisher, so the hosted SDK must NOT subscribe over /ws (keeps the ws-contract honest).
+    // It still returns a valid no-op unsub so the shared SecurityWarningBanner keeps working.
+    const { ws, group } = makeMockWs()
+    const unsub = group.onSecurityWarning(vi.fn())
+    expect(ws.subscribe).not.toHaveBeenCalled()
+    expect(typeof unsub).toBe('function')
+    expect(() => unsub()).not.toThrow()
   })
 
   it('onActivityLogEntry → channel "activity-log:entry"', () => {

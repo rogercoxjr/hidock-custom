@@ -24,6 +24,7 @@ import {
   SyncedFile
 } from './database'
 import { getRecordingsPath } from './file-storage'
+import { getBroadcaster } from './broadcaster'
 
 // =============================================================================
 // Types
@@ -405,23 +406,32 @@ class IntegrityService {
     const startTime = new Date()
     const issues: IntegrityIssue[] = []
 
-    // 1. Check for orphaned downloads
-    issues.push(...this.findOrphanedDownloads())
+    // Each phase reports progress over /ws as `integrity:progress` so the renderer's scan
+    // progress bar can advance (subscribed at src/lib/electron-api/groups/events.ts). The
+    // broadcaster is transport-agnostic: getBroadcaster() is a no-op when no transport is wired
+    // (Electron-desktop / headless tests), so this is server-safe and does not affect desktop
+    // mode. Payload matches the renderer contract shape: { message, progress: 0-100 }.
+    const phases: Array<{ message: string; run: () => IntegrityIssue[] }> = [
+      { message: 'Checking for orphaned downloads', run: () => this.findOrphanedDownloads() },
+      { message: 'Checking for missing files', run: () => this.findMissingFiles() },
+      { message: 'Checking for orphaned files', run: () => this.findOrphanedFiles() },
+      { message: 'Checking for date mismatches', run: () => this.findDateMismatches() },
+      { message: 'Checking for size mismatches', run: () => this.findSizeMismatches() },
+      { message: 'Checking for incomplete downloads', run: () => this.findIncompleteDownloads() }
+    ]
 
-    // 2. Check for missing files (in DB but not on disk)
-    issues.push(...this.findMissingFiles())
+    const broadcaster = getBroadcaster()
+    phases.forEach((phase, index) => {
+      // Emit at the start of each phase so the bar advances as each check begins.
+      broadcaster.broadcast('integrity:progress', {
+        message: phase.message,
+        progress: Math.round((index / phases.length) * 100)
+      })
+      issues.push(...phase.run())
+    })
 
-    // 3. Check for orphaned files (on disk but not in DB)
-    issues.push(...this.findOrphanedFiles())
-
-    // 4. Check for date mismatches
-    issues.push(...this.findDateMismatches())
-
-    // 5. Check for size mismatches
-    issues.push(...this.findSizeMismatches())
-
-    // 6. Check for incomplete downloads (partial files)
-    issues.push(...this.findIncompleteDownloads())
+    // Final 100% once all phases have completed.
+    broadcaster.broadcast('integrity:progress', { message: 'Scan complete', progress: 100 })
 
     const endTime = new Date()
 
