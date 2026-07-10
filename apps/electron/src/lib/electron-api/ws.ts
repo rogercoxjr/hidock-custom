@@ -20,6 +20,14 @@ type Callback = (payload: unknown) => void
 const MIN_BACKOFF_MS = 1_000
 const MAX_BACKOFF_MS = 30_000
 
+/**
+ * Reserved local channel fired by the multiplexer itself (not the server) whenever
+ * the socket *reopens* after a drop. Consumers subscribe to it to refetch data that
+ * may have changed while the browser was disconnected. See groups/events.ts →
+ * onConnectionRestored.
+ */
+export const RECONNECT_CHANNEL = 'connection:reconnected'
+
 function wsUrl(): string {
   if (typeof window === 'undefined') return 'ws://localhost/ws'
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -34,6 +42,7 @@ export class WsClient {
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private _backoff: number = MIN_BACKOFF_MS
   private _closed = false // true after explicit close() call; disables auto-reconnect
+  private _hasOpened = false // true once the socket has opened at least once; gates the reconnect signal
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -106,6 +115,13 @@ export class WsClient {
     socket.onopen = () => {
       // Reset backoff on successful connection.
       this._backoff = MIN_BACKOFF_MS
+      // Only a *reopen* means events may have been missed while disconnected — the
+      // first open coincides with initial page load, which already fetches. Fire the
+      // reserved reconnect channel on subsequent opens so consumers can refetch.
+      if (this._hasOpened) {
+        this._notify(RECONNECT_CHANNEL, undefined)
+      }
+      this._hasOpened = true
     }
 
     socket.onmessage = (ev: MessageEvent<string>) => {
@@ -145,6 +161,11 @@ export class WsClient {
     const { channel, payload } = parsed as { channel: unknown; payload: unknown }
     if (typeof channel !== 'string') return
 
+    this._notify(channel, payload)
+  }
+
+  /** Deliver a payload to every listener on `channel` (server frames and local signals alike). */
+  private _notify(channel: string, payload: unknown): void {
     const listeners = this._listeners.get(channel)
     if (!listeners || listeners.size === 0) return
 

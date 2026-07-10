@@ -697,6 +697,10 @@ export interface ElectronAPI {
     purgedPriorContactId?: string
     purgedCount?: number
   }) => void) => () => void
+
+  // Hosted-mode WS reconnect signal. Desktop has a persistent IPC bridge with no
+  // reconnect concept, so this is a no-op that returns a valid unsubscribe token.
+  onConnectionRestored: (callback: () => void) => () => void
 }
 
 // Expose the API to the renderer process
@@ -1190,6 +1194,12 @@ const electronAPI: ElectronAPI = {
     return () => {
       ipcRenderer.removeListener('voiceprint:captured', handler)
     }
+  },
+
+  // Desktop mode has no WS reconnect — persistent IPC bridge stays live. No-op unsub
+  // keeps the shared data-freshness bridge valid without ever firing.
+  onConnectionRestored: (_callback: () => void) => {
+    return () => {}
   }
 }
 

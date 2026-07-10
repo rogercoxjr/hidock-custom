@@ -682,4 +682,8 @@ export interface ElectronAPI {
     purgedPriorContactId?: string
     purgedCount?: number
   }) => void) => () => void
+
+  // Fired when the hosted-mode WebSocket reopens after a drop — consumers refetch data
+  // that may have changed while disconnected. No-op in desktop mode (persistent IPC bridge).
+  onConnectionRestored: (callback: () => void) => () => void
 }

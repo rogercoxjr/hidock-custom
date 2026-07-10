@@ -51,6 +51,7 @@ interface ProjectMember {
 }
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
+import { useDataRefresh } from '@/hooks/useDataRefresh'
 
 export function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -105,6 +106,9 @@ export function Projects() {
     loadProjects()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Auto-refresh when recordings/transcriptions change (project associations may shift).
+  useDataRefresh('projects', loadProjects)
 
   // Subsequent changes: debounce search/filter
   useEffect(() => {

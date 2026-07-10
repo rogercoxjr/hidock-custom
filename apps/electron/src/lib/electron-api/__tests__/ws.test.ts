@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { WsClient } from '../ws'
+import { WsClient, RECONNECT_CHANNEL } from '../ws'
 
 // ---------------------------------------------------------------------------
 // FakeWS — a minimal WebSocket stand-in that records calls and lets tests
@@ -85,6 +85,29 @@ describe('WsClient', () => {
 
     expect(cb).toHaveBeenCalledOnce()
     expect(cb).toHaveBeenCalledWith({ queueItemId: 'q1', progress: 42, stage: 'asr' })
+  })
+
+  // -------------------------------------------------------------------------
+  // 1b. Reconnect signal: fires on reopen, never on the first open
+  // -------------------------------------------------------------------------
+  it('fires the reconnect channel on socket reopen but not on the initial open', async () => {
+    const client = new WsClient()
+    const cb = vi.fn()
+
+    client.subscribe(RECONNECT_CHANNEL, cb)
+
+    // First open — must NOT signal (initial page load already fetches).
+    await Promise.resolve()
+    expect(cb).not.toHaveBeenCalled()
+
+    // Server drops the socket → auto-reconnect is scheduled with MIN backoff.
+    FakeWS.instances[0].triggerClose()
+    await vi.advanceTimersByTimeAsync(1_000)
+    await Promise.resolve() // let the new socket's onopen microtask settle
+
+    // Reopen — this is the reconnect; signal fires exactly once.
+    expect(cb).toHaveBeenCalledOnce()
+    expect(cb).toHaveBeenCalledWith(undefined)
   })
 
   // -------------------------------------------------------------------------

@@ -115,6 +115,10 @@ describe('makeEventsGroup', () => {
     assertEvent((g, cb) => g.onVoiceprintCaptured(cb), 'voiceprint:captured')
   })
 
+  it('onConnectionRestored → reserved channel "connection:reconnected"', () => {
+    assertEvent((g, cb) => g.onConnectionRestored(cb), 'connection:reconnected')
+  })
+
   // -------------------------------------------------------------------------
   // Nested group partials
   // -------------------------------------------------------------------------

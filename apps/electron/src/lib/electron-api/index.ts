@@ -87,6 +87,7 @@ export function installRestApi(): ElectronAPI {
     onSecurityWarning: eventsGroup.onSecurityWarning,
     onActivityLogEntry: eventsGroup.onActivityLogEntry,
     onVoiceprintCaptured: eventsGroup.onVoiceprintCaptured,
+    onConnectionRestored: eventsGroup.onConnectionRestored,
     // Nested group partials (merged shallowly; later REST group tasks fill the rest
     // of these namespaces — event methods are seeded here first so they're present
     // even before other groups are composed).
