@@ -99,7 +99,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18, 20]
+        # vitest 4 requires Node >=20 (uses node:inspector/promises).
+        # Node 18 EOL was April 2025 — drop it from the matrix.
+        node-version: [20, 22]
 
     steps:
     - uses: actions/checkout@v4

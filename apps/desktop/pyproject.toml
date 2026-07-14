@@ -101,8 +101,12 @@ py-modules = [
 
 [tool.black]
 line-length = 120
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py39', 'py310', 'py311']
 include = '\.pyi?$'
+# force-exclude is honored even when files are passed explicitly; extend-exclude
+# is not — needed because CI runs `black --check --diff .` and setuptools_scm
+# regenerates _version.py at build time with its own style.
+force-exclude = '_version\.py'
 extend-exclude = '''
 /(
   # directories
