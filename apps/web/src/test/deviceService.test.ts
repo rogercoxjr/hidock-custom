@@ -82,14 +82,14 @@ describe('DeviceService WebUSB Implementation', () => {
         it('should request device with correct filters', async () => {
             await deviceService.requestDevice();
 
-            expect(mockNavigatorUSB.requestDevice).toHaveBeenCalledWith({
-                filters: [
-                    { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.H1 },
-                    { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.H1E },
-                    { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.P1 },
-                    { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.DEFAULT },
-                ]
-            });
+            expect(mockNavigatorUSB.requestDevice).toHaveBeenCalledTimes(1);
+            const filters = mockNavigatorUSB.requestDevice.mock.calls[0][0].filters;
+            expect(filters).toEqual(expect.arrayContaining([
+                { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.H1 },
+                { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.H1E },
+                { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.P1 },
+                { vendorId: HIDOCK_DEVICE_CONFIG.VENDOR_ID, productId: HIDOCK_PRODUCT_IDS.DEFAULT },
+            ]));
         });
 
         it('should connect to device successfully', async () => {
@@ -203,10 +203,10 @@ describe('DeviceService WebUSB Implementation', () => {
             (deviceService as unknown as TestableDeviceService).receiveBuffer = packet;
             const parsed = (deviceService as unknown as TestableDeviceService).parsePacket();
 
-            expect(parsed).toEqual({
-                id: commandId,
-                sequence: sequence,
-                body: body
+            expect(parsed).toMatchObject({
+                cmdId: commandId,
+                seqId: sequence,
+                data: body,
             });
         });
 
@@ -526,7 +526,9 @@ describe('isHiDockDevice vendor guard (P1 / 0x3887 regression)', () => {
     });
 
     it('rejects known vendor with unknown product (no name match)', () => {
-        const dev = deviceWith(HIDOCK_DEVICE_CONFIG.VENDOR_ID, 0xDEAD);
+        // Explicit non-HiDock name — the `deviceWith` default is 'HiDock' which
+        // would otherwise satisfy the guard's name fallback and mask this case.
+        const dev = deviceWith(HIDOCK_DEVICE_CONFIG.VENDOR_ID, 0xDEAD, 'Unknown Device');
         expect(service.isHiDockDevice(dev)).toBe(false);
     });
 

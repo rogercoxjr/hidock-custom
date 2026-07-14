@@ -36,6 +36,7 @@
     "@typescript-eslint/eslint-plugin": "*",
     "@typescript-eslint/parser": "*",
     "@vitejs/plugin-react": "*",
+    "@vitest/coverage-v8": "*",
     "@vitest/ui": "*",
     "autoprefixer": "^10.4.21",
     "eslint": "^8.0.0",

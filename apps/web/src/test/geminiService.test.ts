@@ -8,13 +8,17 @@ interface TestableGeminiService {
     activeRequests: Map<string, AbortController>;
 }
 
-// Mock the Google Generative AI
+// Mock the Google Generative AI.
+// Vitest 4 dropped [[Construct]] semantics on arrow functions passed to
+// `mockImplementation`, so use a class-shaped mock to keep `new GoogleGenerativeAI()` valid.
 vi.mock('@google/generative-ai', () => ({
-    GoogleGenerativeAI: vi.fn().mockImplementation(() => ({
-        getGenerativeModel: vi.fn().mockReturnValue({
-            generateContent: vi.fn()
-        })
-    }))
+    GoogleGenerativeAI: vi.fn(function () {
+        return {
+            getGenerativeModel: vi.fn().mockReturnValue({
+                generateContent: vi.fn()
+            })
+        };
+    })
 }));
 
 describe('GeminiService', () => {

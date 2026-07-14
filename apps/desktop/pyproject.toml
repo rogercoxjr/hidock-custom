@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "hidock-next"
 description = "Community-driven HiDock device management and AI transcription platform"
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "HiDock Community", email = "community@hidock-next.org"},
 ]
