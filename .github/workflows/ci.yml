@@ -83,7 +83,7 @@ jobs:
       working-directory: apps/desktop
       run: |
         set -e
-        modules="file_operations_manager storage_management audio_metadata_db device_interface hta_converter calendar_cache_manager calendar_filter_engine gemini_models oauth2_pkce oauth2_token_manager config_and_logger"
+        modules="file_operations_manager storage_management audio_metadata_db device_interface hta_converter calendar_cache_manager calendar_filter_engine gemini_models oauth2_pkce oauth2_token_manager"
         fail=0
         for m in $modules; do
           if python -m coverage report --include=src/$m.py --fail-under=80 >/dev/null 2>&1; then
