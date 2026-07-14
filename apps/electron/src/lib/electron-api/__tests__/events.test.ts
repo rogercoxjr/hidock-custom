@@ -116,7 +116,18 @@ describe('makeEventsGroup', () => {
   })
 
   it('onConnectionRestored → reserved channel "connection:reconnected"', () => {
-    assertEvent((g, cb) => g.onConnectionRestored(cb), 'connection:reconnected')
+    // Bespoke (not assertEvent): this callback takes no payload argument.
+    const { ws, group } = makeMockWs()
+    const cb = vi.fn()
+
+    const unsub = group.onConnectionRestored(cb)
+
+    expect(ws.subscribe).toHaveBeenCalledWith('connection:reconnected', expect.any(Function))
+    expect(typeof unsub).toBe('function')
+
+    const [, subscriber] = ws.subscribe.mock.calls[0] as [string, (p: unknown) => void]
+    subscriber(undefined)
+    expect(cb).toHaveBeenCalledOnce()
   })
 
   // -------------------------------------------------------------------------
