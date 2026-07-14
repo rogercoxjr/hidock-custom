@@ -16,7 +16,7 @@
  *   recording:new, download-service:state-update
  */
 
-import type { WsClient } from '../ws'
+import { RECONNECT_CHANNEL, type WsClient } from '../ws'
 import type { MigrationProgress } from '../../../../electron/preload/migration-types'
 
 export interface EventsDeps {
@@ -55,6 +55,10 @@ export interface EventsGroup {
     purgedPriorContactId?: string
     purgedCount?: number
   }) => void) => () => void
+
+  // Fired when the WebSocket reopens after a drop (hosted mode only) — consumers refetch
+  // data that may have changed while disconnected. Never fires in desktop mode (no /ws).
+  onConnectionRestored: (callback: () => void) => () => void
 
   // Nested group partial — integrity.onProgress
   integrity: {
@@ -111,6 +115,9 @@ export function makeEventsGroup({ wsClient }: EventsDeps): EventsGroup {
     onSecurityWarning: () => () => {},
     onActivityLogEntry: (cb) => wsClient.subscribe('activity-log:entry', cb as (p: unknown) => void),
     onVoiceprintCaptured: (cb) => wsClient.subscribe('voiceprint:captured', cb as (p: unknown) => void),
+
+    // Reserved local channel fired by WsClient itself on socket reopen (see ws.ts).
+    onConnectionRestored: (cb) => wsClient.subscribe(RECONNECT_CHANNEL, cb as (p: unknown) => void),
 
     // -------------------------------------------------------------------------
     // Nested group partial — integrity.onProgress

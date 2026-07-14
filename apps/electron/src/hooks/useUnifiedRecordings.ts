@@ -8,6 +8,7 @@ import {
   BothLocationsRecording
 } from '@/types/unified-recording'
 import type { KnowledgeCapture } from '@/types/knowledge'
+import { subscribeFreshness } from '@/lib/dataFreshness'
 
 interface DatabaseRecording {
   id: string
@@ -580,20 +581,21 @@ export function useUnifiedRecordings(): UseUnifiedRecordingsResult {
     }
   }, [loaded, loadRecordings, deviceService])
 
-  // B-DEV-007: Listen for download completion events to refresh recordings
-  // DL-USB-CONCURRENCY: Use forceRefresh=false — the DB is already updated when downloads complete
-  // (via markRecordingDownloaded). forceRefresh=true would call listRecordings() over USB while
-  // new downloads may be starting, causing USB concurrency conflicts and stalls.
+  // Auto-refresh on the data-freshness bus. The central bridge (useDataFreshnessBridge)
+  // coalesces download/transcription-completion and WS-reconnect events into 'recordings'
+  // pulses; this reloads from the DB in response.
+  // DL-USB-CONCURRENCY: Use forceRefresh=false — the DB is already updated when downloads
+  // complete (via markRecordingDownloaded). forceRefresh=true would call listRecordings()
+  // over USB while new downloads may be starting, causing USB concurrency conflicts.
   useEffect(() => {
-    const handleDownloadsCompleted = () => {
-      console.log('[useUnifiedRecordings] Downloads completed - refreshing from DB')
+    return subscribeFreshness('recordings', () => {
       loadRecordings(false)
-    }
-    window.addEventListener('hidock:downloads-completed', handleDownloadsCompleted)
-    return () => window.removeEventListener('hidock:downloads-completed', handleDownloadsCompleted)
+    })
   }, [loadRecordings])
 
-  // Subscribe to recording watcher events for auto-refresh
+  // Recording-watcher events also drive a user-facing toast. The refetch itself is owned
+  // by the freshness bus above (the bridge maps onRecordingAdded → 'recordings'), so this
+  // only surfaces the notification.
   useEffect(() => {
     if (!window.electronAPI?.onRecordingAdded) return
 
@@ -604,13 +606,10 @@ export function useUnifiedRecordings(): UseUnifiedRecordingsResult {
       import('@/components/ui/toaster').then(({ toast }) => {
         toast.success('New Recording Detected', data.recording.filename)
       })
-
-      // Auto-refresh without forcing device fetch (use cached data for speed)
-      loadRecordings(false)
     })
 
     return unsubscribe
-  }, [loadRecordings])
+  }, [])
 
   // Poll device for file count changes (detect new recordings on device)
   useEffect(() => {

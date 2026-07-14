@@ -75,6 +75,11 @@ export function useTranscriptionSync() {
             const store = useTranscriptionStore.getState()
             if (data.queueItemId) {
               store.markCompleted(data.queueItemId, 'gemini')
+            } else if (data.recordingId) {
+              // Manual (non-queue) transcriptions emit completion with only recordingId
+              // (transcribeManually). Resolve the queue item so its chip clears.
+              const item = Array.from(store.queue.values()).find((i) => i.recordingId === data.recordingId)
+              if (item) store.markCompleted(item.id, 'gemini')
             }
           })
         )
@@ -87,6 +92,10 @@ export function useTranscriptionSync() {
             const store = useTranscriptionStore.getState()
             if (data.queueItemId) {
               store.markFailed(data.queueItemId, data.error || 'Unknown error')
+            } else if (data.recordingId) {
+              // Same recordingId-only fallback for manual transcription failures.
+              const item = Array.from(store.queue.values()).find((i) => i.recordingId === data.recordingId)
+              if (item) store.markFailed(item.id, data.error || 'Unknown error')
             }
           })
         )

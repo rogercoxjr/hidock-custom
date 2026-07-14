@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog'
 import { cn, formatDateTime } from '@/lib/utils'
 import { toast } from '@/components/ui/toaster'
+import { useDataRefresh } from '@/hooks/useDataRefresh'
 import type { Actionable, ActionableStatus } from '@/types/knowledge'
 import type { OutputTemplateId } from '@/types'
 
@@ -176,6 +177,9 @@ export function Actionables() {
   useEffect(() => {
     loadActionables()
   }, [loadActionables])
+
+  // Auto-refresh when a transcription completes (may spawn new actionables).
+  useDataRefresh('actionables', loadActionables)
 
   // AC-07: Auto-dismiss error banner after 5 seconds
   useEffect(() => {

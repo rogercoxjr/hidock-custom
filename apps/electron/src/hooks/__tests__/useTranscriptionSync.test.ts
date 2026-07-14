@@ -77,4 +77,30 @@ describe('useTranscriptionSync — poll reconcile (auto-pipeline P4 Task 4)', ()
 
     expect(useTranscriptionStore.getState().queue.get('q-3')?.status).toBe('pending')
   })
+
+  it('clears the chip via recordingId when a manual completion event omits queueItemId', async () => {
+    let completedCb: ((data: any) => void) | undefined
+    ;(window as any).electronAPI = {
+      recordings: {
+        // Hydration re-adds q-9 as pending (mount clears the store first).
+        getTranscriptionQueue: vi
+          .fn()
+          .mockResolvedValue([{ id: 'q-9', recording_id: 'rec-9', filename: 'm.wav', status: 'pending' }]),
+      },
+      onTranscriptionCompleted: vi.fn((cb: any) => {
+        completedCb = cb
+        return () => {}
+      }),
+    }
+
+    renderHook(() => useTranscriptionSync())
+    await vi.advanceTimersByTimeAsync(0) // flush hydration
+    expect(useTranscriptionStore.getState().queue.get('q-9')?.status).toBe('pending')
+
+    // transcribeManually() emits completion with ONLY recordingId — no queueItemId.
+    expect(completedCb).toBeDefined()
+    completedCb!({ recordingId: 'rec-9' })
+
+    expect(useTranscriptionStore.getState().queue.get('q-9')?.status).toBe('completed')
+  })
 })

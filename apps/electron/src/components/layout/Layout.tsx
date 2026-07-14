@@ -27,6 +27,7 @@ import {
   useActivityLog
 } from '@/store/useAppStore'
 import { useConfigStore } from '@/store/domain/useConfigStore'
+import { useDataFreshnessBridge } from '@/hooks/useDataFreshnessBridge'
 
 type LucideIcon = typeof BookOpen
 import { Button } from '@/components/ui/button'
@@ -89,6 +90,10 @@ export function Layout({ children }: LayoutProps) {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   const qaLogsEnabled = useUIStore((s) => s.qaLogsEnabled)
   const setQaLogsEnabled = useUIStore((s) => s.setQaLogsEnabled)
+
+  // Wire server-originated completion events (download/transcription/reconnect) to the
+  // data-freshness bus so recordings-derived views auto-refresh. Mounted once, app-wide.
+  useDataFreshnessBridge()
 
   // AL-001: Global activity log — visible from all pages
   const activityLog = useActivityLog()
