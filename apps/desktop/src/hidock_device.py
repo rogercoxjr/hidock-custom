@@ -1,3 +1,5 @@
+from __future__ import annotations  # PEP 604 `X | None` on Python 3.9
+
 import struct
 
 # For platform detection (e.g., in connect method for kernel driver)
