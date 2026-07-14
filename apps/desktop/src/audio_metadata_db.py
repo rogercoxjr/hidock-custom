@@ -102,7 +102,8 @@ class AudioMetadataDB:
                 conn.execute("PRAGMA foreign_keys = ON")
 
                 # Create main audio_metadata table
-                conn.execute("""
+                conn.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS audio_metadata (
                         filename TEXT PRIMARY KEY,
                         file_path TEXT NOT NULL,
@@ -145,7 +146,8 @@ class AudioMetadataDB:
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                     )
-                """)
+                """
+                )
 
                 # Create index for faster queries
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_processing_status ON audio_metadata(processing_status)")
@@ -153,7 +155,8 @@ class AudioMetadataDB:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_updated_at ON audio_metadata(updated_at)")
 
                 # Create processing_log table for tracking processing history
-                conn.execute("""
+                conn.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS processing_log (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         filename TEXT NOT NULL,
@@ -163,7 +166,8 @@ class AudioMetadataDB:
                         timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (filename) REFERENCES audio_metadata(filename)
                     )
-                """)
+                """
+                )
 
                 conn.commit()
                 logger.debug("AudioMetadataDB", "_init_database", "Database schema initialized")
@@ -647,11 +651,13 @@ class AudioMetadataDB:
         with self.db_lock:
             conn = sqlite3.connect(self.db_path)
             try:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT processing_status, COUNT(*) as count
                     FROM audio_metadata 
                     GROUP BY processing_status
-                """)
+                """
+                )
 
                 stats = {}
                 for row in cursor.fetchall():
