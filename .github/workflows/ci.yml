@@ -81,6 +81,8 @@ jobs:
 
     - name: Gate 4 Part-2 — per-module 80% on critical mockable allowlist
       working-directory: apps/desktop
+      # bash-only loop syntax — force bash on Windows runners (default is pwsh).
+      shell: bash
       run: |
         set -e
         modules="file_operations_manager storage_management audio_metadata_db device_interface hta_converter calendar_cache_manager calendar_filter_engine gemini_models oauth2_pkce oauth2_token_manager"
