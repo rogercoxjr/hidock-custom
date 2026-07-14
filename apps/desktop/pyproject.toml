@@ -268,7 +268,10 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 40   # Gate 4 Part-1 static floor = floor(measured 41%) - 1; raise manually as coverage rises (no auto-ratchet)
+fail_under = 30   # Gate 4 Part-1 static floor = floor(measured 30.67%) - manual ratchet.
+# Lowered from 40 → 30 after CI began filtering gui/integration/slow/contamination_check
+# markers per CLAUDE.md's stated default — those tests no longer contribute to coverage.
+# Raise manually as fast-unit coverage rises.
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
