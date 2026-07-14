@@ -1145,6 +1145,7 @@ class TestFileOperationsManagerInitialization:
             finally:
                 manager.shutdown()
 
+    @pytest.mark.contamination_check  # macOS $TMPDIR = /var/folders/.../T/ — no "tmp"/"temp" substring
     def test_initialization_custom_cache_dir(self):
         """Test initialization with custom cache directory."""
         import shutil

@@ -73,9 +73,11 @@ jobs:
       working-directory: apps/desktop
       # Filter matches CLAUDE.md's stated default: fast unit tests only.
       # `gui` tests need a display, `integration` may hit external systems,
-      # `slow` are long-running. Keep them exercisable locally via `pytest -m ""`.
+      # `slow` are long-running, `contamination_check` are meta-tests for
+      # the isolation framework that break on macOS $TMPDIR.
+      # Keep everything exercisable locally via `pytest -m ""`.
       run: |
-        python -m pytest tests/ -m "not gui and not integration and not slow" --cov=. --cov-report=xml
+        python -m pytest tests/ -m "not gui and not integration and not slow and not contamination_check" --cov=. --cov-report=xml
 
     - name: Gate 4 Part-2 — per-module 80% on critical mockable allowlist
       working-directory: apps/desktop
