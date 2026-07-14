@@ -17,6 +17,11 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, Mock
 
+import pytest
+
+# Instantiates settings_window (customtkinter) — needs a display.
+pytestmark = pytest.mark.gui
+
 # Mock GUI modules to prevent hanging
 sys.modules["tkinter.messagebox"] = Mock()
 sys.modules["tkinter.filedialog"] = Mock()

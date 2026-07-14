@@ -15,6 +15,11 @@ import unittest
 from contextlib import contextmanager
 from unittest.mock import Mock, patch
 
+import pytest
+
+# GUI-adjacent: touches OS-specific launch APIs (e.g. os.startfile on Windows).
+pytestmark = pytest.mark.gui
+
 
 @contextmanager
 def mock_all_messageboxes():
