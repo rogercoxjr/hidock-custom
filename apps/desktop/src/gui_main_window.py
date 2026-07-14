@@ -32,7 +32,7 @@ import time
 import tkinter
 import traceback
 
-# from datetime import datetime  # Currently unused - may be needed for future timestamp features
+from datetime import datetime
 from tkinter import messagebox, ttk  # Removed filedialog - not used
 
 import customtkinter as ctk

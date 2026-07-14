@@ -161,8 +161,7 @@ class FileMetadataCache:
     def _init_database(self):
         """Initialize the SQLite database for metadata caching."""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS file_metadata (
                     filename TEXT PRIMARY KEY,
                     size INTEGER,
@@ -178,8 +177,7 @@ class FileMetadataCache:
                     tags TEXT,
                     cache_timestamp TEXT
                 )
-            """
-            )
+            """)
             conn.commit()
 
     def get_metadata(self, filename: str) -> Optional[FileMetadata]:

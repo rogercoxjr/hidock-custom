@@ -508,11 +508,6 @@ class TestIntegrationScenarios:
         """Test a complete optimization workflow."""
         pytest.skip("StorageOptimizer implementation differs from test expectations")
 
-        # Execute optimization
-        with patch.object(optimizer, "_execute_temp_file_cleanup", return_value=True):
-            result = optimizer.execute_optimization(suggestions[0])
-            assert result is True
-
 
 class TestErrorHandling:
     """Test error handling scenarios."""

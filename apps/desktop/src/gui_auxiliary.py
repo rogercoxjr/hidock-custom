@@ -177,7 +177,9 @@ class AuxiliaryMixin:
 
     # scan_usb_devices_for_settings is called by SettingsDialog,
     # but defined here as it relates to main app's available_usb_devices
-    def scan_usb_devices_for_settings(self, parent_window_for_dialogs, initial_load=False, change_callback=None):  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
+    def scan_usb_devices_for_settings(
+        self, parent_window_for_dialogs, initial_load=False, change_callback=None
+    ):  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
         """This method is called by the SettingsDialog. It updates self.available_usb_devices
         and then configures the combobox *in the SettingsDialog*.
         The parent_window_for_dialogs will be the SettingsDialog instance."""

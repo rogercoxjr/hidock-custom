@@ -196,12 +196,12 @@ class AudioMetadataDB:
             duration_seconds=row["duration_seconds"],
             date_created=datetime.fromisoformat(row["date_created"]),
             processing_status=ProcessingStatus(row["processing_status"]),
-            processing_started_at=datetime.fromisoformat(row["processing_started_at"])
-            if row["processing_started_at"]
-            else None,
-            processing_completed_at=datetime.fromisoformat(row["processing_completed_at"])
-            if row["processing_completed_at"]
-            else None,
+            processing_started_at=(
+                datetime.fromisoformat(row["processing_started_at"]) if row["processing_started_at"] else None
+            ),
+            processing_completed_at=(
+                datetime.fromisoformat(row["processing_completed_at"]) if row["processing_completed_at"] else None
+            ),
             processing_error=row["processing_error"],
             transcription_text=row["transcription_text"],
             transcription_confidence=row["transcription_confidence"],
@@ -244,12 +244,12 @@ class AudioMetadataDB:
                     "duration_seconds": metadata.duration_seconds,
                     "date_created": metadata.date_created.isoformat(),
                     "processing_status": metadata.processing_status.value,
-                    "processing_started_at": metadata.processing_started_at.isoformat()
-                    if metadata.processing_started_at
-                    else None,
-                    "processing_completed_at": metadata.processing_completed_at.isoformat()
-                    if metadata.processing_completed_at
-                    else None,
+                    "processing_started_at": (
+                        metadata.processing_started_at.isoformat() if metadata.processing_started_at else None
+                    ),
+                    "processing_completed_at": (
+                        metadata.processing_completed_at.isoformat() if metadata.processing_completed_at else None
+                    ),
                     "processing_error": metadata.processing_error,
                     "transcription_text": metadata.transcription_text,
                     "transcription_confidence": metadata.transcription_confidence,

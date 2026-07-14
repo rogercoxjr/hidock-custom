@@ -231,8 +231,7 @@ class StorageOptimizer:
     def _init_database(self):
         """Initialize the optimization database."""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS file_tracking (
                     file_path TEXT PRIMARY KEY,
                     file_size INTEGER,
@@ -242,11 +241,9 @@ class StorageOptimizer:
                     access_count INTEGER DEFAULT 0,
                     created_date TEXT
                 )
-            """
-            )
+            """)
 
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS optimization_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     optimization_type TEXT,
@@ -255,8 +252,7 @@ class StorageOptimizer:
                     execution_time REAL,
                     timestamp TEXT
                 )
-            """
-            )
+            """)
             conn.commit()
 
     def analyze_storage(self) -> StorageAnalytics:

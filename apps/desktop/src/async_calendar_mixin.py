@@ -320,17 +320,19 @@ class AsyncCalendarMixin:
                 "has_meeting": True,  # Only true if we have a real meeting
                 "meeting_subject": cached_meeting.subject,
                 "meeting_organizer": cached_meeting.organizer or "",
-                "meeting_attendees_display": f"{cached_meeting.attendee_count} attendees"
-                if cached_meeting.attendee_count > 0
-                else "No attendees",
+                "meeting_attendees_display": (
+                    f"{cached_meeting.attendee_count} attendees"
+                    if cached_meeting.attendee_count > 0
+                    else "No attendees"
+                ),
                 "meeting_attendees_count": cached_meeting.attendee_count,
                 "meeting_location": cached_meeting.location or "",
                 "meeting_type": meeting_type,
                 "meeting_start_time": start_time,
                 "meeting_end_time": end_time,
-                "meeting_duration_minutes": int((end_time - start_time).total_seconds() / 60)
-                if start_time and end_time
-                else 0,
+                "meeting_duration_minutes": (
+                    int((end_time - start_time).total_seconds() / 60) if start_time and end_time else 0
+                ),
                 "meeting_time_display": start_time.strftime("%H:%M") if start_time else "",
                 "meeting_date_display": start_time.strftime("%Y-%m-%d") if start_time else "",
                 "meeting_display_text": cached_meeting.display_text or "",  # Use cached display text or empty

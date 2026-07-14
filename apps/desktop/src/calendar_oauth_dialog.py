@@ -16,7 +16,7 @@ Features:
 
 import threading
 from datetime import datetime
-from typing import Callable, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import customtkinter as ctk
 from config_and_logger import logger

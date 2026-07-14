@@ -138,9 +138,7 @@ class OutlookIntegrationMixin:
         attendees_display = (
             f"{attendees_count} attendees"
             if attendees_count > 1
-            else f"{attendees_count} attendee"
-            if attendees_count == 1
-            else "No attendees"
+            else f"{attendees_count} attendee" if attendees_count == 1 else "No attendees"
         )
 
         # Determine meeting type
