@@ -4,6 +4,16 @@ This is the **operator runbook**. The image is the multi-stage build from
 `apps/electron/Dockerfile`. The agent that wrote this cannot perform these steps
 — they need the Unraid host, a domain, and a Google OAuth client.
 
+Two ways to run it on Unraid, both produce the same running container:
+
+- **Path A — Unraid "Add Container" template UI** (sections 1-3 below). No SSH
+  needed. Config lives in Unraid's XML template store.
+- **Path B — docker compose via SSH** (section 2b below). Requires SSH. Config
+  lives in a `docker-compose.yml` + `.env` you version-control. Recommended if
+  you want reproducible, portable deploys.
+
+Section 4 (reverse proxy + OAuth) is identical for both paths.
+
 ## 1. Build & publish the image
 
 On a build host (or Unraid with the Docker buildx plugin), from `apps/electron/`:
@@ -13,7 +23,7 @@ On a build host (or Unraid with the Docker buildx plugin), from `apps/electron/`
 
 (Or build locally on Unraid and reference the local image tag.)
 
-## 2. Unraid container template
+## 2. Path A — Unraid container template
 
 Add a container (Docker tab → Add Container) with:
 
@@ -55,10 +65,54 @@ writable by uid 1000 (Unraid's default appdata perms usually are; if not,
 > use the same custom network and `http://<ollama-container-name>:11434`. The
 > value is written to `config.embeddings.ollamaBaseUrl` at boot.
 
+## 2b. Path B — docker compose via SSH (alternative to §2)
+
+Instead of the Unraid UI template, put the deployment in a `docker-compose.yml`
++ `.env` under `/mnt/user/appdata/compose/hidock-hub/`. The compose file is
+already in the repo at `apps/electron/docker-compose.unraid.yml`.
+
+SSH to Unraid, then:
+
+    mkdir -p /mnt/user/appdata/compose/hidock-hub
+    cd /mnt/user/appdata/compose/hidock-hub
+
+    # Copy the compose file from the repo (scp/rsync from your workstation, or
+    # `curl` from GitHub raw). Rename it to docker-compose.yml so `docker compose`
+    # finds it without a -f flag:
+    #   scp apps/electron/docker-compose.unraid.yml \
+    #       root@<unraid-ip>:/mnt/user/appdata/compose/hidock-hub/docker-compose.yml
+    #
+    # Same for .env — copy .env.example, rename to .env, fill secrets:
+    #   scp apps/electron/.env.example root@<unraid-ip>:/mnt/user/appdata/compose/hidock-hub/.env
+
+    vi .env               # fill in GOOGLE_CLIENT_ID/SECRET, PUBLIC_URL, SESSION_SECRET, HIDOCK_SECRET_KEY
+    chmod 600 .env        # secrets — restrict read access
+
+    docker compose up -d
+    docker compose ps                       # container should show "healthy" after ~30s
+    curl http://127.0.0.1:8788/healthz      # → {"status":"ok"}
+
+For updates (when a new image tag lands):
+
+    docker compose pull && docker compose up -d
+
+Notes:
+
+- Compose-managed containers still show in the Unraid Docker tab (name, log
+  button, status) — but the UI's "Edit" button doesn't understand compose. Use
+  `docker compose` for all lifecycle actions, not the Unraid Edit dialog.
+- The default image tag in the compose file is `:latest`. For a pinned deploy,
+  set `HIDOCK_IMAGE=rogercoxjr/hidock-hub:0.1.0` in `.env` (the compose file
+  reads it as `${HIDOCK_IMAGE:-…}`).
+- Autostart on host boot: `restart: unless-stopped` handles this — Docker
+  brings the container back when the daemon starts. No Unraid autostart
+  checkbox needed.
+
 ## 3. Start it
 
-Apply the template. Check the container log for `app.listen` success and hit the
-healthcheck: `curl http://<unraid-ip>:8788/healthz` → `{"status":"ok"}`.
+Apply the template (Path A) or `docker compose up -d` (Path B). Check the
+container log for `app.listen` success and hit the healthcheck:
+`curl http://<unraid-ip>:8788/healthz` → `{"status":"ok"}`.
 (Direct host access bypasses TLS — fine for a smoke test; real access is via NPM.)
 
 ## 4. Reverse proxy & OAuth

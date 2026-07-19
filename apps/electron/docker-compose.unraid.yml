@@ -1,0 +1,39 @@
+# HiDock Hosted Hub — Unraid docker-compose deployment.
+#
+# Alternative to the Unraid "Add Container" template UI (see docs/DEPLOY-UNRAID.md
+# for the UI walkthrough). Same runtime contract, different config surface: this
+# pulls the published image from Docker Hub and mounts the standard Unraid
+# appdata path.
+#
+# Usage on Unraid:
+#   mkdir -p /mnt/user/appdata/compose/hidock-hub
+#   cd /mnt/user/appdata/compose/hidock-hub
+#   # Copy this file as docker-compose.yml, and .env.example as .env; fill secrets.
+#   chmod 600 .env
+#   docker compose up -d
+#
+# Updates:
+#   docker compose pull && docker compose up -d
+#
+# Env vars: see .env.example (same file the UI-template path uses).
+
+services:
+  hidock-hub:
+    # Override with `HIDOCK_IMAGE=rogercoxjr/hidock-hub:0.1.0 docker compose up -d`
+    # for a pinned deploy; default follows :latest for hands-off updates.
+    image: ${HIDOCK_IMAGE:-rogercoxjr/hidock-hub:latest}
+    container_name: hidock-hub
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8788:8788"
+    volumes:
+      # SQLite DB, recordings, transcripts, config.json — back up this dir to back
+      # up everything. Uid 1000 (node) must own it; Unraid appdata usually is.
+      - /mnt/user/appdata/hidock-hub:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
