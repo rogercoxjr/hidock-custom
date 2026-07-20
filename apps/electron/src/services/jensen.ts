@@ -1692,7 +1692,14 @@ export class JensenDevice {
         new JensenMessage(CMD.TRANSFER_FILE).body(body), undefined, `downloadFile:${filename}`)
       this.onreceive = null
       signal?.removeEventListener('abort', abortHandler)
-      return result ?? false
+      // Report success ONLY if the transfer handler itself completed (result === true) AND we
+      // actually received the whole file. On the shared-singleton USB stack a concurrent command
+      // (e.g. a listFiles scan) can cross-resolve this pending promise with a foreign truthy value
+      // (a FileInfo[] array) after setup()/re-claim clears currentCommandTag out from under an
+      // in-flight download — the old `result ?? false` treated that array as success and returned
+      // a "downloaded" file of 0 bytes. Requiring `received >= fileSize` rejects that fake success
+      // so the caller fails+retries instead of uploading an empty recording.
+      return result === true && received >= fileSize
     } catch {
       this.onreceive = null
       signal?.removeEventListener('abort', abortHandler)
