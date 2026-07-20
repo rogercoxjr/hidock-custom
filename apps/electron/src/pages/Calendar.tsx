@@ -12,6 +12,7 @@ import {
   useLastCalendarSync,
   useCalendarSyncing,
   useDownloadQueue,
+  useDeviceSyncing,
   useSetLastCalendarSync,
   useSetCalendarSyncing,
 } from '@/store/useAppStore'
@@ -126,6 +127,10 @@ export function Calendar() {
 
   // Centralized operations
   const { queueTranscription, queueDownload, queueBulkDownloads } = useOperations()
+
+  // Device sync guard: block starting a new download while any single/batch sync
+  // is in flight (shared USB read loop — see fix/hosted-device-downloads).
+  const deviceSyncing = useDeviceSyncing()
 
   // State from config (with defaults)
   // calendarView now comes from useAppStore (single source of truth — CA-04)
@@ -717,7 +722,7 @@ export function Calendar() {
                 variant="default"
                 size="sm"
                 onClick={handleBulkDownload}
-                disabled={bulkDownloading || !deviceConnected}
+                disabled={bulkDownloading || deviceSyncing || !deviceConnected}
               >
                 {bulkDownloading ? <RefreshCw className="h-3 w-3 animate-spin mr-2" /> : <Download className="h-3 w-3 mr-2" />}
                 Download Selected
@@ -826,7 +831,7 @@ export function Calendar() {
                         {isDeviceOnly(recording) && (
                           <Button variant="ghost" size="icon" className="h-6 w-6"
                             onClick={() => handleDownload(recording)}
-                            disabled={!deviceConnected || downloadQueue.has(recording.deviceFilename)}
+                            disabled={!deviceConnected || deviceSyncing || downloadQueue.has(recording.deviceFilename)}
                             title="Download">
                             {downloadQueue.has(recording.deviceFilename) ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                           </Button>
@@ -943,7 +948,7 @@ export function Calendar() {
                         {isDeviceOnly(recording) && (
                           <Button variant="ghost" size="icon" className="h-6 w-6"
                             onClick={(e) => { e.stopPropagation(); handleDownload(recording) }}
-                            disabled={!deviceConnected || downloadQueue.has(recording.deviceFilename)}
+                            disabled={!deviceConnected || deviceSyncing || downloadQueue.has(recording.deviceFilename)}
                             title="Download from device">
                             {downloadQueue.has(recording.deviceFilename) ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
                           </Button>
