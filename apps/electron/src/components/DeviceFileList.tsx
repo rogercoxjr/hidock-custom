@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { toast } from '@/components/ui/toaster'
 import { getHiDockDeviceService } from '@/services/hidock-device'
+import { useOperations } from '@/hooks/useOperations'
 import { hasDeviceFile, type DeviceOnlyRecording, type BothLocationsRecording } from '@/types/unified-recording'
 import { formatBytes, formatDuration } from '@/utils/formatters'
 import { useIsDownloading, useDownloadProgress } from '@/store/useAppStore'
@@ -172,6 +173,11 @@ function DeviceFileRow({
 
 export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: DeviceFileListProps) {
   const deviceService = getHiDockDeviceService()
+  // Hosted mode: downloads must stream to the server via the device-sync client, NOT the
+  // desktop `downloadRecordingToFile` IPC path (which buffers the whole file and does
+  // `Array.from(combined)` — a 150 MB recording becomes a 150-million-element boxed array and
+  // throws "Invalid array length"). syncDeviceFiles streams straight to /api/recordings/sync.
+  const { syncDeviceFiles } = useOperations()
   const [downloadErrors, setDownloadErrors] = useState<Map<string, string>>(new Map())
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [fileToDelete, setFileToDelete] = useState<string | null>(null)
@@ -250,8 +256,8 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
       setDownloadErrors(prev => { const m = new Map(prev); m.delete(recordingId); return m })
     }
     try {
-      const success = await deviceService.downloadRecordingToFile(filename, fileSize)
-      if (success) {
+      const synced = await syncDeviceFiles([{ filename, size: fileSize }])
+      if (synced > 0) {
         toast.success(`Downloaded ${filename}`)
         onRefresh?.()
         onRecordingsRefresh?.()
@@ -264,7 +270,7 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
       toast.error(error?.message || `Failed to download ${filename}`)
       if (recordingId) setDownloadErrors(prev => new Map(prev).set(recordingId, error?.message || 'Download failed'))
     }
-  }, [deviceService, deviceRecordings, onRefresh, onRecordingsRefresh])
+  }, [syncDeviceFiles, deviceRecordings, onRefresh, onRecordingsRefresh])
 
   const handleDeleteClick = useCallback((filename: string) => {
     setFileToDelete(filename)
@@ -338,8 +344,24 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
                 size="sm"
                 variant="default"
                 disabled={allSelectedSynced}
-                onClick={() => {
-                  selectedUndownloaded.forEach(r => handleDownloadFile(r.deviceFilename, r.size))
+                onClick={async () => {
+                  // Serialize the batch through ONE guarded syncDeviceFiles call (holds the
+                  // download guard for the whole batch) instead of an un-awaited forEach that
+                  // fired every download concurrently and let refreshes cancel their reads.
+                  const files = selectedUndownloaded.map((r) => ({ filename: r.deviceFilename, size: r.size }))
+                  if (files.length === 0) return
+                  try {
+                    const synced = await syncDeviceFiles(files)
+                    if (synced > 0) {
+                      toast.success(`Downloaded ${synced} file${synced !== 1 ? 's' : ''}`)
+                      onRefresh?.()
+                      onRecordingsRefresh?.()
+                    } else {
+                      toast.error('No files downloaded')
+                    }
+                  } catch (error: any) {
+                    toast.error(error?.message || 'Download failed')
+                  }
                 }}
               >
                 <Download className="h-4 w-4 mr-1" />
