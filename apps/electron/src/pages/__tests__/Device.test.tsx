@@ -81,7 +81,14 @@ vi.mock('@/store/useAppStore', () => {
   })
   useAppStore.getState = () => ({
     clearActivityLog: vi.fn(),
-    invalidateUnifiedRecordings: vi.fn()
+    invalidateUnifiedRecordings: vi.fn(),
+    // useOperations.syncDeviceFiles/syncOne now drive sync state + the download
+    // queue through getState(); reuse mockSetDeviceSyncState so the existing
+    // deviceSyncing assertions still capture calls from this path too.
+    setDeviceSyncState: mockSetDeviceSyncState,
+    clearDeviceSyncState: vi.fn(),
+    addToDownloadQueue: vi.fn(),
+    removeFromDownloadQueue: vi.fn()
   })
   return { useAppStore }
 })
