@@ -23,3 +23,11 @@ export interface SyncFinalizeResponse {
   recordingId: string
   status: 'synced' | 'skipped'
 }
+
+// Progress event emitted by the upload client (device-sync-client) during syncFile().
+// stage: which phase; loaded/total: bytes for that phase (total is the file's declared size).
+export interface SyncProgress {
+  stage: 'reading' | 'uploading' | 'saving'
+  loaded: number
+  total: number
+}
