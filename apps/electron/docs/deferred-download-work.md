@@ -74,8 +74,11 @@ Not blockers; downloads work. Ordered by leverage.
    and null the handle on reset failure. Needs a device to exercise the reset→reconnect path.
 
 ## Ops
-- **Cut over to the rebuilt image.** The 4 shipped fixes currently run as a hotpatch in the live
-  container (reverts on next `docker compose pull`). A permanent image
-  (`rogercoxjr/hidock-hub:latest`, id `92f957a6…`) is already built on the server; rollback ref
-  is the prior id `82414c3c…`. **Cutover (container recreate) is deferred to bundle with the
-  progress-UI feature** so the hub restarts once, not twice.
+- **Cut over to the rebuilt image. DONE (2026-07-20).** After merging the feature to `main`, a
+  fresh `rogercoxjr/hidock-hub:latest` (id `4157c8aa…`) was built from `main` on the server over
+  SSH and the container was recreated via `docker compose -f docker-compose.unraid.yml up -d`.
+  The live hub now runs a permanent image (all download fixes + progress feature + concurrency
+  gate baked in), not a hotpatch. Verified: container healthy, `/healthz` 200, and
+  `https://hidock.coxserver.com/` 200 end-to-end through Cloudflare→NPM→container. Rollback tags
+  on the server: `rogercoxjr/hidock-hub:pre-feature-backup` = `92f957a6…` (4 fixes, no feature),
+  pristine original `82414c3c…`.
