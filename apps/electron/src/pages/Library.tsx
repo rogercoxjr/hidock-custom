@@ -996,6 +996,7 @@ export function Library() {
         onDownload={handleSelectedDownload}
         onProcess={handleSelectedProcess}
         onDelete={handleSelectedDelete}
+        disabledActions={{ download: deviceSyncing }}
       />
 
       {/* Error display */}
