@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { Download, Trash2, AlertCircle, CheckCircle, HardDrive, Volume2, ChevronUp, ChevronDown, Mic } from 'lucide-react'
+import { Download, Trash2, AlertCircle, CheckCircle, HardDrive, Volume2, ChevronUp, ChevronDown, Mic, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,7 +24,7 @@ import { getHiDockDeviceService } from '@/services/hidock-device'
 import { useOperations } from '@/hooks/useOperations'
 import { hasDeviceFile, type DeviceOnlyRecording, type BothLocationsRecording } from '@/types/unified-recording'
 import { formatBytes, formatDuration } from '@/utils/formatters'
-import { useIsDownloading, useDownloadProgress } from '@/store/useAppStore'
+import { useIsDownloading, useDownloadProgress, useDeviceFileStage, useDeviceFileDownloading } from '@/store/useAppStore'
 import { useUIStore } from '@/store/ui/useUIStore'
 
 type SortColumn = 'filename' | 'size' | 'duration' | 'dateRecorded'
@@ -73,8 +73,12 @@ function DeviceFileRow({
   onDeleteClick,
 }: DeviceFileRowProps) {
   const filename = recording.deviceFilename
-  const isDownloading = useIsDownloading(recording.id)
-  const downloadProgress = useDownloadProgress(recording.id)
+  const dlKey = recording.deviceFilename
+  const isDownloading = useIsDownloading(dlKey)
+  const downloadProgress = useDownloadProgress(dlKey)
+  const deviceFileStage = useDeviceFileStage()
+  const deviceFileDownloading = useDeviceFileDownloading()
+  const downloadStage = deviceFileDownloading === dlKey ? deviceFileStage : null
 
   // FL-002: Show "—" for unknown/zero duration instead of "0:00"
   const durationDisplay = (!recording.duration || recording.duration === 0)
@@ -154,7 +158,15 @@ function DeviceFileRow({
 
       {/* Actions */}
       <div className="flex items-center gap-1 justify-end">
-        {showDownloadButton && (
+        {isDownloading ? (
+          <div className="flex items-center gap-1 text-xs text-ink-muted px-1">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            <span>
+              {downloadStage ? { reading: 'Reading', uploading: 'Uploading', saving: 'Saving' }[downloadStage] + ' ' : ''}
+              {downloadProgress ?? 0}%
+            </span>
+          </div>
+        ) : showDownloadButton && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
             onClick={() => onDownload(filename, recording.size)}>
             <Download className="h-3 w-3 mr-1" />
