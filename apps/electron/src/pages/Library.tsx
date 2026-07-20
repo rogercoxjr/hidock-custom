@@ -15,7 +15,7 @@ import {
 import { Transcript, Meeting, LabelDefinition } from '@/types'
 import { useAudioControls } from '@/components/OperationController'
 import { useUIStore } from '@/store/useUIStore'
-import { useDownloadQueue } from '@/store/useAppStore'
+import { useDownloadQueue, useDeviceFileStage, useDeviceFileDownloading } from '@/store/useAppStore'
 import {
   LibraryHeader,
   LibraryFilters,
@@ -72,6 +72,8 @@ export function Library() {
 
   // SM-03 fix: Use granular selector instead of pulling volatile state
   const downloadQueue = useDownloadQueue()
+  const deviceFileStage = useDeviceFileStage()
+  const deviceFileDownloading = useDeviceFileDownloading()
 
   // Helper to check if a file is downloading
   const isDownloading = useCallback((filename: string) => {
@@ -1097,6 +1099,9 @@ export function Library() {
                           isDownloading={isDeviceOnly(recording) && isDownloading(recording.deviceFilename)}
                           downloadProgress={
                             isDeviceOnly(recording) ? downloadQueue.get(recording.deviceFilename)?.progress : undefined
+                          }
+                          downloadStage={
+                            isDeviceOnly(recording) && deviceFileDownloading === recording.deviceFilename ? deviceFileStage : undefined
                           }
                           deviceConnected={deviceConnected}
                           people={rowPeople}

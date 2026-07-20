@@ -71,6 +71,7 @@ interface SourceRowProps {
   // Download state for device-only recordings
   isDownloading?: boolean
   downloadProgress?: number
+  downloadStage?: 'reading' | 'uploading' | 'saving' | null
   deviceConnected?: boolean
   /** Pre-derived people for the pills row (from meeting attendees, slice 1). */
   people?: CapturePerson[]
@@ -102,6 +103,7 @@ export const SourceRow = memo(function SourceRow({
   onGenerateOutput,
   isDownloading = false,
   downloadProgress,
+  downloadStage,
   deviceConnected = false,
   people = [],
   labels = [],
@@ -230,7 +232,10 @@ export const SourceRow = memo(function SourceRow({
         {isDownloading && (
           <div className="flex items-center gap-1 text-xs text-ink-muted px-1">
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            <span>{downloadProgress ?? 0}%</span>
+            <span>
+              {downloadStage ? { reading: 'Reading', uploading: 'Uploading', saving: 'Saving' }[downloadStage] + ' ' : ''}
+              {downloadProgress ?? 0}%
+            </span>
           </div>
         )}
 
@@ -377,6 +382,7 @@ export const SourceRow = memo(function SourceRow({
     prevProps.isActiveSource === nextProps.isActiveSource &&
     prevProps.isDownloading === nextProps.isDownloading &&
     prevProps.downloadProgress === nextProps.downloadProgress &&
+    prevProps.downloadStage === nextProps.downloadStage &&
     prevProps.transcript?.id === nextProps.transcript?.id &&
     prevProps.transcript?.title_suggestion === nextProps.transcript?.title_suggestion &&
     prevProps.meeting?.id === nextProps.meeting?.id &&
