@@ -56,6 +56,8 @@ interface AppState {
   deviceSyncBytesDownloaded: number
   deviceSyncTotalBytes: number
   deviceSyncEta: number | null // seconds remaining
+  // Current-file phase label for hosted downloads: 'reading' (USB) | 'uploading' | 'saving' | null (idle)
+  deviceFileStage: 'reading' | 'uploading' | 'saving' | null
 
   // Download queue state (persists across page navigation)
   downloadQueue: Map<string, { filename: string; progress: number; size: number }>
@@ -99,6 +101,7 @@ interface AppState {
     deviceSyncBytesDownloaded?: number
     deviceSyncTotalBytes?: number
     deviceSyncEta?: number | null
+    deviceFileStage?: 'reading' | 'uploading' | 'saving' | null
   }) => void
   clearDeviceSyncState: () => void
   cancelDeviceSync: () => void
@@ -160,6 +163,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deviceSyncBytesDownloaded: 0,
   deviceSyncTotalBytes: 0,
   deviceSyncEta: null,
+  deviceFileStage: null,
 
   // Download queue initial state
   downloadQueue: new Map(),
@@ -287,6 +291,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     deviceSyncBytesDownloaded: state.deviceSyncBytesDownloaded ?? prev.deviceSyncBytesDownloaded,
     deviceSyncTotalBytes: state.deviceSyncTotalBytes ?? prev.deviceSyncTotalBytes,
     deviceSyncEta: state.deviceSyncEta !== undefined ? state.deviceSyncEta : prev.deviceSyncEta,
+    deviceFileStage: state.deviceFileStage !== undefined ? state.deviceFileStage : prev.deviceFileStage,
   })),
 
   clearDeviceSyncState: () => set({
@@ -298,6 +303,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     deviceSyncBytesDownloaded: 0,
     deviceSyncTotalBytes: 0,
     deviceSyncEta: null,
+    deviceFileStage: null,
   }),
 
   // Cancel is signaled via state - useDownloadOrchestrator checks this
@@ -413,6 +419,8 @@ export const useActivityLog = () => useAppStore((s) => s.activityLog)
 export const useDeviceSyncing = () => useAppStore((s) => s.deviceSyncing)
 export const useDeviceSyncProgress = () => useAppStore((s) => s.deviceSyncProgress)
 export const useDeviceSyncEta = () => useAppStore((s) => s.deviceSyncEta)
+export const useDeviceFileStage = () => useAppStore((s) => s.deviceFileStage)
+export const useDeviceFileDownloading = () => useAppStore((s) => s.deviceFileDownloading)
 
 // Download queue selectors
 export const useDownloadQueue = () => useAppStore(useShallow((s) => s.downloadQueue))
