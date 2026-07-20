@@ -106,6 +106,51 @@ describe('makeDeviceSyncClient', () => {
     expect(http.postStream).not.toHaveBeenCalled()
   })
 
+  it('chunked upload: inits, posts N sub-threshold chunks, then finalizes (large-file path)', async () => {
+    const posted: Array<{ path: string; size: number }> = []
+    const postStream = vi.fn().mockImplementation((path: string, body: Blob) => {
+      posted.push({ path, size: body.size })
+      if (path === '/api/recordings/sync/init') {
+        return Promise.resolve({ ok: true, status: 200, data: { uploadId: 'u9' } })
+      }
+      return Promise.resolve({ ok: true, status: 200, data: { ok: true } }) // chunk
+    })
+    const post = vi.fn().mockResolvedValue({ ok: true, status: 200, data: { recordingId: 'r9', status: 'synced' } })
+    const del = vi.fn()
+    const http = { postStream, post, del } as any
+    // Tiny thresholds so a 10-byte file exercises the chunked path (4 + 4 + 2).
+    const client = makeDeviceSyncClient({ http, chunkThreshold: 4, chunkSize: 4 })
+    const src = { filename: 'BIG.hda', size: 10, async *stream() { yield new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) } }
+
+    const res = await client.syncFile(src)
+    expect(res.status).toBe('synced')
+    expect(posted[0].path).toBe('/api/recordings/sync/init')
+    const chunkSizes = posted.filter((p) => p.path === '/api/recordings/sync/u9/chunk').map((p) => p.size)
+    expect(chunkSizes).toEqual([4, 4, 2]) // split into sub-threshold chunks
+    expect(posted.some((p) => p.path === '/api/recordings/sync')).toBe(false) // NOT the single-shot path
+    expect(post).toHaveBeenCalledWith('/api/recordings/sync/u9/finalize', expect.objectContaining({ clientSha256: expect.any(String) }))
+  })
+
+  it('chunked upload: a failed chunk deletes the partfile and retries', async () => {
+    let chunkCalls = 0
+    const postStream = vi.fn().mockImplementation((path: string) => {
+      if (path === '/api/recordings/sync/init') return Promise.resolve({ ok: true, status: 200, data: { uploadId: 'u1' } })
+      // Fail the first chunk of attempt 1, succeed everything on attempt 2.
+      chunkCalls++
+      if (chunkCalls === 1) return Promise.resolve({ ok: false, status: 0, error: 'network' })
+      return Promise.resolve({ ok: true, status: 200, data: { ok: true } })
+    })
+    const post = vi.fn().mockResolvedValue({ ok: true, status: 200, data: { recordingId: 'r', status: 'synced' } })
+    const del = vi.fn().mockResolvedValue({ ok: true, status: 204 })
+    const http = { postStream, post, del } as any
+    const client = makeDeviceSyncClient({ http, chunkThreshold: 4, chunkSize: 4 })
+    const src = { filename: 'BIG.hda', size: 10, async *stream() { yield new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) } }
+
+    const res = await client.syncFile(src)
+    expect(res.status).toBe('synced')
+    expect(del).toHaveBeenCalledWith('/api/recordings/sync/u1') // cleaned up the aborted upload
+  })
+
   it('throws after MAX_ATTEMPTS failed creates without exceeding the attempt bound', async () => {
     const postStream = vi.fn().mockResolvedValue({ ok: false, status: 0, error: 'network' })
     const http = {

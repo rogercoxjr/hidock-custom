@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Fastify from 'fastify'
 import { mkdtempSync, rmSync } from 'fs'
+import { createHash } from 'crypto'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
@@ -123,6 +124,57 @@ describe('device-sync routes', () => {
     })
     expect(fin.statusCode).toBe(200)
     expect(fin.json()).toEqual({ recordingId: '', status: 'skipped' })
+    expect(insertRecording).not.toHaveBeenCalled()
+  })
+
+  it('chunked upload: init → chunk×N → finalize reassembles the file and syncs', async () => {
+    const app = appWithAuth()
+    await registerDeviceSync(app)
+    const payload = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) // 10 bytes
+    const meta = Buffer.from(JSON.stringify({ filename: 'REC_BIG.hda', size: payload.length })).toString('base64')
+
+    const init = await app.inject({ method: 'POST', url: '/api/recordings/sync/init', headers: { 'x-device-file': meta } })
+    expect(init.statusCode).toBe(200)
+    const { uploadId } = init.json()
+    expect(uploadId).toBeTruthy()
+
+    // Two chunks: 6 bytes then 4 bytes, appended to the same partfile.
+    const c1 = await app.inject({
+      method: 'POST', url: `/api/recordings/sync/${uploadId}/chunk`,
+      headers: { 'content-type': 'application/octet-stream' }, payload: payload.subarray(0, 6)
+    })
+    expect(c1.statusCode).toBe(200)
+    const c2 = await app.inject({
+      method: 'POST', url: `/api/recordings/sync/${uploadId}/chunk`,
+      headers: { 'content-type': 'application/octet-stream' }, payload: payload.subarray(6)
+    })
+    expect(c2.statusCode).toBe(200)
+
+    const clientSha256 = createHash('sha256').update(payload).digest('hex')
+    const fin = await app.inject({
+      method: 'POST', url: `/api/recordings/sync/${uploadId}/finalize`, payload: { clientSha256 }
+    })
+    expect(fin.statusCode).toBe(200)
+    expect(fin.json().status).toBe('synced')
+    expect(insertRecording).toHaveBeenCalledTimes(1)
+  })
+
+  it('chunked upload: byte-count/hash mismatch is rejected by finalize', async () => {
+    const app = appWithAuth()
+    await registerDeviceSync(app)
+    // Declare 10 bytes but only send 6 → finalize must 4xx (rec.bytes 6 !== meta.size 10).
+    const meta = Buffer.from(JSON.stringify({ filename: 'REC_BAD.hda', size: 10 })).toString('base64')
+    const init = await app.inject({ method: 'POST', url: '/api/recordings/sync/init', headers: { 'x-device-file': meta } })
+    const { uploadId } = init.json()
+    await app.inject({
+      method: 'POST', url: `/api/recordings/sync/${uploadId}/chunk`,
+      headers: { 'content-type': 'application/octet-stream' }, payload: Buffer.from([1, 2, 3, 4, 5, 6])
+    })
+    const clientSha256 = createHash('sha256').update(Buffer.from([1, 2, 3, 4, 5, 6])).digest('hex')
+    const fin = await app.inject({
+      method: 'POST', url: `/api/recordings/sync/${uploadId}/finalize`, payload: { clientSha256 }
+    })
+    expect(fin.statusCode).toBe(400)
     expect(insertRecording).not.toHaveBeenCalled()
   })
 

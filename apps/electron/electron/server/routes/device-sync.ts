@@ -14,6 +14,12 @@ import type { DeviceFileMeta } from '../../../src/lib/electron-api/types-device-
 // In-memory map of open uploads → their finish() result (bounded; parts are on disk).
 const finished = new Map<string, { sha256: string; bytes: number; path: string; meta: DeviceFileMeta }>()
 
+// In-progress CHUNKED uploads: the partfile stays open across requests (init → chunk×N →
+// finalize). Large recordings can't go in a single POST because Cloudflare (and many proxies)
+// cap a single request body at ~100 MB; the client streams them as sub-cap chunks appended to
+// one partfile, and finalize closes/hashes it exactly like the single-shot path.
+const open = new Map<string, { part: ReturnType<typeof createPart>; meta: DeviceFileMeta }>()
+
 export async function registerDeviceSync(app: FastifyInstance): Promise<void> {
   // Fire a TTL sweep on registration (24h) — abandoned partfiles never accumulate.
   // Best-effort: HIDOCK_DATA_ROOT may be unset/unwritable in some environments (e.g.
@@ -78,13 +84,73 @@ export async function registerDeviceSync(app: FastifyInstance): Promise<void> {
       }
     )
 
+    // --- Chunked upload (large files) ---------------------------------------------------------
+    // init: open a partfile (no body) and return its uploadId; the client then POSTs the file
+    // in sub-cap chunks to /chunk and closes it with the shared /finalize.
+    scoped.post(
+      '/api/recordings/sync/init',
+      { preHandler: [scoped.requireAuth, scoped.requireSameOrigin] },
+      async (req, reply) => {
+        const header = req.headers['x-device-file']
+        if (typeof header !== 'string') throw new BadRequestError('missing x-device-file header')
+        let meta: DeviceFileMeta
+        try {
+          meta = JSON.parse(Buffer.from(header, 'base64').toString('utf8'))
+        } catch {
+          throw new BadRequestError('bad x-device-file')
+        }
+        const part = createPart()
+        open.set(part.uploadId, { part, meta })
+        return reply.code(200).send({ uploadId: part.uploadId })
+      }
+    )
+
+    // chunk: append one raw-byte chunk to an open partfile (drains req.raw like /sync, but does
+    // not finish — finalize does that once all chunks are in).
+    scoped.post(
+      '/api/recordings/sync/:uploadId/chunk',
+      { preHandler: [scoped.requireAuth, scoped.requireSameOrigin] },
+      async (req, reply) => {
+        const { uploadId } = req.params as { uploadId: string }
+        const o = open.get(uploadId)
+        if (!o) throw new NotFoundError('upload not found')
+        try {
+          await new Promise<void>((resolve, reject) => {
+            req.raw.on('data', (c: Buffer) => {
+              o.part.write(c)
+              const err = o.part.hasError()
+              if (err) reject(err)
+            })
+            req.raw.on('end', () => resolve())
+            req.raw.on('error', reject)
+          })
+        } catch (err) {
+          // A disk error mid-chunk aborts the whole upload: close+drop the partfile.
+          open.delete(uploadId)
+          deletePart(uploadId)
+          throw err
+        }
+        return reply.code(200).send({ ok: true })
+      }
+    )
+
     scoped.post(
       '/api/recordings/sync/:uploadId/finalize',
       { preHandler: [scoped.requireAuth, scoped.requireSameOrigin] },
       async (req, reply) => {
         const { uploadId } = req.params as { uploadId: string }
         const { clientSha256 } = (req.body ?? {}) as { clientSha256?: string }
-        const rec = finished.get(uploadId)
+        // Source the completed upload from either the single-shot /sync path (already finished)
+        // or a chunked upload (finish the open partfile now to get its hash + byte count).
+        let rec = finished.get(uploadId)
+        if (!rec) {
+          const o = open.get(uploadId)
+          if (o) {
+            open.delete(uploadId)
+            const r = await o.part.finish()
+            rec = { ...r, meta: o.meta }
+          }
+        }
         if (!rec) throw new NotFoundError('upload not found')
 
         if (!clientSha256 || clientSha256 !== rec.sha256 || rec.bytes !== rec.meta.size) {
@@ -141,6 +207,12 @@ export async function registerDeviceSync(app: FastifyInstance): Promise<void> {
       { preHandler: [scoped.requireAuth, scoped.requireSameOrigin] },
       async (req, reply) => {
         const { uploadId } = req.params as { uploadId: string }
+        // Close an in-progress chunked upload's write stream before deleting its file.
+        const o = open.get(uploadId)
+        if (o) {
+          open.delete(uploadId)
+          await o.part.finish().catch(() => {})
+        }
         deletePart(uploadId)
         finished.delete(uploadId)
         return reply.code(204).send()

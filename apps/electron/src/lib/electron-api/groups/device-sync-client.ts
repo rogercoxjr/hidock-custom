@@ -14,9 +14,15 @@ import type { Http } from '../http'
 
 export interface DeviceSyncClientDeps {
   http: Http
+  /** Files larger than this upload in chunks (default 64 MiB). Cloudflare and many proxies cap a
+   *  single request body at ~100 MB, so large recordings must be split across requests. */
+  chunkThreshold?: number
+  /** Per-chunk request size for the chunked path (default 64 MiB — comfortably under ~100 MB). */
+  chunkSize?: number
 }
 
 const MAX_ATTEMPTS = 2
+const DEFAULT_CHUNK = 64 * 1024 * 1024 // 64 MiB — well under the ~100 MB single-request body cap
 
 async function collectAndHash(
   src: DeviceFileSource,
@@ -55,7 +61,11 @@ async function collectAndHash(
   return { blob, hashHex }
 }
 
-export function makeDeviceSyncClient({ http }: DeviceSyncClientDeps) {
+export function makeDeviceSyncClient({
+  http,
+  chunkThreshold = DEFAULT_CHUNK,
+  chunkSize = DEFAULT_CHUNK,
+}: DeviceSyncClientDeps) {
   return {
     async syncFile(src: DeviceFileSource, onProgress?: (sent: number) => void): Promise<SyncFinalizeResponse> {
       // A device-only recording built from cache can carry size 0 (useUnifiedRecordings:
@@ -83,16 +93,43 @@ export function makeDeviceSyncClient({ http }: DeviceSyncClientDeps) {
           lastErr = `short read: got ${blob.size} of ${src.size} bytes`
           continue
         }
-        const created = await http.postStream('/api/recordings/sync', blob, { 'x-device-file': header })
-        if (!created.ok) {
-          lastErr = created.error ?? `HTTP ${created.status}`
-          continue
+        // Upload the body: a single POST for normal files (the proven path), or a chunked
+        // init → chunk×N sequence for large files. Cloudflare (and many proxies) cap a single
+        // request body at ~100 MB, so a 150 MB recording must be split across sub-cap requests.
+        let uploadId: string
+        if (blob.size > chunkThreshold) {
+          const init = await http.postStream('/api/recordings/sync/init', new Blob([]), { 'x-device-file': header })
+          if (!init.ok) {
+            lastErr = init.error ?? `HTTP ${init.status}`
+            continue
+          }
+          uploadId = (init.data as { uploadId: string }).uploadId
+          let chunkErr: string | null = null
+          for (let offset = 0; offset < blob.size; offset += chunkSize) {
+            const part = blob.slice(offset, Math.min(offset + chunkSize, blob.size))
+            const res = await http.postStream(`/api/recordings/sync/${uploadId}/chunk`, part)
+            onProgress?.(Math.min(offset + chunkSize, blob.size))
+            if (!res.ok) {
+              chunkErr = res.error ?? `HTTP ${res.status}`
+              break
+            }
+          }
+          if (chunkErr) {
+            // Drop the half-written partfile server-side so it doesn't linger, then retry.
+            await http.del(`/api/recordings/sync/${uploadId}`).catch(() => {})
+            lastErr = chunkErr
+            continue
+          }
+        } else {
+          const created = await http.postStream('/api/recordings/sync', blob, { 'x-device-file': header })
+          if (!created.ok) {
+            lastErr = created.error ?? `HTTP ${created.status}`
+            continue
+          }
+          uploadId = (created.data as SyncCreateResponse).uploadId
         }
-        // Server reports the hash it computed while receiving the stream; the client sends its
-        // own `clientSha256` on finalize and the server is the authority on rejecting a mismatch
-        // (its 4xx response surfaces as `fin.ok === false` below), so we don't duplicate that
-        // check client-side here.
-        const { uploadId } = created.data as SyncCreateResponse
+
+        // The server is the authority on hash/size — its finalize 4xx surfaces as fin.ok===false.
         const fin = await http.post(`/api/recordings/sync/${uploadId}/finalize`, { clientSha256: hashHex })
         if (!fin.ok) {
           lastErr = fin.error ?? `HTTP ${fin.status}`
