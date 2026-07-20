@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { X, Download, Sparkles, RefreshCw, AlertCircle, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { useDownloadQueue, useDeviceSyncProgress, useDeviceSyncEta } from '@/store/useAppStore'
+import { useDownloadQueue, useDeviceSyncProgress, useDeviceSyncEta, useDeviceFileStage, useDeviceFileDownloading } from '@/store/useAppStore'
 import { getHiDockDeviceService } from '@/services/hidock-device'
 import { useTranscriptionStore, useTranscriptionStats } from '@/store/features/useTranscriptionStore'
 import { useOperations } from '@/hooks/useOperations'
@@ -24,6 +24,11 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
   const downloadQueue = useDownloadQueue()
   const deviceSyncProgress = useDeviceSyncProgress()
   const deviceSyncEta = useDeviceSyncEta()
+  const deviceFileStage = useDeviceFileStage()
+  const deviceFileDownloading = useDeviceFileDownloading()
+  const STAGE_LABEL: Record<'reading' | 'uploading' | 'saving', string> = {
+    reading: 'Reading from device…', uploading: 'Uploading…', saving: 'Saving…',
+  }
   const transcriptionStats = useTranscriptionStats()
   const transcriptionQueue = useTranscriptionStore((s) => s.queue)
   const { cancelAllDownloads, cancelAllTranscriptions, cancelTranscription } = useOperations()
@@ -150,6 +155,11 @@ export function OperationsPanel({ sidebarOpen }: OperationsPanelProps) {
                   })()}
                   {deviceSyncEta != null && deviceSyncEta > 0 && (
                     <div className="text-[10px] text-ink-muted mt-0.5">~{formatEta(deviceSyncEta)}</div>
+                  )}
+                  {deviceFileStage && deviceFileDownloading && (
+                    <div className="text-[10px] text-ink-muted mt-0.5 truncate" title={deviceFileDownloading}>
+                      {STAGE_LABEL[deviceFileStage]} {deviceFileDownloading}
+                    </div>
                   )}
                 </div>
               )}
