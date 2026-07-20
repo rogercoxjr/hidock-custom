@@ -67,4 +67,23 @@ describe('useOperations.syncDeviceFiles', () => {
     expect(count).toBe(1)
     expect(syncFile).toHaveBeenCalledTimes(2)
   })
+
+  it('drives deviceSyncState + downloadQueue during a sync and clears on completion', async () => {
+    const { useAppStore } = await import('@/store/useAppStore')
+    const seen: Array<{ stage: unknown; queued: boolean; syncing: boolean }> = []
+    syncFile.mockImplementationOnce(async (_src: any, onProgress?: (p: any) => void) => {
+      onProgress?.({ stage: 'reading', loaded: 3, total: 3 })
+      const s = useAppStore.getState()
+      seen.push({ stage: s.deviceFileStage, queued: s.downloadQueue.has('A.hda'), syncing: s.deviceSyncing })
+      return { recordingId: 'r1', status: 'synced' }
+    })
+    const { result } = renderHook(() => useOperations())
+    await act(async () => { await result.current.syncDeviceFiles([{ filename: 'A.hda', size: 3 }]) })
+
+    expect(seen[0]).toEqual({ stage: 'reading', queued: true, syncing: true })
+    const after = useAppStore.getState()
+    expect(after.deviceSyncing).toBe(false)
+    expect(after.downloadQueue.has('A.hda')).toBe(false)
+    expect(after.deviceFileStage).toBeNull()
+  })
 })

@@ -3,9 +3,11 @@ import { toast } from '@/components/ui/toaster'
 import { useTranscriptionStore } from '@/store/features/useTranscriptionStore'
 import { cancelDownloads, cancelDownloadsComplete } from '@/hooks/useDownloadOrchestrator'
 import { beginDownload, endDownload } from '@/services/download-guard'
+import { useAppStore } from '@/store/useAppStore'
 import type { UnifiedRecording } from '@/types/unified-recording'
 import { hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 import type { ElectronAPI } from '@/lib/electron-api/types'
+import type { SyncFinalizeResponse } from '@/lib/electron-api/types-device-sync'
 
 // Task 12 investigated reconciling this: window.electronAPI's *ambient* type is sourced from
 // the real Electron desktop preload's ElectronAPI (electron/preload/index.ts), whose object
@@ -176,6 +178,29 @@ export function useOperations() {
 
   // ── Downloads ──────────────────────────────────────────
 
+  // Per-file sync + live progress into the shared store (sidebar + rows read this).
+  // Does NOT own the aggregate (deviceSyncing/deviceSyncProgress) or the guard — callers do.
+  const syncOne = useCallback(async (filename: string, size: number): Promise<SyncFinalizeResponse | null> => {
+    const store = useAppStore.getState()
+    store.addToDownloadQueue(filename, filename, size)
+    store.setDeviceSyncState({ deviceFileDownloading: filename, deviceFileProgress: 0, deviceFileStage: 'reading' })
+    try {
+      const src = hostedApi().downloadService.deviceFileSource(filename, size)
+      const res = await hostedApi().deviceSync.syncFile(src, (p) => {
+        const pct = p.total > 0 ? Math.round((p.loaded / p.total) * 100) : 0
+        const s = useAppStore.getState()
+        s.updateDownloadProgress(filename, pct)
+        s.setDeviceSyncState({ deviceFileProgress: pct, deviceFileStage: p.stage })
+      })
+      return res
+    } catch (e) {
+      console.error('Failed to sync device file:', filename, e instanceof Error ? e.message : 'Unknown error')
+      return null
+    } finally {
+      useAppStore.getState().removeFromDownloadQueue(filename)
+    }
+  }, [])
+
   // Routes through the device sync client (renderer) rather than the stubbed
   // downloadService.queueDownloads — hosted mode has no local download queue, so the
   // device file is streamed straight to the server via deviceSync.syncFile.
@@ -185,65 +210,66 @@ export function useOperations() {
     // Raise the download guard so concurrent listFiles/refresh/reconnect don't cancel the read
     // (see download-guard.ts). Ref-counted, so nesting under queueBulkDownloads is safe.
     beginDownload()
+    useAppStore.getState().setDeviceSyncState({ deviceSyncing: true, deviceSyncProgress: { current: 0, total: 1 } })
     try {
-      const src = hostedApi().downloadService.deviceFileSource(recording.deviceFilename, recording.size)
-      const res = await hostedApi().deviceSync.syncFile(src)
-      toast({ title: res.status === 'skipped' ? 'Already synced' : 'Synced', description: recording.filename })
-      return true
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error'
-      toast({ title: 'Sync failed', description: msg, variant: 'error' })
-      return false
+      const res = await syncOne(recording.deviceFilename, recording.size)
+      useAppStore.getState().setDeviceSyncState({ deviceSyncProgress: { current: 1, total: 1 } })
+      toast(res
+        ? { title: res.status === 'skipped' ? 'Already synced' : 'Synced', description: recording.filename }
+        : { title: 'Sync failed', description: recording.filename, variant: 'error' })
+      return res != null
     } finally {
+      useAppStore.getState().clearDeviceSyncState()
       endDownload()
     }
-  }, [])
+  }, [syncOne])
 
   const queueBulkDownloads = useCallback(async (recordings: UnifiedRecording[]) => {
     const eligible = recordings.filter(isDeviceOnly)
+    if (eligible.length === 0) return 0
     // Hold the guard across the WHOLE batch (not just each file) so a refresh can't slip in
     // between files and cancel the next download's read. Ref-counted with the per-file
-    // queueDownload begin/end, so the guard stays raised until the last file settles.
+    // syncOne begin/end, so the guard stays raised until the last file settles.
     beginDownload()
+    useAppStore.getState().setDeviceSyncState({ deviceSyncing: true, deviceSyncProgress: { current: 0, total: eligible.length } })
     try {
       let done = 0
       // Serialized — one device claim at a time. The device has a single USB endpoint, so
       // concurrent syncFile calls would race for the same connection (see USB safety notes).
-      for (const r of eligible) {
-        if (await queueDownload(r)) done++
+      for (let i = 0; i < eligible.length; i++) {
+        if (await syncOne(eligible[i].deviceFilename, eligible[i].size)) done++
+        useAppStore.getState().setDeviceSyncState({ deviceSyncProgress: { current: i + 1, total: eligible.length } })
       }
       if (done) toast({ title: `${done} recording${done > 1 ? 's' : ''} synced` })
       return done
     } finally {
+      useAppStore.getState().clearDeviceSyncState()
       endDownload()
     }
-  }, [queueDownload])
+  }, [syncOne])
 
   // Same hosted device-sync client as queueDownload/queueBulkDownloads above, but takes
   // raw {filename, size} pairs (e.g. from downloadService.getFilesToSync) rather than
   // UnifiedRecording objects — used by the /sync page's "Sync all" flow (Device.tsx).
   const syncDeviceFiles = useCallback(async (files: Array<{ filename: string; size: number }>) => {
+    if (files.length === 0) return 0
     // Hold the guard for the whole batch so concurrent listFiles/refresh/reconnect can't cancel
     // an in-flight read (see download-guard.ts).
     beginDownload()
+    useAppStore.getState().setDeviceSyncState({ deviceSyncing: true, deviceSyncProgress: { current: 0, total: files.length } })
     try {
       let synced = 0
       // Serialized — one device claim at a time (see queueBulkDownloads USB safety notes).
-      for (const f of files) {
-        try {
-          const src = hostedApi().downloadService.deviceFileSource(f.filename, f.size)
-          await hostedApi().deviceSync.syncFile(src)
-          synced++
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : 'Unknown error'
-          console.error('Failed to sync device file:', f.filename, msg)
-        }
+      for (let i = 0; i < files.length; i++) {
+        if (await syncOne(files[i].filename, files[i].size)) synced++
+        useAppStore.getState().setDeviceSyncState({ deviceSyncProgress: { current: i + 1, total: files.length } })
       }
       return synced
     } finally {
+      useAppStore.getState().clearDeviceSyncState()
       endDownload()
     }
-  }, [])
+  }, [syncOne])
 
   const cancelAllDownloads = useCallback(async () => {
     try {
