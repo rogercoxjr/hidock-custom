@@ -6,6 +6,21 @@ function srcOf(bytes: number[]) {
 }
 
 describe('makeDeviceSyncClient', () => {
+  it('emits staged progress: reading during collect, uploading during POST, saving before finalize (single-POST)', async () => {
+    const stages: string[] = []
+    const http = {
+      postStream: vi.fn().mockResolvedValue({ ok: true, status: 200, data: { uploadId: 'u1', serverSha256: 'x', bytesReceived: 3 } }),
+      post: vi.fn().mockResolvedValue({ ok: true, status: 200, data: { recordingId: 'r1', status: 'synced' } }),
+    } as any
+    const client = makeDeviceSyncClient({ http })
+    await client.syncFile(srcOf([1, 2, 3]), (p) => stages.push(p.stage))
+    expect(stages).toContain('reading')
+    expect(stages).toContain('uploading')
+    expect(stages).toContain('saving')
+    expect(stages.indexOf('reading')).toBeLessThan(stages.indexOf('uploading'))
+    expect(stages.indexOf('uploading')).toBeLessThan(stages.indexOf('saving'))
+  })
+
   it('streams, sends browser hash on finalize, returns synced', async () => {
     const http = {
       postStream: vi.fn().mockResolvedValue({

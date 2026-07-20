@@ -9,7 +9,7 @@
  * `src.stream()` on the next attempt — there is no partial resume in Phase 1.
  */
 
-import type { DeviceFileSource, DeviceFileMeta, SyncCreateResponse, SyncFinalizeResponse } from '../types-device-sync'
+import type { DeviceFileSource, DeviceFileMeta, SyncCreateResponse, SyncFinalizeResponse, SyncProgress } from '../types-device-sync'
 import type { Http } from '../http'
 
 export interface DeviceSyncClientDeps {
@@ -67,7 +67,7 @@ export function makeDeviceSyncClient({
   chunkSize = DEFAULT_CHUNK,
 }: DeviceSyncClientDeps) {
   return {
-    async syncFile(src: DeviceFileSource, onProgress?: (sent: number) => void): Promise<SyncFinalizeResponse> {
+    async syncFile(src: DeviceFileSource, onProgress?: (p: SyncProgress) => void): Promise<SyncFinalizeResponse> {
       // A device-only recording built from cache can carry size 0 (useUnifiedRecordings:
       // `cached.file_size ?? cached.size ?? 0`). Downloading with size 0 both truncates the
       // read (downloadFile completes at `received >= 0` after the first packet) and would
@@ -82,7 +82,8 @@ export function makeDeviceSyncClient({
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         // Device can't seek → re-read the whole file each attempt.
-        const { blob, hashHex } = await collectAndHash(src, onProgress)
+        const { blob, hashHex } = await collectAndHash(src, (sent) =>
+          onProgress?.({ stage: 'reading', loaded: sent, total: src.size }))
         // Short-read guard: if the WebUSB read delivered fewer bytes than the device declared
         // (e.g. the download's transferIn was cancelled by a concurrent scan and downloadFile
         // resolved without the full file — collectAndHash then yields a truncated/empty blob),
@@ -108,7 +109,7 @@ export function makeDeviceSyncClient({
           for (let offset = 0; offset < blob.size; offset += chunkSize) {
             const part = blob.slice(offset, Math.min(offset + chunkSize, blob.size))
             const res = await http.postStream(`/api/recordings/sync/${uploadId}/chunk`, part)
-            onProgress?.(Math.min(offset + chunkSize, blob.size))
+            onProgress?.({ stage: 'uploading', loaded: Math.min(offset + chunkSize, blob.size), total: blob.size })
             if (!res.ok) {
               chunkErr = res.error ?? `HTTP ${res.status}`
               break
@@ -121,15 +122,18 @@ export function makeDeviceSyncClient({
             continue
           }
         } else {
+          onProgress?.({ stage: 'uploading', loaded: 0, total: src.size })
           const created = await http.postStream('/api/recordings/sync', blob, { 'x-device-file': header })
           if (!created.ok) {
             lastErr = created.error ?? `HTTP ${created.status}`
             continue
           }
+          onProgress?.({ stage: 'uploading', loaded: src.size, total: src.size })
           uploadId = (created.data as SyncCreateResponse).uploadId
         }
 
         // The server is the authority on hash/size — its finalize 4xx surfaces as fin.ok===false.
+        onProgress?.({ stage: 'saving', loaded: src.size, total: src.size })
         const fin = await http.post(`/api/recordings/sync/${uploadId}/finalize`, { clientSha256: hashHex })
         if (!fin.ok) {
           lastErr = fin.error ?? `HTTP ${fin.status}`
