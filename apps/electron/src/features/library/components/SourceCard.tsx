@@ -44,6 +44,7 @@ interface SourceCardProps {
   downloadStage?: 'reading' | 'uploading' | 'saving' | null
   isDeleting: boolean
   deviceConnected: boolean
+  deviceSyncing?: boolean
   isSelected?: boolean
   /**
    * Unified click handler. Receives the raw mouse event so the parent can read
@@ -77,6 +78,7 @@ export const SourceCard = memo(function SourceCard({
   downloadStage,
   isDeleting,
   deviceConnected,
+  deviceSyncing = false,
   isSelected = false,
   onClick,
   onPlay,
@@ -204,7 +206,7 @@ export const SourceCard = memo(function SourceCard({
                   variant="ghost"
                   size="icon"
                   onClick={onDownload}
-                  disabled={!deviceConnected}
+                  disabled={!deviceConnected || deviceSyncing}
                   title={deviceConnected ? 'Download to computer' : 'Device not connected'}
                 >
                   <Download className="h-4 w-4" />
@@ -391,6 +393,7 @@ export const SourceCard = memo(function SourceCard({
     prevProps.downloadStage === nextProps.downloadStage &&
     prevProps.isDeleting === nextProps.isDeleting &&
     prevProps.deviceConnected === nextProps.deviceConnected &&
+    prevProps.deviceSyncing === nextProps.deviceSyncing &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.transcript?.id === nextProps.transcript?.id &&
     prevProps.meeting?.id === nextProps.meeting?.id &&

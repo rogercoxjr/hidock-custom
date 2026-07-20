@@ -73,6 +73,7 @@ interface SourceRowProps {
   downloadProgress?: number
   downloadStage?: 'reading' | 'uploading' | 'saving' | null
   deviceConnected?: boolean
+  deviceSyncing?: boolean
   /** Pre-derived people for the pills row (from meeting attendees, slice 1). */
   people?: CapturePerson[]
   /** Pre-derived labels for the chip row (category, slice 1). */
@@ -105,6 +106,7 @@ export const SourceRow = memo(function SourceRow({
   downloadProgress,
   downloadStage,
   deviceConnected = false,
+  deviceSyncing = false,
   people = [],
   labels = [],
   peopleKey: _peopleKey,
@@ -279,7 +281,7 @@ export const SourceRow = memo(function SourceRow({
 
               {/* Download — only for device-only recordings */}
               {onDownload && recording.location === 'device-only' && (
-                <DropdownMenuItem onSelect={() => onDownload()} disabled={!deviceConnected}>
+                <DropdownMenuItem onSelect={() => onDownload()} disabled={!deviceConnected || deviceSyncing}>
                   <Download className="mr-2 h-4 w-4" />
                   {deviceConnected ? 'Download' : 'Device not connected'}
                 </DropdownMenuItem>
@@ -383,6 +385,7 @@ export const SourceRow = memo(function SourceRow({
     prevProps.isDownloading === nextProps.isDownloading &&
     prevProps.downloadProgress === nextProps.downloadProgress &&
     prevProps.downloadStage === nextProps.downloadStage &&
+    prevProps.deviceSyncing === nextProps.deviceSyncing &&
     prevProps.transcript?.id === nextProps.transcript?.id &&
     prevProps.transcript?.title_suggestion === nextProps.transcript?.title_suggestion &&
     prevProps.meeting?.id === nextProps.meeting?.id &&

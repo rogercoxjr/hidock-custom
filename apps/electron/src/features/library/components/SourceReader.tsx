@@ -62,6 +62,7 @@ interface SourceReaderProps {
   onDelete?: () => void
   // State for button enabling/disabling
   deviceConnected?: boolean
+  deviceSyncing?: boolean
   isDownloading?: boolean
   downloadProgress?: number
   downloadStage?: 'reading' | 'uploading' | 'saving' | null
@@ -87,6 +88,7 @@ export function SourceReader({
   onResummarize,
   onDelete,
   deviceConnected = false,
+  deviceSyncing = false,
   isDownloading = false,
   downloadProgress,
   downloadStage,
@@ -694,7 +696,7 @@ export function SourceReader({
             variant="outline"
             size="sm"
             onClick={onDownload}
-            disabled={!deviceConnected || isDownloading}
+            disabled={!deviceConnected || isDownloading || deviceSyncing}
             className="gap-2"
             title={!deviceConnected ? "Device not connected" : "Download recording from device"}
           >

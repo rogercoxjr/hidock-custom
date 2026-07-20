@@ -17,6 +17,7 @@ function makeProps(overrides: Partial<Parameters<typeof LibraryHeader>[0]> = {})
   return {
     stats: { total: 5, deviceOnly: 0, localOnly: 5, unsynced: 0 },
     deviceConnected: true,
+    deviceSyncing: false,
     loading: false,
     compactView: false,
     downloadQueueSize: 0,

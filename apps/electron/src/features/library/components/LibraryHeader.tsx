@@ -11,6 +11,7 @@ interface LibraryHeaderProps {
     unsynced: number
   }
   deviceConnected: boolean
+  deviceSyncing: boolean
   loading: boolean
   compactView: boolean
   downloadQueueSize: number
@@ -34,6 +35,7 @@ interface LibraryHeaderProps {
 export function LibraryHeader({
   stats,
   deviceConnected,
+  deviceSyncing,
   loading,
   compactView,
   downloadQueueSize,
@@ -85,7 +87,7 @@ export function LibraryHeader({
             variant="outline"
             size="sm"
             onClick={onBulkDownload}
-            disabled={downloadQueueSize > 0 || !deviceConnected}
+            disabled={downloadQueueSize > 0 || deviceSyncing || !deviceConnected}
             title={`Download ${bulkCounts.deviceOnly} captures from device`}
           >
             {downloadQueueSize > 0 ? (

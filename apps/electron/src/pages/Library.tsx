@@ -15,7 +15,7 @@ import {
 import { Transcript, Meeting, LabelDefinition } from '@/types'
 import { useAudioControls } from '@/components/OperationController'
 import { useUIStore } from '@/store/useUIStore'
-import { useDownloadQueue, useDeviceFileStage, useDeviceFileDownloading } from '@/store/useAppStore'
+import { useDownloadQueue, useDeviceFileStage, useDeviceFileDownloading, useDeviceSyncing } from '@/store/useAppStore'
 import {
   LibraryHeader,
   LibraryFilters,
@@ -74,6 +74,7 @@ export function Library() {
   const downloadQueue = useDownloadQueue()
   const deviceFileStage = useDeviceFileStage()
   const deviceFileDownloading = useDeviceFileDownloading()
+  const deviceSyncing = useDeviceSyncing()
 
   // Helper to check if a file is downloading
   const isDownloading = useCallback((filename: string) => {
@@ -926,6 +927,7 @@ export function Library() {
       <LibraryHeader
         stats={stats}
         deviceConnected={deviceConnected}
+        deviceSyncing={deviceSyncing}
         loading={loading}
         compactView={compactView}
         downloadQueueSize={downloadQueue.size}
@@ -1104,6 +1106,7 @@ export function Library() {
                             isDeviceOnly(recording) && deviceFileDownloading === recording.deviceFilename ? deviceFileStage : undefined
                           }
                           deviceConnected={deviceConnected}
+                          deviceSyncing={deviceSyncing}
                           people={rowPeople}
                           labels={rowLabels}
                           peopleKey={rowPeopleKey}
@@ -1158,6 +1161,7 @@ export function Library() {
                           }
                           isDeleting={deleting === recording.id}
                           deviceConnected={deviceConnected}
+                          deviceSyncing={deviceSyncing}
                           isSelected={selectedIds.has(recording.id)}
                           onClick={(e) => handleSourceClick(recording, e)}
                           onPlay={() => {
@@ -1256,6 +1260,7 @@ export function Library() {
                   onDelete={() => handleDeleteCallback(selectedRecording)}
                   // State for button disabling
                   deviceConnected={deviceConnected}
+                  deviceSyncing={deviceSyncing}
                   isDownloading={isDeviceOnly(selectedRecording)
                     ? isDownloading(selectedRecording.deviceFilename)
                     : false}

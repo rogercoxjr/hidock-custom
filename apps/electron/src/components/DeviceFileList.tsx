@@ -24,7 +24,7 @@ import { getHiDockDeviceService } from '@/services/hidock-device'
 import { useOperations } from '@/hooks/useOperations'
 import { hasDeviceFile, type DeviceOnlyRecording, type BothLocationsRecording } from '@/types/unified-recording'
 import { formatBytes, formatDuration } from '@/utils/formatters'
-import { useIsDownloading, useDownloadProgress, useDeviceFileStage, useDeviceFileDownloading } from '@/store/useAppStore'
+import { useIsDownloading, useDownloadProgress, useDeviceFileStage, useDeviceFileDownloading, useDeviceSyncing } from '@/store/useAppStore'
 import { useUIStore } from '@/store/ui/useUIStore'
 
 type SortColumn = 'filename' | 'size' | 'duration' | 'dateRecorded'
@@ -78,6 +78,7 @@ function DeviceFileRow({
   const downloadProgress = useDownloadProgress(dlKey)
   const deviceFileStage = useDeviceFileStage()
   const deviceFileDownloading = useDeviceFileDownloading()
+  const deviceSyncing = useDeviceSyncing()
   const downloadStage = deviceFileDownloading === dlKey ? deviceFileStage : null
 
   // FL-002: Show "—" for unknown/zero duration instead of "0:00"
@@ -168,6 +169,7 @@ function DeviceFileRow({
           </div>
         ) : showDownloadButton && (
           <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+            disabled={deviceSyncing}
             onClick={() => onDownload(filename, recording.size)}>
             <Download className="h-3 w-3 mr-1" />
             DL
@@ -204,6 +206,7 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
 
   const currentlyPlayingId = useUIStore((s) => s.currentlyPlayingId)
   const isPlaying = useUIStore((s) => s.isPlaying)
+  const deviceSyncing = useDeviceSyncing()
 
   // Filter to only show device-accessible recordings
   const deviceRecordings = recordings.filter(rec => hasDeviceFile(rec))
@@ -355,7 +358,7 @@ export function DeviceFileList({ recordings, onRefresh, onRecordingsRefresh }: D
               <Button
                 size="sm"
                 variant="default"
-                disabled={allSelectedSynced}
+                disabled={allSelectedSynced || deviceSyncing}
                 onClick={async () => {
                   // Serialize the batch through ONE guarded syncDeviceFiles call (holds the
                   // download guard for the whole batch) instead of an un-awaited forEach that
