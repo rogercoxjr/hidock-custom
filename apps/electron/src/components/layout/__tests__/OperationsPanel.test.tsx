@@ -10,7 +10,9 @@ vi.mock('@/store/useAppStore', () => ({
   useAppStore: vi.fn(),
   useDownloadQueue: vi.fn().mockReturnValue(new Map()),
   useDeviceSyncProgress: vi.fn().mockReturnValue(null),
-  useDeviceSyncEta: vi.fn().mockReturnValue(null)
+  useDeviceSyncEta: vi.fn().mockReturnValue(null),
+  useDeviceFileStage: vi.fn().mockReturnValue(null),
+  useDeviceFileDownloading: vi.fn().mockReturnValue(null)
 }))
 
 vi.mock('@/store/features/useTranscriptionStore', () => ({

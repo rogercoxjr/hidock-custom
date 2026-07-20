@@ -103,7 +103,9 @@ vi.mock('@/store/useAppStore', () => ({
   useConnectionStatus: vi.fn().mockReturnValue({ step: 'idle', message: 'Not connected' }),
   useDeviceState: vi.fn().mockReturnValue({ connected: false }),
   useIsDownloading: vi.fn().mockReturnValue(false),
-  useDownloadProgress: vi.fn().mockReturnValue(null)
+  useDownloadProgress: vi.fn().mockReturnValue(null),
+  useDeviceFileStage: vi.fn().mockReturnValue(null),
+  useDeviceFileDownloading: vi.fn().mockReturnValue(null)
 }))
 
 vi.mock('@/store/useLibraryStore', () => ({
