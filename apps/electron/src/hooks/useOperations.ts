@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { toast } from '@/components/ui/toaster'
 import { useTranscriptionStore } from '@/store/features/useTranscriptionStore'
 import { cancelDownloads, cancelDownloadsComplete } from '@/hooks/useDownloadOrchestrator'
+import { beginDownload, endDownload } from '@/services/download-guard'
 import type { UnifiedRecording } from '@/types/unified-recording'
 import { hasLocalPath, isDeviceOnly } from '@/types/unified-recording'
 import type { ElectronAPI } from '@/lib/electron-api/types'
@@ -181,6 +182,9 @@ export function useOperations() {
   const queueDownload = useCallback(async (recording: UnifiedRecording) => {
     if (!isDeviceOnly(recording)) return false
 
+    // Raise the download guard so concurrent listFiles/refresh/reconnect don't cancel the read
+    // (see download-guard.ts). Ref-counted, so nesting under queueBulkDownloads is safe.
+    beginDownload()
     try {
       const src = hostedApi().downloadService.deviceFileSource(recording.deviceFilename, recording.size)
       const res = await hostedApi().deviceSync.syncFile(src)
@@ -190,38 +194,55 @@ export function useOperations() {
       const msg = e instanceof Error ? e.message : 'Unknown error'
       toast({ title: 'Sync failed', description: msg, variant: 'error' })
       return false
+    } finally {
+      endDownload()
     }
   }, [])
 
   const queueBulkDownloads = useCallback(async (recordings: UnifiedRecording[]) => {
     const eligible = recordings.filter(isDeviceOnly)
-    let done = 0
-    // Serialized — one device claim at a time. The device has a single USB endpoint, so
-    // concurrent syncFile calls would race for the same connection (see USB safety notes).
-    for (const r of eligible) {
-      if (await queueDownload(r)) done++
+    // Hold the guard across the WHOLE batch (not just each file) so a refresh can't slip in
+    // between files and cancel the next download's read. Ref-counted with the per-file
+    // queueDownload begin/end, so the guard stays raised until the last file settles.
+    beginDownload()
+    try {
+      let done = 0
+      // Serialized — one device claim at a time. The device has a single USB endpoint, so
+      // concurrent syncFile calls would race for the same connection (see USB safety notes).
+      for (const r of eligible) {
+        if (await queueDownload(r)) done++
+      }
+      if (done) toast({ title: `${done} recording${done > 1 ? 's' : ''} synced` })
+      return done
+    } finally {
+      endDownload()
     }
-    if (done) toast({ title: `${done} recording${done > 1 ? 's' : ''} synced` })
-    return done
   }, [queueDownload])
 
   // Same hosted device-sync client as queueDownload/queueBulkDownloads above, but takes
   // raw {filename, size} pairs (e.g. from downloadService.getFilesToSync) rather than
   // UnifiedRecording objects — used by the /sync page's "Sync all" flow (Device.tsx).
   const syncDeviceFiles = useCallback(async (files: Array<{ filename: string; size: number }>) => {
-    let synced = 0
-    // Serialized — one device claim at a time (see queueBulkDownloads USB safety notes).
-    for (const f of files) {
-      try {
-        const src = hostedApi().downloadService.deviceFileSource(f.filename, f.size)
-        await hostedApi().deviceSync.syncFile(src)
-        synced++
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Unknown error'
-        console.error('Failed to sync device file:', f.filename, msg)
+    // Hold the guard for the whole batch so concurrent listFiles/refresh/reconnect can't cancel
+    // an in-flight read (see download-guard.ts).
+    beginDownload()
+    try {
+      let synced = 0
+      // Serialized — one device claim at a time (see queueBulkDownloads USB safety notes).
+      for (const f of files) {
+        try {
+          const src = hostedApi().downloadService.deviceFileSource(f.filename, f.size)
+          await hostedApi().deviceSync.syncFile(src)
+          synced++
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Unknown error'
+          console.error('Failed to sync device file:', f.filename, msg)
+        }
       }
+      return synced
+    } finally {
+      endDownload()
     }
-    return synced
   }, [])
 
   const cancelAllDownloads = useCallback(async () => {

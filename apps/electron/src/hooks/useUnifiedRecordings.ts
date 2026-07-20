@@ -9,6 +9,7 @@ import {
 } from '@/types/unified-recording'
 import type { KnowledgeCapture } from '@/types/knowledge'
 import { subscribeFreshness } from '@/lib/dataFreshness'
+import { isDownloadInFlight } from '@/services/download-guard'
 
 interface DatabaseRecording {
   id: string
@@ -458,7 +459,12 @@ export function useUnifiedRecordings(): UseUnifiedRecordingsResult {
 
       // PHASE 2: Fetch device recordings (slow) - this updates the view when complete
       // Only needed if we don't have memory cache or forceRefresh is true
-      const needsDeviceFetch = isConnected && (memoryCachedDeviceRecs.length === 0 || forceRefresh)
+      // DL-USB-CONCURRENCY (Tier 1): NEVER issue a listFiles scan over USB while a download is in
+      // flight — it shares the single WebUSB read loop and cancels the download's transferIn,
+      // collapsing the read to 0 bytes. Defer to cached data; a refresh after the download settles
+      // picks up the truth. See download-guard.ts.
+      const needsDeviceFetch =
+        isConnected && (memoryCachedDeviceRecs.length === 0 || forceRefresh) && !isDownloadInFlight()
 
       // Only decrement loading if no device fetch is needed.
       // If Phase 2 will run, keep loading count elevated so the UI shows a loading indicator
@@ -625,6 +631,10 @@ export function useUnifiedRecordings(): UseUnifiedRecordingsResult {
         // FL-04: Skip polling when a connection-triggered refresh is already in progress
         // This prevents the polling effect from racing with connection event handlers
         if (loadingRef.current) return
+
+        // DL-USB-CONCURRENCY (Tier 1): never poll the device mid-download — a listFiles scan
+        // cancels the in-flight download read on the shared WebUSB loop (see download-guard.ts).
+        if (isDownloadInFlight()) return
 
         // AUD5-014: Skip polling during cooldown after a connection event
         // This prevents the poll from firing a redundant refresh right after connect/ready

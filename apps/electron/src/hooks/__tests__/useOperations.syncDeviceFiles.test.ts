@@ -12,6 +12,7 @@ vi.mock('@/store/features/useTranscriptionStore', () => ({
   }),
 }))
 import { useOperations } from '../useOperations'
+import { isDownloadInFlight } from '@/services/download-guard'
 
 const syncFile = vi.fn().mockResolvedValue({ recordingId: 'r1', status: 'synced' })
 const deviceFileSource = vi.fn().mockImplementation((filename: string, size: number) => ({
@@ -38,6 +39,19 @@ describe('useOperations.syncDeviceFiles', () => {
     expect(deviceFileSource).toHaveBeenNthCalledWith(1, 'A.hda', 3)
     expect(deviceFileSource).toHaveBeenNthCalledWith(2, 'B.hda', 5)
     expect(syncFile).toHaveBeenCalledTimes(2)
+  })
+
+  it('raises the download guard while syncing and clears it afterward (Tier 1 churn guard)', async () => {
+    let inFlightDuringSync = false
+    syncFile.mockImplementationOnce(async () => {
+      inFlightDuringSync = isDownloadInFlight()
+      return { recordingId: 'r1', status: 'synced' }
+    })
+    const { result } = renderHook(() => useOperations())
+    expect(isDownloadInFlight()).toBe(false)
+    await act(async () => { await result.current.syncDeviceFiles([{ filename: 'A.hda', size: 3 }]) })
+    expect(inFlightDuringSync).toBe(true) // guard up during the read → refresh/poll defer
+    expect(isDownloadInFlight()).toBe(false) // and cleared after (finally)
   })
 
   it('continues past a per-file error and returns the successful count', async () => {
