@@ -41,6 +41,7 @@ interface SourceCardProps {
   isTranscriptExpanded: boolean
   isDownloading: boolean
   downloadProgress?: number
+  downloadStage?: 'reading' | 'uploading' | 'saving' | null
   isDeleting: boolean
   deviceConnected: boolean
   isSelected?: boolean
@@ -73,6 +74,7 @@ export const SourceCard = memo(function SourceCard({
   isTranscriptExpanded,
   isDownloading,
   downloadProgress,
+  downloadStage,
   isDeleting,
   deviceConnected,
   isSelected = false,
@@ -194,6 +196,7 @@ export const SourceCard = memo(function SourceCard({
               (isDownloading ? (
                 <div className="flex items-center gap-2 text-xs text-ink-muted">
                   <RefreshCw className="h-4 w-4 animate-spin" />
+                  {downloadStage ? { reading: 'Reading', uploading: 'Uploading', saving: 'Saving' }[downloadStage] + ' ' : ''}
                   {downloadProgress ?? 0}%
                 </div>
               ) : (
@@ -385,6 +388,7 @@ export const SourceCard = memo(function SourceCard({
     prevProps.isTranscriptExpanded === nextProps.isTranscriptExpanded &&
     prevProps.isDownloading === nextProps.isDownloading &&
     prevProps.downloadProgress === nextProps.downloadProgress &&
+    prevProps.downloadStage === nextProps.downloadStage &&
     prevProps.isDeleting === nextProps.isDeleting &&
     prevProps.deviceConnected === nextProps.deviceConnected &&
     prevProps.isSelected === nextProps.isSelected &&

@@ -1153,6 +1153,9 @@ export function Library() {
                           downloadProgress={
                             isDeviceOnly(recording) ? downloadQueue.get(recording.deviceFilename)?.progress : undefined
                           }
+                          downloadStage={
+                            isDeviceOnly(recording) && deviceFileDownloading === recording.deviceFilename ? deviceFileStage : undefined
+                          }
                           isDeleting={deleting === recording.id}
                           deviceConnected={deviceConnected}
                           isSelected={selectedIds.has(recording.id)}
@@ -1259,6 +1262,9 @@ export function Library() {
                   downloadProgress={isDeviceOnly(selectedRecording)
                     ? downloadQueue.get(selectedRecording.deviceFilename)?.progress
                     : undefined}
+                  downloadStage={
+                    isDeviceOnly(selectedRecording) && deviceFileDownloading === selectedRecording.deviceFilename ? deviceFileStage : undefined
+                  }
                   isDeleting={deleting === selectedRecording.id}
                   // Navigation
                   onNavigateToMeeting={handleNavigateToMeeting}

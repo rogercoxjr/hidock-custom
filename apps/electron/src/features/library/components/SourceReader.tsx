@@ -64,6 +64,7 @@ interface SourceReaderProps {
   deviceConnected?: boolean
   isDownloading?: boolean
   downloadProgress?: number
+  downloadStage?: 'reading' | 'uploading' | 'saving' | null
   isDeleting?: boolean
   // Navigation
   onNavigateToMeeting?: (meetingId: string) => void
@@ -88,6 +89,7 @@ export function SourceReader({
   deviceConnected = false,
   isDownloading = false,
   downloadProgress,
+  downloadStage,
   isDeleting = false,
   onNavigateToMeeting,
   onMetadataEdited
@@ -699,6 +701,7 @@ export function SourceReader({
             {isDownloading ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
+                {downloadStage ? { reading: 'Reading', uploading: 'Uploading', saving: 'Saving' }[downloadStage] + ' ' : ''}
                 {downloadProgress !== undefined ? `${downloadProgress}%` : 'Downloading...'}
               </>
             ) : (
