@@ -99,6 +99,20 @@ export function SourceReader({
 
   // Summary collapse state (QOL #5 — summary is now at the top of the reader)
   const [summaryExpanded, setSummaryExpanded] = useState(true)
+  // Collapsible metadata header (QOL): on short/laptop viewports the metadata grid eats real
+  // estate; let the user fold it to a title-only bar via the chevron. Persisted in localStorage
+  // so the choice sticks across recordings and reloads. Kept out of the Zustand store on purpose
+  // — a new store export would need adding to five hand-rolled useAppStore test mocks.
+  const [metadataCollapsed, setMetadataCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('hidock-reader-metadata-collapsed') === '1' } catch { return false }
+  })
+  const toggleMetadata = useCallback(() => {
+    setMetadataCollapsed((prev) => {
+      const next = !prev
+      try { localStorage.setItem('hidock-reader-metadata-collapsed', next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   // Title editing state
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -484,7 +498,8 @@ export function SourceReader({
       {/* Header with comprehensive metadata */}
       <div className="shrink-0 space-y-4 border-b border-border bg-surface p-[var(--space-5)]">
         <div>
-          <div className="mb-4">
+          <div className="mb-4 flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
             {isEditingTitle ? (
               <div className="flex items-center gap-2">
                 <Input
@@ -529,8 +544,21 @@ export function SourceReader({
                 )}
               </div>
             )}
+            </div>
+            <button
+              type="button"
+              onClick={toggleMetadata}
+              className="mt-1 shrink-0 rounded-sm p-1 text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink"
+              aria-expanded={!metadataCollapsed}
+              aria-label={metadataCollapsed ? 'Show recording details' : 'Hide recording details'}
+              title={metadataCollapsed ? 'Show details' : 'Hide details'}
+            >
+              {metadataCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
           </div>
 
+          {!metadataCollapsed && (
+          <>
           {/* Comprehensive Metadata Grid */}
           <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3 lg:grid-cols-4">
             <div>
@@ -648,6 +676,8 @@ export function SourceReader({
             <p className="mt-3 text-xs italic text-ink-muted">
               Download this capture to play it and generate a transcript.
             </p>
+          )}
+          </>
           )}
         </div>
       </div>
