@@ -6,6 +6,22 @@ downloads (2026-07-19). Fixes already shipped live on branch `fix/hosted-device-
 Tier-1 concurrency guard, and chunked upload. See `apps/electron/docs/DEPLOY-UNRAID.md` /
 `DEPLOY-NPM.md` for the hosting topology (Cloudflare ~100 MB upload cap is why chunking exists).
 
+## Verify live (pending — needs the real device)
+- **On-hardware smoke test of the deployed progress UI + concurrency gate** (live hub image
+  `4157c8aa`, `https://hidock.coxserver.com`). Not yet done — done by an agent would require USB
+  probing, which the CLAUDE.md safety rules forbid; this is a human/manual check. One clean run:
+  1. Download a single device-only recording → the trigger button swaps to a spinner on click and
+     the stage label cycles **reading → uploading → saving** with a live percentage (per-row and
+     in the `OperationsPanel` sidebar).
+  2. "Download All" / a multi-select batch → sidebar shows two-level progress (file N of M +
+     current file's stage/%).
+  3. **Gate:** while a sync is in flight, every *other* download-start control is disabled —
+     per-row DL (Library + Device + Calendar), "Download All", DeviceFileList "Download N",
+     BulkActionsBar selection download; the actively-downloading row still shows its spinner
+     (not a dead button). Device "Sync all" shows a Cancel button.
+  4. Large file (>100 MB) still lands at exact byte size (chunked path).
+  Respect USB safety: one connect, one operation, proper cleanup — no exploratory probing.
+
 ## Shipped on this branch (2026-07-19/20)
 - **Download click-confirmation + progress indicators.** DONE. `syncFile` now emits
   `SyncProgress {stage, loaded, total}` (reading→uploading→saving); `useOperations` maps it to
