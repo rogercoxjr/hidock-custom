@@ -6,14 +6,29 @@ downloads (2026-07-19). Fixes already shipped live on branch `fix/hosted-device-
 Tier-1 concurrency guard, and chunked upload. See `apps/electron/docs/DEPLOY-UNRAID.md` /
 `DEPLOY-NPM.md` for the hosting topology (Cloudflare ~100 MB upload cap is why chunking exists).
 
-## In design (active)
-- **Download click-confirmation + progress indicators.** The download works but gives no
-  feedback (no "you clicked / it started" and no progress). Being brainstormed now. Agreed so
-  far: stage label **+** percentage; shown on **both** the global sidebar (`OperationsPanel`)
-  **and** per-row (`SourceRow` / `DeviceFileList`) + trigger-button disable/spinner on click;
-  **two-level** batch progress (file N of M + current file's stage/%); **no cancel** (see below).
-  All the rendering already exists — the hosted path just never sets `deviceSyncState` /
-  `downloadQueue` / passes `syncFile`'s `onProgress`.
+## Shipped on this branch (2026-07-19/20)
+- **Download click-confirmation + progress indicators.** DONE. `syncFile` now emits
+  `SyncProgress {stage, loaded, total}` (reading→uploading→saving); `useOperations` maps it to
+  `deviceSyncState` + `downloadQueue`; rendered as stage label **+** percentage in the sidebar
+  (`OperationsPanel`) and per-row (`SourceRow`/`SourceCard`/`SourceReader`/`DeviceFileList`), with
+  the trigger button swapping to a spinner on click and two-level batch progress (file N of M +
+  current file's stage/%). No cancel (still deferred, below). Spec/plan under
+  `docs/superpowers/specs|plans/2026-07-19-hosted-download-feedback*`.
+- **Concurrency gate (device safety).** DONE. Every download-START control is `disabled` while
+  `deviceSyncing` is true so a second `syncFile` can't collide on the shared USB read loop:
+  SourceRow/SourceCard/SourceReader, DeviceFileList per-row + batch, LibraryHeader "Download All",
+  Calendar bulk + card-row + list-row, and BulkActionsBar (via `disabledActions.download`).
+  Device "Sync all" flips to Cancel while syncing. Regression-guarded by
+  `SourceCard.deviceSyncing.test.tsx`.
+
+## Minor cleanups (deferred, low priority)
+- **Dead store field `deviceFileProgress`.** Written (`useOperations.ts`, `Device.tsx`,
+  `useDownloadOrchestrator.ts`) but never read — per-file % surfaces through the `downloadQueue`
+  Map via `useDownloadProgress(id)`. Pre-existing; safe to remove the writes + field.
+- **Shared `@/store/useAppStore` test mock.** Five suites hand-roll the same `vi.mock` factory
+  (Library, Device, library-a11y, library-performance, OperationsPanel); a new store export
+  silently breaks all of them (it did this branch). Extract one shared mock helper (or use
+  `vi.importActual` + partial override) so exports can't drift.
 
 ## Deferred features
 - **Cancel an in-progress download/batch.** Explicitly deferred. Needs an `AbortController`
