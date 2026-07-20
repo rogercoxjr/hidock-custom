@@ -36,7 +36,7 @@ import type {
   Conversation,
   Message,
 } from '../../types/knowledge'
-import type { DeviceFileSource, SyncFinalizeResponse } from './types-device-sync'
+import type { DeviceFileSource, SyncFinalizeResponse, SyncProgress } from './types-device-sync'
 
 // Re-export imported types so consumers of this module get a single import point.
 export type {
@@ -523,7 +523,7 @@ export interface ElectronAPI {
 
   // Device Sync Client (Task 12 facade) — streams a DeviceFileSource to the hosted-hub server.
   deviceSync: {
-    syncFile: (src: DeviceFileSource, onProgress?: (sent: number) => void) => Promise<SyncFinalizeResponse>
+    syncFile: (src: DeviceFileSource, onProgress?: (p: SyncProgress) => void) => Promise<SyncFinalizeResponse>
   }
 
   // Device Cache - Caches device file listings for offline access
