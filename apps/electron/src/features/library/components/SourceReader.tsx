@@ -474,9 +474,15 @@ export function SourceReader({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-bg">
+    // Single vertical scroll container: the metadata header + action bar have no height cap
+    // (the action bar wraps to more rows as the pane narrows), so on short/laptop viewports
+    // their combined min-content height would eat the pane and collapse a `flex-1` transcript
+    // to zero under `overflow-hidden` — leaving nothing scrollable. Scrolling the whole panel
+    // (header → actions → transcript flow as one document) keeps every section reachable at any
+    // height. Safe because TranscriptViewer renders in normal flow (no virtualized scroll parent).
+    <div className="flex h-full flex-col overflow-y-auto bg-bg">
       {/* Header with comprehensive metadata */}
-      <div className="space-y-4 border-b border-border bg-surface p-[var(--space-5)]">
+      <div className="shrink-0 space-y-4 border-b border-border bg-surface p-[var(--space-5)]">
         <div>
           <div className="mb-4">
             {isEditingTitle ? (
@@ -647,7 +653,7 @@ export function SourceReader({
       </div>
 
       {/* Action Buttons Section */}
-      <div className="flex flex-wrap gap-2 border-b border-border bg-surface-sunken px-[var(--space-5)] py-3">
+      <div className="flex shrink-0 flex-wrap gap-2 border-b border-border bg-surface-sunken px-[var(--space-5)] py-3">
         {/* Play/Stop Button - only for local recordings - LB-03 fix: Wire up onPlay callback */}
         {canPlay && onPlay && (
           isPlaying ? (
@@ -910,13 +916,13 @@ export function SourceReader({
 
       {/* Audio Player — shown whenever recording has local file */}
       {canPlay && (
-        <div className="sticky top-0 z-10 border-b border-border bg-surface px-[var(--space-5)] py-3">
+        <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-surface px-[var(--space-5)] py-3">
           <AudioPlayer key={recording.id} filename={recording.filename} onClose={onStop} />
         </div>
       )}
 
-      {/* Transcript Content */}
-      <div className="flex-1 overflow-auto p-[var(--space-5)]">
+      {/* Transcript Content — flows within the panel's single scroll (see container note above) */}
+      <div className="p-[var(--space-5)]">
         {transcript ? (
           <>
             {summaryStale && (
