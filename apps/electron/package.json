@@ -24,7 +24,8 @@
     "test:run": "vitest run",
     "test:performance": "vitest run src/__tests__/performance",
     "start:server": "node out/server/index.js",
-    "build:server": "node scripts/build-server.mjs"
+    "build:server": "node scripts/build-server.mjs",
+    "deploy:hub": "bash scripts/deploy-hub.sh"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

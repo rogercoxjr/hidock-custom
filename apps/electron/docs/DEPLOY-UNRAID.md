@@ -23,6 +23,14 @@ On a build host (or Unraid with the Docker buildx plugin), from `apps/electron/`
 
 (Or build locally on Unraid and reference the local image tag.)
 
+> **Recommended: `npm run deploy:hub`** (`scripts/deploy-hub.sh`) does the full
+> tested flow from a Mac against the Unraid daemon over SSH — snapshots the current
+> `:latest` as a `pre-deploy-<id>` rollback tag, builds, cuts over (`compose up -d`),
+> and verifies health + the public endpoint. It wraps the build in **`caffeinate`**
+> so an idle-sleeping Mac can't drop the `DOCKER_HOST=ssh` pipe mid-build (which
+> otherwise hangs the local `docker` CLI forever while the remote quietly finishes).
+> `SKIP_CUTOVER=1 npm run deploy:hub` builds only. Override `SSH_HOST`/`IMAGE`/etc via env.
+
 ## 2. Path A — Unraid container template
 
 Add a container (Docker tab → Add Container) with:
