@@ -76,8 +76,22 @@ writable by uid 1000 (Unraid's default appdata perms usually are; if not,
 ## 2b. Path B — docker compose via SSH (alternative to §2)
 
 Instead of the Unraid UI template, put the deployment in a `docker-compose.yml`
-+ `.env` under `/mnt/user/appdata/compose/hidock-hub/`. The compose file is
-already in the repo at `apps/electron/docker-compose.unraid.yml`.
++ `.env` under a server-side dir. The compose file is already in the repo at
+`apps/electron/docker-compose.unraid.yml`.
+
+> **`npm run deploy:hub` uses `/mnt/user/appdata/hidock-hub-deploy/` by default**
+> (`REMOTE_DIR`). It builds the image on the remote daemon, ships the compose
+> file there, and runs `docker compose -p hidock-hub up -d` **on the server**, so
+> the container's env comes from *that dir's* `.env` — never the deploy machine's
+> `.env`. This is deliberate: it stops a dev box's `.env` (e.g. a `localhost`
+> `PUBLIC_URL`, which breaks Google OAuth with "no login in progress") from being
+> injected into production. Provision that dir's `.env` once (below); the deploy
+> then fails fast if it's missing.
+>
+> Note: `PUBLIC_URL` is **pinned in the compose file** (`environment:`, a non-secret,
+> deployment-fixed value), so it overrides `.env` — the server `.env` only needs the
+> **secrets** (`GOOGLE_CLIENT_ID/SECRET`, `SESSION_SECRET`, `HIDOCK_SECRET_KEY`,
+> `ADMIN_EMAIL`, `OLLAMA_URL`). Change the pinned domain in the compose file, not `.env`.
 
 SSH to Unraid, then:
 

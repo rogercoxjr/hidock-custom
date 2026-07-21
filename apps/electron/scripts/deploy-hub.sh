@@ -16,7 +16,12 @@
 #   SKIP_CUTOVER=1 ./scripts/deploy-hub.sh  # build the image only, don't recreate the container
 #   npm run deploy:hub                      # same, via package.json
 #
-# Overridable via env: SSH_HOST SSH_PORT IMAGE COMPOSE_FILE PUBLIC_URL CONTAINER
+# Overridable via env: SSH_HOST SSH_PORT IMAGE COMPOSE_FILE PUBLIC_URL CONTAINER REMOTE_DIR PROJECT
+#
+# Secrets: the cutover runs `docker compose up -d` ON THE SERVER, in REMOTE_DIR, so it reads the
+# server-side .env there — NOT this deploy box's .env. This prevents a dev .env (e.g. a localhost
+# PUBLIC_URL, or wrong secrets) from being injected into production. Provision REMOTE_DIR/.env once
+# on the server (see docs/DEPLOY-UNRAID.md).
 #
 set -euo pipefail
 
@@ -26,6 +31,11 @@ IMAGE="${IMAGE:-rogercoxjr/hidock-hub:latest}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.unraid.yml}"
 PUBLIC_URL="${PUBLIC_URL:-https://hidock.coxserver.com}"
 CONTAINER="${CONTAINER:-hidock-hub}"
+# Server-side deploy dir holding the prod .env + compose file. The cutover runs there so secrets
+# come from the SERVER, never this box. PROJECT keeps the compose project name stable regardless
+# of which dir/machine the deploy is driven from.
+REMOTE_DIR="${REMOTE_DIR:-/mnt/user/appdata/hidock-hub-deploy}"
+PROJECT="${PROJECT:-hidock-hub}"
 
 export DOCKER_HOST="ssh://${SSH_HOST}:${SSH_PORT}"
 export DOCKER_BUILDKIT=1
@@ -58,13 +68,19 @@ $CAFF docker build -t "$IMAGE" .
 
 if [ "${SKIP_CUTOVER:-0}" = "1" ]; then
   echo "▶ SKIP_CUTOVER=1 — image built + tagged ${IMAGE}; container NOT recreated."
-  echo "  Cut over later:  DOCKER_HOST=${DOCKER_HOST} docker compose -f ${COMPOSE_FILE} up -d"
+  echo "  Cut over later:  ssh -p ${SSH_PORT} ${SSH_HOST} 'cd ${REMOTE_DIR} && HIDOCK_IMAGE=${IMAGE} docker compose -p ${PROJECT} up -d'"
   exit 0
 fi
 
-# 3) Cut over (also caffeinated — quick, but harmless to guard).
-echo "▶ Cutover…"
-$CAFF docker compose -f "$COMPOSE_FILE" up -d
+# 3) Cut over ON THE SERVER against REMOTE_DIR/.env (server-side secrets, not this box's .env).
+echo "▶ Cutover (server-side env in ${REMOTE_DIR})…"
+# Fail fast if the server hasn't been provisioned with a prod .env.
+ssh $SSH_OPTS "$SSH_HOST" "test -f '${REMOTE_DIR}/.env'" \
+  || { echo "✖ Missing ${REMOTE_DIR}/.env on the server. Provision it first (see docs/DEPLOY-UNRAID.md)."; exit 1; }
+# Ship the current compose file (carries the pinned non-secret PUBLIC_URL), then bring up the
+# image we just built (HIDOCK_IMAGE pins it so compose uses the local tag, no registry pull).
+scp -P "$SSH_PORT" -o ConnectTimeout=10 "$COMPOSE_FILE" "$SSH_HOST:${REMOTE_DIR}/docker-compose.yml"
+ssh $SSH_OPTS "$SSH_HOST" "cd '${REMOTE_DIR}' && HIDOCK_IMAGE='${IMAGE}' docker compose -p '${PROJECT}' up -d"
 
 # 4) Verify container health, then the public path end-to-end.
 echo "▶ Verifying container health…"
