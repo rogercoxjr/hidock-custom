@@ -24,6 +24,12 @@ services:
     image: ${HIDOCK_IMAGE:-rogercoxjr/hidock-hub:latest}
     container_name: hidock-hub
     restart: unless-stopped
+    # PUBLIC_URL is the public origin used to build the OAuth redirect_uri and callback URL.
+    # It is NOT a secret and is fixed per deployment, so pin it here — `environment:` overrides
+    # `env_file:`, preventing a dev .env's localhost value from leaking into the hosted
+    # redirect_uri (which breaks Google login with "no login in progress" at the callback).
+    environment:
+      PUBLIC_URL: https://hidock.coxserver.com
     env_file: .env
     ports:
       - "8788:8788"
