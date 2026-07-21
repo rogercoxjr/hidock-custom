@@ -60,10 +60,27 @@ RUN npm rebuild better-sqlite3 \
 # usb is optional for the server (device access is a browser gesture in hosted
 # mode). If its native build is absent, the server must still run — do not fail.
 RUN npm rebuild usb || echo "[native-deps] usb rebuild skipped (not required server-side)"
-# Phase 2 (optional): sherpa-onnx-node is an optionalDependency; tolerate failure.
-RUN npm rebuild sherpa-onnx-node 2>/dev/null || echo "[native-deps] sherpa-onnx-node not installed (Phase 2)"
+# sherpa-onnx-node powers the voiceprint embedder (worker_threads under plain Node). It ships
+# platform prebuilds (sherpa-onnx-linux-x64), so an explicit rebuild is usually a no-op; tolerate
+# its failure so a platform without a prebuild still yields a running (embedding-disabled) server.
+RUN npm rebuild sherpa-onnx-node 2>/dev/null || echo "[native-deps] sherpa-onnx-node rebuild skipped"
 # Smoke-load the must-have native modules to fail the build early on ABI mismatch.
 RUN node -e "require('better-sqlite3'); require('sodium-native'); console.log('native ABI OK')"
+# Non-fatal probe: report whether the voiceprint embedder addon is loadable in this image, so a
+# missing/broken sherpa prebuild is visible in the build log instead of silently no-opping at run time.
+RUN node -e "try{require('sherpa-onnx-node');console.log('[native-deps] sherpa-onnx-node OK — voiceprint embedder available')}catch(e){console.warn('[native-deps] sherpa-onnx-node NOT loadable — voiceprint enrollment will no-op:',e.message)}"
+
+# ---------------------------------------------------------------------------
+# Stage 3b: models — download the speaker-embedding ONNX model for voiceprint
+# enrollment. fetch-models.mjs uses only Node builtins (no npm install) and writes
+# a sha256-pinned resources/models/<model>.onnx. Isolated so a model re-fetch (or a
+# build-host network hiccup here) doesn't bust the node_modules/native-deps cache.
+# Requires network egress to the k2-fsa release host at build time.
+# ---------------------------------------------------------------------------
+FROM node:22-bookworm-slim AS models
+WORKDIR /app
+COPY scripts/fetch-models.mjs scripts/fetch-models.mjs
+RUN node scripts/fetch-models.mjs && test -f resources/models/3dspeaker_eres2net_en_voxceleb.onnx
 
 # ---------------------------------------------------------------------------
 # Stage 4: runtime — slim image, no toolchain, no dev deps, no source.
@@ -73,13 +90,17 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=8788 \
     HIDOCK_DATA_ROOT=/data \
-    HIDOCK_SPA_DIR=/app/out/renderer
+    HIDOCK_SPA_DIR=/app/out/renderer \
+    HIDOCK_MODELS_DIR=/app/models
 # Production node_modules with runtime-ABI native deps.
 COPY --from=native-deps /app/node_modules ./node_modules
 # Built server bundle (entry + lazy chunks + type:module package.json) + sourcemaps.
 COPY --from=server-build /app/out/server ./out/server
 # Built SPA.
 COPY --from=spa-build /app/out/renderer ./out/renderer
+# Speaker-embedding model. The hosted worker_threads embedder reads it via HIDOCK_MODELS_DIR
+# (=/app/models). Without this, voiceprint enrollment silently no-ops.
+COPY --from=models /app/resources/models ./models
 # package.json present so node resolves "type"/exports correctly for the bundle.
 COPY package.json ./
 

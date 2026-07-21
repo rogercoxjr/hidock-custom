@@ -10,6 +10,9 @@ node_modules
 # Local runtime state — must NEVER enter the image (lives on the /data volume)
 .hidock-data
 .hidock-data-smoke
+# Local dev data root (recordings, sqlite, transcripts) — ~GBs; the image gets its
+# own empty /data volume. Root-anchored so it can't match a source dir named 'data'.
+/data
 
 # Large model binaries — fetched into the image in a controlled step, not via COPY .
 resources/models/*.onnx

@@ -79,8 +79,9 @@ export async function decodeRecordingPcm16k(filePath: string): Promise<Buffer> {
 }
 
 // ERes2Net (3D-Speaker, en VoxCeleb, 16k) — adopted rev 2 (Phase-0: ~0.8% cross-recording
-// EER on real far-field P1 audio vs WeSpeaker's 26.8%). 256-dim → no voiceprints storage
-// migration. Per-voiceprint model_id makes a future swap re-embeddable.
+// EER on real far-field P1 audio vs WeSpeaker's 26.8%). Emits 192-dim embeddings; the actual
+// dim is stored per-voiceprint (`dim = embedding.length`), so a future model swap needs no
+// storage migration. Per-voiceprint model_id makes such a swap re-embeddable.
 export const VOICEPRINT_MODEL_ID = '3dspeaker_eres2net_en_voxceleb'
 
 // ---------------------------------------------------------------------------
@@ -331,14 +332,25 @@ function embeddingToBlob(vec: Float32Array): Uint8Array {
  * so voiceprint capture degrades gracefully instead of crashing. See the note on the top of
  * voiceprint-worker-pool.ts for why the electron import must stay lazy.
  */
+/**
+ * Hosted (plain Node) model location. The Docker image provisions the ONNX model at /app/models
+ * (see Dockerfile) and sets HIDOCK_MODELS_DIR; an override lets dev/tests point elsewhere. Falls
+ * back to <cwd>/resources/models so a local `node out/server/index.js` run against a fetched model
+ * works without extra env.
+ */
+function hostedModelPath(): string {
+  const dir = process.env.HIDOCK_MODELS_DIR || join(process.cwd(), 'resources', 'models')
+  return join(dir, `${VOICEPRINT_MODEL_ID}.onnx`)
+}
+
 async function modelPath(): Promise<string> {
   let app: Electron.App
   try {
     const electron = await import('electron')
-    if (!electron || typeof (electron as { app?: unknown }).app !== 'object') return ''
+    if (!electron || typeof (electron as { app?: unknown }).app !== 'object') return hostedModelPath()
     app = electron.app
   } catch {
-    return '' // plain Node (hosted) — electron unavailable; caller's embed step no-ops
+    return hostedModelPath() // plain Node (hosted) — electron unavailable; resolve from env/cwd
   }
   return app.isPackaged
     ? join(process.resourcesPath, 'models', `${VOICEPRINT_MODEL_ID}.onnx`)
