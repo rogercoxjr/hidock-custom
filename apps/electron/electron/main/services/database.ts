@@ -4084,6 +4084,13 @@ export interface Contact {
   meeting_count: number
   created_at: string
   voiceprint_count?: number
+  /**
+   * Live-derived interaction count: distinct recordings the contact is an assigned
+   * speaker in (recording_speakers) PLUS distinct meetings they attend (meeting_contacts).
+   * Unlike the legacy `meeting_count` scalar (bumped only by calendar ingestion), this
+   * reflects speaker assignments made in the reader. Populated by getContacts/getContactById.
+   */
+  interaction_count?: number
 }
 
 export type ContactRole = 'organizer' | 'attendee'
@@ -4096,14 +4103,26 @@ export interface MeetingContact {
 
 export function getContacts(search?: string, type?: string, limit = 100, offset = 0): { contacts: Contact[]; total: number } {
   let countSql = 'SELECT COUNT(*) as count FROM contacts c'
-  let sql = `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count
+  let sql = `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count,
+  COALESCE(rs.rec_count, 0) + COALESCE(mc.mtg_count, 0) AS interaction_count
 FROM contacts c
 LEFT JOIN (
   SELECT contact_id, COUNT(*) AS vp_count
   FROM voiceprints
   WHERE disabled_at IS NULL
   GROUP BY contact_id
-) v ON v.contact_id = c.id`
+) v ON v.contact_id = c.id
+LEFT JOIN (
+  SELECT contact_id, COUNT(DISTINCT recording_id) AS rec_count
+  FROM recording_speakers
+  WHERE contact_id IS NOT NULL
+  GROUP BY contact_id
+) rs ON rs.contact_id = c.id
+LEFT JOIN (
+  SELECT contact_id, COUNT(DISTINCT meeting_id) AS mtg_count
+  FROM meeting_contacts
+  GROUP BY contact_id
+) mc ON mc.contact_id = c.id`
   const params: unknown[] = []
   const whereClauses: string[] = []
 
@@ -4124,7 +4143,7 @@ LEFT JOIN (
     sql += whereClause
   }
 
-  sql += ' ORDER BY c.meeting_count DESC, c.last_seen_at DESC LIMIT ? OFFSET ?'
+  sql += ' ORDER BY interaction_count DESC, c.last_seen_at DESC LIMIT ? OFFSET ?'
 
   const countResult = queryOne<{ count: number }>(countSql, params)
   const contacts = queryAll<Contact>(sql, [...params, limit, offset])
@@ -4134,7 +4153,8 @@ LEFT JOIN (
 
 export function getContactById(id: string): Contact | undefined {
   return queryOne<Contact>(
-    `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count
+    `SELECT c.*, COALESCE(v.vp_count, 0) AS voiceprint_count,
+  COALESCE(rs.rec_count, 0) + COALESCE(mc.mtg_count, 0) AS interaction_count
 FROM contacts c
 LEFT JOIN (
   SELECT contact_id, COUNT(*) AS vp_count
@@ -4142,6 +4162,17 @@ LEFT JOIN (
   WHERE disabled_at IS NULL
   GROUP BY contact_id
 ) v ON v.contact_id = c.id
+LEFT JOIN (
+  SELECT contact_id, COUNT(DISTINCT recording_id) AS rec_count
+  FROM recording_speakers
+  WHERE contact_id IS NOT NULL
+  GROUP BY contact_id
+) rs ON rs.contact_id = c.id
+LEFT JOIN (
+  SELECT contact_id, COUNT(DISTINCT meeting_id) AS mtg_count
+  FROM meeting_contacts
+  GROUP BY contact_id
+) mc ON mc.contact_id = c.id
 WHERE c.id = ?`,
     [id]
   )

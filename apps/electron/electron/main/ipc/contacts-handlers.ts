@@ -293,7 +293,7 @@ function mapToPerson(contact: Contact): Person {
     isSelf: contact.is_self === 1,
     firstSeenAt: contact.first_seen_at,
     lastSeenAt: contact.last_seen_at,
-    interactionCount: contact.meeting_count,
+    interactionCount: contact.interaction_count ?? contact.meeting_count,
     createdAt: contact.created_at,
     voiceprintCount: contact.voiceprint_count ?? 0
   }
